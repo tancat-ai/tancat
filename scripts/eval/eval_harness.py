@@ -17,6 +17,10 @@ Subcommands:
     run         Execute evaluation (mode: static, resolver, full)
     baseline    Save current results as the reference baseline
     compare     Compare current results against the baseline
+    rebuild     Rebuild eval_runs rows from a run's kept evidence
+    report      Rollup over eval_runs + eval_criteria for one story
+    runs        List every leg in the store, with the settings it ran at
+    diff-runs   Compare two legs; exits 6 when they are not the same dataset
     dataset     Validate golden key files
 
 Usage:
@@ -332,6 +336,25 @@ def _cmd_rebuild(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_runs(args: argparse.Namespace) -> int:
+    """List every leg in the store, with the settings each ran at (j-0273)."""
+    from eval_runner import render_runs
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    print(render_runs(db_path))
+    return 0
+
+
+def _cmd_diff_runs(args: argparse.Namespace) -> int:
+    """Compare two legs; refuse when they are not the same sample (j-0273)."""
+    from eval_runner import compare_run_groups
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    result = compare_run_groups(db_path, args.leg_a, args.leg_b)
+    print(result["text"])
+    return int(result["exit"])
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: dataset
 # ---------------------------------------------------------------------------
@@ -529,6 +552,18 @@ def main(argv: list[str] | None = None) -> int:
     rebuild_parser.add_argument("--thinking", help="Thinking mode this leg ran (e.g. off)")
     rebuild_parser.add_argument("--settings-json", help="JSON file of further settings, each with its source")
 
+    # --- runs / diff-runs (j-0273) ---
+    runs_parser = subparsers.add_parser("runs", help="List every leg in eval_runs with its settings")
+    runs_parser.add_argument("--db", help="Path to the SQLite database")
+
+    diff_parser = subparsers.add_parser(
+        "diff-runs",
+        help="Compare two legs; exits 6 when they are not the same dataset",
+    )
+    diff_parser.add_argument("leg_a", help="First leg (a --run-group value)")
+    diff_parser.add_argument("leg_b", help="Second leg (a --run-group value)")
+    diff_parser.add_argument("--db", help="Path to the SQLite database")
+
     # --- dataset ---
     dataset_parser = subparsers.add_parser("dataset", help="Validate golden keys")
     dataset_parser.add_argument("--validate", action="store_true", help="Deep-validate all golden key fields")
@@ -546,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
         "compare": _cmd_compare,
         "report": _cmd_report,
         "rebuild": _cmd_rebuild,
+        "runs": _cmd_runs,
+        "diff-runs": _cmd_diff_runs,
         "dataset": _cmd_dataset,
     }
 

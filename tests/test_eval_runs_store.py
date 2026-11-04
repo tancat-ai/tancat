@@ -34,14 +34,17 @@ import eval_harness  # noqa: E402
 from eval_metrics import ResolutionResult, StoryResult  # noqa: E402
 from eval_runner import (  # noqa: E402
     _EVAL_SCHEMA_SQL,
+    NOT_COMPARABLE_EXIT,
     _ensure_eval_table,
     _resolve_dataset_dir,
+    compare_run_groups,
     dataset_key,
     describe_model,
     load_eval_history,
     persist_policy_error,
     persist_results,
     rebuild_run_from_evidence,
+    render_runs,
 )
 
 # The table as it stood before j-0273: no leg identity, no settings JSON.
@@ -377,3 +380,173 @@ class TestDescribeModel:
 
     def test_a_named_model_keeps_its_endpoint(self) -> None:
         assert describe_model("openai-local", "qwen.gguf") == "qwen.gguf (openai-local)"
+
+
+def _leg(
+    db: Path,
+    group: str | None,
+    story_id: str,
+    *,
+    correct: int = 1,
+    total: int = 2,
+    false_greens: int = 0,
+    dataset_key_value: str | None = "9:abc123abc123",
+    dataset_size: int | None = 114,
+    model: str | None = None,
+    rag_store: str | None = "bundled:113 golden + 35 docs",
+) -> None:
+    """Persist one story of one leg, with only the fields the test cares about."""
+    story = _story(story_id, total)
+    story.tests_false_positive = false_greens
+    # `correct` of `total` placeholders match; the rest are misses, so the row's
+    # own total is the dataset size, not the numerator.
+    story.resolutions = [
+        ResolutionResult("CLICK", f"r{i}", "#a", [], "#a" if i < correct else "#b", i < correct, 0, "golden")
+        for i in range(total)
+    ]
+    persist_results(
+        db,
+        [story],
+        mode="full",
+        run_group=group,
+        dataset_key=dataset_key_value,
+        dataset_size=dataset_size,
+        rag_store=rag_store,
+        model=model or "",
+        provider="openai-local" if model else "",
+        run_settings='{"declared": {}}',
+        created_at="2026-11-04T00:14:41.782683+00:00",
+    )
+
+
+class TestRunsListing:
+    def test_every_leg_is_listed_with_the_settings_it_ran_at(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "2026-11-04-leg1", "eval-001", correct=18, total=20, model="qwen.gguf")
+
+        rendered = render_runs(db)
+
+        assert "2026-11-04-leg1" in rendered
+        assert "qwen.gguf (openai-local)" in rendered
+        assert "bundled:113 golden + 35 docs" in rendered
+        assert "size 114" in rendered
+        assert "gate1 18/20 = 90.0%" in rendered
+        assert "eval-001 18/20" in rendered  # per-story numbers, not just the leg total
+
+    def test_an_old_row_is_listed_as_ungrouped_and_never_compared(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, None, "eval-001")
+
+        rendered = render_runs(db)
+
+        assert "ungrouped" in rendered
+        assert "cannot be compared" in rendered
+
+    def test_an_unrecorded_model_reads_as_unknown_not_empty(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "2026-11-04-leg2", "eval-001", model=None)
+
+        rendered = render_runs(db)
+
+        assert "model unknown" in rendered
+        assert "model (" not in rendered  # never a bare endpoint pretending to be a model
+
+    def test_an_empty_store_says_so(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        assert "No runs in the store yet" in render_runs(db)
+
+
+class TestDiffRuns:
+    def test_two_legs_on_different_dataset_sizes_are_refused(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "2026-10-31-leg1", "eval-001", dataset_size=113)
+        _leg(db, "2026-11-04-leg1", "eval-001", dataset_size=114)
+
+        result = compare_run_groups(db, "2026-10-31-leg1", "2026-11-04-leg1")
+
+        assert result["comparable"] is False
+        assert "113" in result["why"] and "114" in result["why"]
+        assert result["exit"] == NOT_COMPARABLE_EXIT == 6
+        assert "NOT COMPARABLE" in result["text"]
+
+    def test_two_legs_on_different_story_sets_are_refused(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg-a", "eval-001", dataset_key_value="8:aaaa")
+        _leg(db, "leg-b", "eval-001", dataset_key_value="9:bbbb")
+
+        result = compare_run_groups(db, "leg-a", "leg-b")
+
+        assert result["comparable"] is False
+        assert "8:aaaa" in result["why"] and "9:bbbb" in result["why"]
+
+    def test_an_unrecorded_size_is_not_treated_as_a_match(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg-a", "eval-001", dataset_size=None)
+        _leg(db, "leg-b", "eval-001", dataset_size=114)
+
+        result = compare_run_groups(db, "leg-a", "leg-b")
+
+        assert result["comparable"] is False
+        assert "not recorded" in result["why"]
+
+    def test_the_same_sample_is_compared_per_story(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg1", "eval-001", correct=18, total=20, false_greens=4)
+        _leg(db, "leg1", "eval-002", correct=7, total=8, false_greens=0)
+        _leg(db, "leg3", "eval-001", correct=19, total=20, false_greens=3)
+        _leg(db, "leg3", "eval-002", correct=5, total=8, false_greens=1)
+
+        result = compare_run_groups(db, "leg1", "leg3")
+
+        assert result["comparable"] is True
+        assert result["exit"] == 0
+        assert "COMPARABLE" in result["text"]
+        assert "eval-001" in result["text"] and "+1" in result["text"]
+        assert "delta -1 placeholder(s)" in result["text"]  # totals, not just rows
+
+    def test_a_leg_that_is_not_in_the_store_is_named(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg1", "eval-001")
+
+        result = compare_run_groups(db, "leg1", "leg9")
+
+        assert result["comparable"] is False
+        assert "no such leg: leg9" in result["why"]
+        assert "leg1" in result["text"]  # says what IS there
+
+    def test_the_cli_exits_six_when_it_refuses(self, tmp_path: Path) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg1", "eval-001", dataset_size=113)
+        _leg(db, "leg2", "eval-001", dataset_size=114)
+
+        assert eval_harness.main(["diff-runs", "leg1", "leg2", "--db", str(db)]) == 6
+
+    def test_the_cli_exits_zero_and_prints_the_table_when_it_compares(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg1", "eval-001", correct=1, total=2)
+        _leg(db, "leg2", "eval-001", correct=2, total=2)
+
+        assert eval_harness.main(["diff-runs", "leg1", "leg2", "--db", str(db)]) == 0
+        out = capsys.readouterr().out
+        assert "COMPARABLE" in out and "TOTAL" in out
+
+    def test_the_runs_cli_prints_the_store(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "leg1", "eval-001", model="qwen.gguf")
+
+        assert eval_harness.main(["runs", "--db", str(db)]) == 0
+        assert "leg1" in capsys.readouterr().out
+
+    def test_a_history_sized_group_is_summarised_not_printed_cell_by_cell(self, tmp_path: Path) -> None:
+        """The rows that predate run_group are 1284 wide; one line of cells is unreadable."""
+        db = tmp_path / "run_results.sqlite"
+        for _ in range(25):
+            _leg(db, None, "eval-001")
+
+        rendered = render_runs(db)
+
+        assert "25 rows over 1 story ids" in rendered
+        assert "per story:" not in rendered
+        assert len(rendered.splitlines()[4]) < 300

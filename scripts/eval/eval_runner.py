@@ -1070,6 +1070,238 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# The leg view: `runs` and `diff-runs` (j-0273)
+# ---------------------------------------------------------------------------
+
+#: Exit code for a comparison the tool refuses to draw (j-0273). Distinct from
+#: 2 (bad usage) so a script can tell "these two legs are not comparable" from
+#: "you named a leg that is not in the store".
+NOT_COMPARABLE_EXIT = 6
+
+
+def _row_gate2(row: dict[str, Any]) -> int | None:
+    """Gate 2 for one story row: the false greens the run recorded, or None.
+
+    Gate 2 (hollow passes) is a count, not a rate, and it lives in the row's
+    ``raw_report``. A row that did not measure it must read as unknown, never 0 -
+    zero is the good outcome and a parse miss must not be mistaken for it.
+    """
+    raw = row.get("raw_report")
+    if not raw:
+        return None
+    try:
+        payload = json.loads(str(raw))
+        stories = payload.get("stories") or []
+        return int(stories[0].get("tests_false_positive"))
+    except ValueError, TypeError, KeyError, IndexError:
+        return None
+
+
+def _declared_unknown(rows: list[dict[str, Any]]) -> set[str]:
+    """Fields the run itself said it did not record, from ``run_settings``."""
+    for row in rows:
+        raw = row.get("run_settings")
+        if not raw:
+            continue
+        try:
+            payload = json.loads(str(raw))
+        except ValueError:
+            continue
+        unknown = payload.get("unknown")
+        if isinstance(unknown, list):
+            return {str(name) for name in unknown}
+    return set()
+
+
+def _rag_text(rows: list[dict[str, Any]]) -> str:
+    """RAG state for a leg: the gate AND the store it pointed at.
+
+    ``rag_enabled`` alone cannot tell a leg against the bundled pack from one
+    against an empty store - both say 1. The store is the switch that matters.
+    """
+    unknown = _declared_unknown(rows)
+    flag = rows[0].get("rag_enabled")
+    if "rag_enabled" in unknown or flag is None:
+        gate = "unknown"
+    else:
+        gate = "on" if int(flag) else "off"
+    store = rows[0].get("rag_store")
+    if "rag_store" in unknown or not store:
+        return f"rag {gate}, store unknown"
+    return f"rag {gate}, store {store}"
+
+
+def _server_facts(rows: list[dict[str, Any]]) -> str:
+    """The endpoint launch facts the run saw, for the leg header."""
+    raw = rows[0].get("server_defaults")
+    if not raw:
+        return "endpoint defaults unknown"
+    try:
+        payload = json.loads(str(raw))
+    except ValueError:
+        return "endpoint defaults unknown"
+    parts = []
+    if payload.get("build_info"):
+        parts.append(f"build {payload['build_info']}")
+    if payload.get("n_ctx"):
+        parts.append(f"n_ctx {payload['n_ctx']}")
+    return "  ".join(parts) or "endpoint defaults unknown"
+
+
+def load_run_groups(db_path: str | Path) -> dict[str | None, list[dict[str, Any]]]:
+    """Every stored run, grouped by leg. ``None`` holds the rows that predate it."""
+    groups: dict[str | None, list[dict[str, Any]]] = {}
+    for row in load_eval_history(Path(db_path)):
+        key = row.get("run_group")
+        groups.setdefault(str(key) if key else None, []).append(row)
+    return groups
+
+
+def _render_group(name: str | None, rows: list[dict[str, Any]]) -> list[str]:
+    """One leg, with the settings it ran at above its numbers."""
+    rows = sorted(rows, key=lambda row: str(row.get("story_id")))
+    first = rows[0]
+    dates = sorted(str(row.get("created_at") or "") for row in rows)
+    total = sum(int(row.get("placeholders_total") or 0) for row in rows)
+    correct = sum(int(row.get("placeholders_correct") or 0) for row in rows)
+    gate2 = [_row_gate2(row) for row in rows]
+    recorded_gate2 = [value for value in gate2 if value is not None]
+    accuracy = f"{correct}/{total} = {correct / total * 100:.1f}%" if total else f"{correct}/{total} = not measured"
+    size = first.get("dataset_size")
+    unknown = _declared_unknown(rows)
+    temp = first.get("temperature_sent")
+    temp_text = "unknown" if temp is None else str(temp)
+    thinking = first.get("thinking") or ("unknown" if "thinking" in unknown else "")
+
+    lines = [
+        f"{name or '(ungrouped rows from before run_group)'}",
+        f"  {len(rows)} stories   ran {dates[0][:16]} .. {dates[-1][:16]}   git {(first.get('git_commit') or 'unknown')[:7]}",
+        f"  mode {first.get('mode')}  pipeline {first.get('pipeline')}  generation {first.get('generation_mode')}",
+        f"  model {describe_model(first.get('provider'), first.get('model'))}",
+        f"  {_rag_text(rows)}",
+        f"  dataset {first.get('dataset_key') or 'unknown'}  size {size if size is not None else 'unknown'}",
+        f"  temp {temp_text}  thinking {thinking or 'unknown'}  {_server_facts(rows)}",
+        f"  gate1 {accuracy}  gate2 {sum(recorded_gate2) if recorded_gate2 else 'not recorded'}",
+    ]
+    story_cells = [
+        f"{row.get('story_id')} {row.get('placeholders_correct')}/{row.get('placeholders_total')}" for row in rows
+    ]
+    if len(story_cells) > 20:
+        # A group this wide is history, not a leg (the rows that predate
+        # run_group are 1284 of them). One line of 1284 cells is unreadable, so
+        # say the shape and point at the per-story view instead.
+        ids: dict[str, int] = {}
+        for row in rows:
+            ids[str(row.get("story_id"))] = ids.get(str(row.get("story_id")), 0) + 1
+        lines.append(
+            f"  {len(rows)} rows over {len(ids)} story ids "
+            f"({', '.join(f'{sid} x{count}' for sid, count in sorted(ids.items()))})"
+            "  - per-story history: eval_harness.py report --story <id>"
+        )
+    else:
+        lines.append("  per story: " + " | ".join(story_cells))
+    return lines
+
+
+def render_runs(db_path: str | Path) -> str:
+    """The owner's list: every leg in the store, with its settings above its numbers."""
+    groups = load_run_groups(db_path)
+    if not groups:
+        return "No runs in the store yet. A run writes here unless it is --mode static."
+    lines = ["RUNS IN THE STORE (eval_runs)", "=" * 70, ""]
+    named = sorted((key for key in groups if key), key=str, reverse=True)
+    for name in named:
+        lines.extend(_render_group(name, groups[name]))
+        lines.append("")
+    ungrouped = groups.get(None)
+    if ungrouped:
+        lines.extend(_render_group(None, ungrouped))
+        lines.append("  (a leg with no name cannot be compared; run with --run-group)")
+        lines.append("")
+    lines.append("Compare two legs: eval_harness.py diff-runs <leg-a> <leg-b>")
+    return "\n".join(lines).rstrip()
+
+
+def compare_run_groups(db_path: str | Path, leg_a: str, leg_b: str) -> dict[str, Any]:
+    """Compare two legs, and refuse when they are not the same sample.
+
+    Refused when the dataset key or the dataset size differs, or when either is
+    not recorded: two numbers from different samples are not a delta, and a
+    missing size is not a match. The refusal names both sides, so the reader is
+    told what to fix instead of being handed a misleading delta.
+
+    Returns ``{"comparable": bool, "why": str, "text": str}``.
+    """
+    groups = load_run_groups(db_path)
+    missing = [name for name in (leg_a, leg_b) if name not in groups]
+    if missing:
+        available = ", ".join(sorted(key for key in groups if key)) or "none"
+        return {
+            "comparable": False,
+            "why": f"no such leg: {', '.join(missing)}",
+            "text": f"NOT COMPARABLE: no such leg: {', '.join(missing)}. Legs in the store: {available}",
+            "exit": 2,
+        }
+
+    rows_a, rows_b = groups[leg_a], groups[leg_b]
+    first_a = sorted(rows_a, key=lambda row: str(row.get("created_at")))[0]
+    first_b = sorted(rows_b, key=lambda row: str(row.get("created_at")))[0]
+    key_a, key_b = first_a.get("dataset_key"), first_b.get("dataset_key")
+    size_a, size_b = first_a.get("dataset_size"), first_b.get("dataset_size")
+
+    lines = ["LEG COMPARISON", "=" * 70, ""]
+    lines.extend(_render_group(leg_a, rows_a))
+    lines.append("")
+    lines.extend(_render_group(leg_b, rows_b))
+    lines.append("")
+
+    why = ""
+    if key_a is None or key_b is None:
+        why = (
+            f"not comparable: the dataset is not recorded for "
+            f"{leg_a if key_a is None else leg_b}, so we cannot show these are the same sample"
+        )
+    elif str(key_a) != str(key_b):
+        why = f"not comparable: {leg_a} scored dataset {key_a} and {leg_b} scored {key_b}"
+    elif size_a is None or size_b is None:
+        why = (
+            f"not comparable: the dataset size is not recorded for "
+            f"{leg_a if size_a is None else leg_b}, so a delta cannot be sized"
+        )
+    elif int(size_a) != int(size_b):
+        why = f"not comparable: {leg_a} scored {size_a} placeholders and {leg_b} scored {size_b}"
+
+    if why:
+        lines.append(f"NOT COMPARABLE: {why}")
+        lines.append("  (same story files, same placeholder count - or a re-run - before a delta means anything)")
+        return {"comparable": False, "why": why, "text": "\n".join(lines), "exit": NOT_COMPARABLE_EXIT}
+
+    by_story_a = {str(row.get("story_id")): row for row in rows_a}
+    by_story_b = {str(row.get("story_id")): row for row in rows_b}
+    stories = sorted(set(by_story_a) | set(by_story_b))
+    lines.append(f"{'story':<10} {'gate1 A':>9} {'gate1 B':>9} {'delta':>6}  {'gate2 A':>7} {'gate2 B':>7}")
+    total_delta = 0
+    for story in stories:
+        row_a = by_story_a.get(story, {})
+        row_b = by_story_b.get(story, {})
+        correct_a = int(row_a.get("placeholders_correct") or 0)
+        correct_b = int(row_b.get("placeholders_correct") or 0)
+        delta = correct_b - correct_a
+        total_delta += delta
+        gate2_a = _row_gate2(row_a) if row_a else None
+        gate2_b = _row_gate2(row_b) if row_b else None
+        lines.append(
+            f"{story:<10} {correct_a:>4}/{int(row_a.get('placeholders_total') or 0):<4} "
+            f"{correct_b:>4}/{int(row_b.get('placeholders_total') or 0):<4} {delta:>+6}  "
+            f"{('-' if gate2_a is None else gate2_a):>7} {('-' if gate2_b is None else gate2_b):>7}"
+        )
+    lines.append(f"{'TOTAL':<10} delta {total_delta:+d} placeholder(s) from {leg_a} to {leg_b}")
+    lines.append("")
+    lines.append(f"COMPARABLE: same dataset {key_a} of {size_a} placeholders")
+    return {"comparable": True, "why": "", "text": "\n".join(lines), "exit": 0}
+
+
+# ---------------------------------------------------------------------------
 # Runner (unified entry point)
 # ---------------------------------------------------------------------------
 
