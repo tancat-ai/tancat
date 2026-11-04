@@ -1,0 +1,11 @@
+{
+ "source_of_values": "leg-settings.json in this directory (launch_config block), except pytest_timeout_s which comes from the leg summaries",
+ "pytest_timeout_s": 300,
+ "ctx_size": 262144,
+ "cache_type_k_v": "q8_0/q8_0",
+ "flash_attn": "on",
+ "temperature": 0.0,
+ "thinking": "off",
+ "build": "b11871-b3fa69955",
+ "server": "llama.cpp Vulkan, 127.0.0.1:8080"
+}

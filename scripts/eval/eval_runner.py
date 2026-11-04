@@ -10,6 +10,7 @@ Pure orchestration — delegates to eval_metrics.py and golden_validator.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -59,7 +60,15 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     thinking         TEXT,
     verified_by_element INTEGER NOT NULL DEFAULT 0,
     verified_by_page    INTEGER NOT NULL DEFAULT 0,
-    unverified          INTEGER NOT NULL DEFAULT 0
+    unverified          INTEGER NOT NULL DEFAULT 0,
+    -- j-0273: one place for every run, with its leg identity and its settings.
+    -- All nullable on purpose: NULL means "this run did not record it" and must
+    -- never be read as a measured empty value.
+    run_group    TEXT,
+    dataset_key  TEXT,
+    dataset_size INTEGER,
+    rag_store    TEXT,
+    run_settings TEXT
 )
 """
 
@@ -77,6 +86,102 @@ def _story_test_filename(story_id: str) -> str:
 
 
 _EVAL_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_story ON eval_runs(story_id)"
+# j-0273: the leg is the unit the owner compares, so it needs to be cheap to
+# select. Without this index a group lookup scans the whole table.
+_EVAL_GROUP_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_group ON eval_runs(run_group)"
+
+
+def persist_policy_error(mode: str, no_persist: bool, run_group: str | None) -> str | None:
+    """Return why this run may not be started as asked, or ``None`` if it may.
+
+    The owner wants one place for every run (j-0273). ``--no-persist`` was built
+    to keep the cheap static CI check from filling ``eval_runs`` with model-less
+    rows, and that is still its only honest use. A run that spends a model and a
+    live site is a measurement someone will quote later, so it must be stored:
+
+    * ``--no-persist`` is refused for ``full`` and ``resolver``. ``static`` keeps
+      it, because that is what ``scripts/gate_full.py`` gate 3 needs.
+    * A persisting ``full``/``resolver`` run must name its leg (``--run-group``).
+      Without a group a leg is nine unrelated rows, which is exactly what the
+      four 2026-11-04 legs became when they ran with ``--no-persist``.
+
+    Returns one sentence naming the rule and the fix, so the CLI prints it as-is.
+    """
+    model_bearing = mode in ("full", "resolver")
+    if no_persist and model_bearing:
+        return (
+            f"--no-persist is not allowed with --mode {mode}: a model-bearing run is a "
+            "measurement someone will quote, so it must land in eval_runs. Run it without "
+            "--no-persist and name the leg with --run-group <id>."
+        )
+    if model_bearing and not no_persist and not (run_group or "").strip():
+        return (
+            f"--mode {mode} must carry --run-group <id> (e.g. --run-group 2026-11-04-leg1). "
+            "Without a group the leg's rows cannot be selected or compared."
+        )
+    return None
+
+
+def dataset_key(dataset_dir: Path) -> str | None:
+    """A stable identity for the story files a run was scored on.
+
+    Two runs whose golden files differ are scores on different samples and must
+    not be compared. The key is the sorted story ids, so adding, removing or
+    renaming a story changes it; the placeholder count is stored beside it as
+    ``dataset_size`` because a story can also gain a criterion.
+
+    Story ids, not filenames: a run rebuilt from kept evidence knows its story
+    ids and not the golden filenames, and both sides must produce the same key
+    for the same sample.
+    """
+    ids: list[str] = []
+    try:
+        for path in sorted(dataset_dir.glob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            ids.append(str(data.get("id") or path.stem))
+    except OSError, ValueError:
+        return None
+    return dataset_key_from_story_ids(ids)
+
+
+def dataset_key_from_story_ids(story_ids: list[str] | tuple[str, ...]) -> str | None:
+    """The same key from story ids alone (used by the rebuild from evidence)."""
+    ids = sorted({str(sid) for sid in story_ids if str(sid).strip()})
+    if not ids:
+        return None
+    digest = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:12]
+    return f"{len(ids)}:{digest}"
+
+
+def describe_model(provider: str | None, model: str | None) -> str:
+    """Render the model a run used, or say it is unknown.
+
+    The ``model`` column is NOT NULL DEFAULT '' (it predates this change), so an
+    unrecorded model is an empty string in the row. It must never print as an
+    empty string - a reader would take that for a model named "".
+    """
+    name = (model or "").strip()
+    endpoint = (provider or "").strip()
+    if name and endpoint:
+        return f"{name} ({endpoint})"
+    if name:
+        return name
+    if endpoint:
+        return f"unknown model ({endpoint})"
+    return "unknown"
+
+
+def _dataset_size(dataset_dir: Path) -> int | None:
+    """Placeholders the dataset holds right now, or ``None`` when unreadable.
+
+    Read from the golden files, never from the run's own numerator: a run that
+    missed a story must not look like a smaller dataset.
+    """
+    try:
+        from gate_record import dataset_placeholder_count
+    except ImportError:  # importing eval_runner without scripts/eval on sys.path
+        return None
+    return dataset_placeholder_count(dataset_dir) or None
 
 
 def _get_git_commit() -> str:
@@ -112,11 +217,20 @@ def _ensure_eval_table(conn: sqlite3.Connection) -> None:
         "verified_by_element INTEGER NOT NULL DEFAULT 0",
         "verified_by_page INTEGER NOT NULL DEFAULT 0",
         "unverified INTEGER NOT NULL DEFAULT 0",
+        # j-0273: leg identity + the settings a leg ran at. No default: an
+        # existing row honestly has no group, and the readers say so instead of
+        # inventing one.
+        "run_group TEXT",
+        "dataset_key TEXT",
+        "dataset_size INTEGER",
+        "rag_store TEXT",
+        "run_settings TEXT",
     ):
         try:
             conn.execute(f"ALTER TABLE eval_runs ADD COLUMN {column_decl}")
         except sqlite3.OperationalError:
             pass  # column already exists (fresh table or previously migrated)
+    conn.execute(_EVAL_GROUP_INDEX_SQL)
     # B-093: per-criterion rows live in the SAME database, beside eval_runs.
     from eval_criteria import ensure_criteria_table
 
@@ -590,7 +704,7 @@ def persist_results(
     *,
     pipeline: str = "linear",
     generation_mode: str = "captured",
-    rag_enabled: bool = False,
+    rag_enabled: bool | None = None,
     pom_mode: bool = False,
     provider: str = "",
     model: str = "",
@@ -604,6 +718,12 @@ def persist_results(
     thinking: str | None = "",
     code_map: dict[str, str] | None = None,
     outcomes: dict[str, dict[str, str]] | None = None,
+    run_group: str | None = None,
+    dataset_key: str | None = None,
+    dataset_size: int | None = None,
+    rag_store: str | None = None,
+    run_settings: str | None = None,
+    created_at: str | None = None,
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -622,6 +742,18 @@ def persist_results(
             ``eval_criteria`` row is written per resolution (B-093).
         outcomes: Optional story_id -> per-test outcomes. Gives each criterion
             row the outcome of its own test function.
+        run_group: The leg this row belongs to (j-0273). ``None`` means the
+            caller did not name one; the row then reads as ungrouped.
+        dataset_key: Identity of the story files scored (see
+            :func:`dataset_key`). ``None`` = not recorded.
+        dataset_size: Placeholders the dataset held, when the caller knows it.
+        rag_store: What the RAG store held (e.g. "bundled:113 golden + 35 docs",
+            "empty:0"). ``rag_enabled`` alone cannot tell those two legs apart.
+        run_settings: JSON of the settings the leg ran at. ``None`` = the run
+            recorded none.
+        created_at: When the run happened. ``None`` = now. A backfill passes the
+            run's own timestamp, so the history does not read as if every leg had
+            been run on the day it was recovered.
 
     Returns:
         List of run_ids inserted.
@@ -634,7 +766,7 @@ def persist_results(
     try:
         _ensure_eval_table(conn)
         run_ids: list[str] = []
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = created_at or datetime.now(UTC).isoformat()
 
         for story in stories:
             report = HarnessReport(stories=[story])
@@ -649,8 +781,9 @@ def persist_results(
                      skeleton_completeness, generation_duration, mode, raw_report, created_at,
                      pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit,
                      temperature_sent, server_defaults, thinking,
-                     verified_by_element, verified_by_page, unverified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     verified_by_element, verified_by_page, unverified,
+                     run_group, dataset_key, dataset_size, rag_store, run_settings)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -680,6 +813,13 @@ def persist_results(
                     split["golden"] + split["element"],
                     split["page"],
                     split["unverified"],
+                    # j-0273: the leg and what it ran at. Stored as given; an
+                    # undeclared value stays NULL rather than becoming a fact.
+                    run_group,
+                    dataset_key,
+                    dataset_size,
+                    rag_store,
+                    run_settings,
                 ),
             )
             run_ids.append(run_id)
@@ -731,10 +871,46 @@ def load_eval_history(
         conn.close()
 
 
+def _resolve_dataset_dir(recorded: Any, dataset_dir: Path | None) -> Path:
+    """Which golden keys a rebuild scores against, or a refusal naming why.
+
+    The manifest records the dataset as the path the run was started with - often
+    relative (``..\\..\\scripts\\eval\\dataset``), so resolving it against the
+    current working directory silently scores the wrong sample. Only an absolute
+    recorded path that exists is used; otherwise the caller's ``--dataset``, then
+    the dataset beside this script.
+    """
+    if dataset_dir is not None:
+        if not dataset_dir.is_dir():
+            raise ValueError(f"dataset directory not found: {dataset_dir}")
+        return dataset_dir
+    if recorded:
+        candidate = Path(str(recorded))
+        if candidate.is_absolute() and candidate.is_dir():
+            return candidate
+    default_dataset = Path(__file__).resolve().parent / "dataset"
+    if default_dataset.is_dir():
+        return default_dataset
+    raise ValueError(
+        f"no dataset to score against: the manifest records {recorded!r} and the default "
+        f"{default_dataset} does not exist. Pass --dataset."
+    )
+
+
 def rebuild_run_from_evidence(
     evidence_dir: str | Path,
     db_path: str | Path,
     dataset_dir: Path | None = None,
+    *,
+    run_group: str | None = None,
+    rag_enabled: bool | None = None,
+    rag_store: str | None = None,
+    dataset_size: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    temperature_sent: float | None = None,
+    thinking: str | None = None,
+    settings_declared: dict[str, Any] | None = None,
 ) -> list[str]:
     """Rebuild an eval_runs row + its criteria from a run's kept evidence (B-093).
 
@@ -743,23 +919,85 @@ def rebuild_run_from_evidence(
     re-validated against the golden keys and the kept per-test outcomes give
     each criterion the outcome of its own test. This is how a row lost from the
     database is recovered without re-running the held-out set.
+
+    What the manifest holds is read from it (mode, generation_mode, pipeline,
+    git_commit, the run's own created_at, and the placeholder count it scored).
+    Everything else - the leg name, the model, the RAG store, the temperature -
+    is only knowable from the operator who ran it, so it is a keyword argument
+    and, when absent, it stays unknown. Nothing here invents a value: a parameter
+    left as ``None`` is recorded in ``run_settings`` as not recorded, so a reader
+    can tell "no model" from "nobody wrote down the model".
     """
     import rescore as _rescore
     from eval_evidence import read_run_evidence
 
     evidence = read_run_evidence(evidence_dir)
-    recorded_dataset = evidence.manifest.get("dataset")
-    default_dataset = Path(__file__).resolve().parent / "dataset"
-    dataset = dataset_dir or (Path(recorded_dataset) if recorded_dataset else default_dataset)
-    report = _rescore.rescore(Path(evidence_dir), Path(dataset))
+    manifest = evidence.manifest
+    dataset = _resolve_dataset_dir(manifest.get("dataset"), dataset_dir)
+    report = _rescore.rescore(Path(evidence_dir), dataset)
     outcomes = {story_id: evidence.per_test(story_id) for story_id in evidence.code_map}
+
+    # The run's own count, when it recorded one; today's dataset recount only as
+    # a fallback, and never a guessed number.
+    recorded_size = manifest.get("gate1_placeholders_total")
+    if dataset_size is not None:
+        size: int | None = dataset_size
+    elif recorded_size is not None and str(recorded_size).strip().isdigit():
+        size = int(str(recorded_size).strip())
+    else:
+        size = None
+
+    declared: dict[str, Any] = dict(settings_declared or {})
+    for name, value in (
+        ("rag_enabled", rag_enabled),
+        ("rag_store", rag_store),
+        ("provider", provider),
+        ("model", model),
+        ("temperature_sent", temperature_sent),
+        ("thinking", thinking),
+        ("dataset_size", size),
+    ):
+        if value is not None:
+            declared[name] = value
+    unknown = [
+        name
+        for name, value in (
+            ("rag_enabled", rag_enabled),
+            ("rag_store", rag_store),
+            ("provider", provider),
+            ("model", model),
+            ("temperature_sent", temperature_sent),
+            ("thinking", thinking),
+            ("server_defaults", None),
+            ("dataset_size", size),
+        )
+        if value is None
+    ]
+    settings = {
+        "source": "rebuild from kept evidence",
+        "evidence_dir": str(evidence_dir),
+        "dataset_dir": str(dataset),
+        "declared": declared,
+        "unknown": unknown,
+    }
     return persist_results(
         Path(db_path),
         report.stories,
-        mode=str(evidence.manifest.get("mode", "static")),
-        generation_mode=str(evidence.manifest.get("generation_mode", "regenerated")),
-        pipeline=str(evidence.manifest.get("pipeline", "linear")),
-        git_commit=str(evidence.manifest.get("git_commit", "")),
+        mode=str(manifest.get("mode", "static")),
+        generation_mode=str(manifest.get("generation_mode", "regenerated")),
+        pipeline=str(manifest.get("pipeline", "linear")),
+        git_commit=str(manifest.get("git_commit", "")),
+        provider=provider or "",
+        model=model or "",
+        temperature_sent=temperature_sent,
+        thinking=thinking,
+        rag_enabled=rag_enabled,
+        rag_store=rag_store,
+        run_group=run_group,
+        dataset_key=dataset_key_from_story_ids(list(evidence.code_map)),
+        dataset_size=size,
+        run_settings=json.dumps(settings),
+        created_at=(str(manifest["created_at"]) if manifest.get("created_at") else None),
         code_map=evidence.code_map,
         outcomes=outcomes,
     )
@@ -832,6 +1070,238 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# The leg view: `runs` and `diff-runs` (j-0273)
+# ---------------------------------------------------------------------------
+
+#: Exit code for a comparison the tool refuses to draw (j-0273). Distinct from
+#: 2 (bad usage) so a script can tell "these two legs are not comparable" from
+#: "you named a leg that is not in the store".
+NOT_COMPARABLE_EXIT = 6
+
+
+def _row_gate2(row: dict[str, Any]) -> int | None:
+    """Gate 2 for one story row: the false greens the run recorded, or None.
+
+    Gate 2 (hollow passes) is a count, not a rate, and it lives in the row's
+    ``raw_report``. A row that did not measure it must read as unknown, never 0 -
+    zero is the good outcome and a parse miss must not be mistaken for it.
+    """
+    raw = row.get("raw_report")
+    if not raw:
+        return None
+    try:
+        payload = json.loads(str(raw))
+        stories = payload.get("stories") or []
+        return int(stories[0].get("tests_false_positive"))
+    except ValueError, TypeError, KeyError, IndexError:
+        return None
+
+
+def _declared_unknown(rows: list[dict[str, Any]]) -> set[str]:
+    """Fields the run itself said it did not record, from ``run_settings``."""
+    for row in rows:
+        raw = row.get("run_settings")
+        if not raw:
+            continue
+        try:
+            payload = json.loads(str(raw))
+        except ValueError:
+            continue
+        unknown = payload.get("unknown")
+        if isinstance(unknown, list):
+            return {str(name) for name in unknown}
+    return set()
+
+
+def _rag_text(rows: list[dict[str, Any]]) -> str:
+    """RAG state for a leg: the gate AND the store it pointed at.
+
+    ``rag_enabled`` alone cannot tell a leg against the bundled pack from one
+    against an empty store - both say 1. The store is the switch that matters.
+    """
+    unknown = _declared_unknown(rows)
+    flag = rows[0].get("rag_enabled")
+    if "rag_enabled" in unknown or flag is None:
+        gate = "unknown"
+    else:
+        gate = "on" if int(flag) else "off"
+    store = rows[0].get("rag_store")
+    if "rag_store" in unknown or not store:
+        return f"rag {gate}, store unknown"
+    return f"rag {gate}, store {store}"
+
+
+def _server_facts(rows: list[dict[str, Any]]) -> str:
+    """The endpoint launch facts the run saw, for the leg header."""
+    raw = rows[0].get("server_defaults")
+    if not raw:
+        return "endpoint defaults unknown"
+    try:
+        payload = json.loads(str(raw))
+    except ValueError:
+        return "endpoint defaults unknown"
+    parts = []
+    if payload.get("build_info"):
+        parts.append(f"build {payload['build_info']}")
+    if payload.get("n_ctx"):
+        parts.append(f"n_ctx {payload['n_ctx']}")
+    return "  ".join(parts) or "endpoint defaults unknown"
+
+
+def load_run_groups(db_path: str | Path) -> dict[str | None, list[dict[str, Any]]]:
+    """Every stored run, grouped by leg. ``None`` holds the rows that predate it."""
+    groups: dict[str | None, list[dict[str, Any]]] = {}
+    for row in load_eval_history(Path(db_path)):
+        key = row.get("run_group")
+        groups.setdefault(str(key) if key else None, []).append(row)
+    return groups
+
+
+def _render_group(name: str | None, rows: list[dict[str, Any]]) -> list[str]:
+    """One leg, with the settings it ran at above its numbers."""
+    rows = sorted(rows, key=lambda row: str(row.get("story_id")))
+    first = rows[0]
+    dates = sorted(str(row.get("created_at") or "") for row in rows)
+    total = sum(int(row.get("placeholders_total") or 0) for row in rows)
+    correct = sum(int(row.get("placeholders_correct") or 0) for row in rows)
+    gate2 = [_row_gate2(row) for row in rows]
+    recorded_gate2 = [value for value in gate2 if value is not None]
+    accuracy = f"{correct}/{total} = {correct / total * 100:.1f}%" if total else f"{correct}/{total} = not measured"
+    size = first.get("dataset_size")
+    unknown = _declared_unknown(rows)
+    temp = first.get("temperature_sent")
+    temp_text = "unknown" if temp is None else str(temp)
+    thinking = first.get("thinking") or ("unknown" if "thinking" in unknown else "")
+
+    lines = [
+        f"{name or '(ungrouped rows from before run_group)'}",
+        f"  {len(rows)} stories   ran {dates[0][:16]} .. {dates[-1][:16]}   git {(first.get('git_commit') or 'unknown')[:7]}",
+        f"  mode {first.get('mode')}  pipeline {first.get('pipeline')}  generation {first.get('generation_mode')}",
+        f"  model {describe_model(first.get('provider'), first.get('model'))}",
+        f"  {_rag_text(rows)}",
+        f"  dataset {first.get('dataset_key') or 'unknown'}  size {size if size is not None else 'unknown'}",
+        f"  temp {temp_text}  thinking {thinking or 'unknown'}  {_server_facts(rows)}",
+        f"  gate1 {accuracy}  gate2 {sum(recorded_gate2) if recorded_gate2 else 'not recorded'}",
+    ]
+    story_cells = [
+        f"{row.get('story_id')} {row.get('placeholders_correct')}/{row.get('placeholders_total')}" for row in rows
+    ]
+    if len(story_cells) > 20:
+        # A group this wide is history, not a leg (the rows that predate
+        # run_group are 1284 of them). One line of 1284 cells is unreadable, so
+        # say the shape and point at the per-story view instead.
+        ids: dict[str, int] = {}
+        for row in rows:
+            ids[str(row.get("story_id"))] = ids.get(str(row.get("story_id")), 0) + 1
+        lines.append(
+            f"  {len(rows)} rows over {len(ids)} story ids "
+            f"({', '.join(f'{sid} x{count}' for sid, count in sorted(ids.items()))})"
+            "  - per-story history: eval_harness.py report --story <id>"
+        )
+    else:
+        lines.append("  per story: " + " | ".join(story_cells))
+    return lines
+
+
+def render_runs(db_path: str | Path) -> str:
+    """The owner's list: every leg in the store, with its settings above its numbers."""
+    groups = load_run_groups(db_path)
+    if not groups:
+        return "No runs in the store yet. A run writes here unless it is --mode static."
+    lines = ["RUNS IN THE STORE (eval_runs)", "=" * 70, ""]
+    named = sorted((key for key in groups if key), key=str, reverse=True)
+    for name in named:
+        lines.extend(_render_group(name, groups[name]))
+        lines.append("")
+    ungrouped = groups.get(None)
+    if ungrouped:
+        lines.extend(_render_group(None, ungrouped))
+        lines.append("  (a leg with no name cannot be compared; run with --run-group)")
+        lines.append("")
+    lines.append("Compare two legs: eval_harness.py diff-runs <leg-a> <leg-b>")
+    return "\n".join(lines).rstrip()
+
+
+def compare_run_groups(db_path: str | Path, leg_a: str, leg_b: str) -> dict[str, Any]:
+    """Compare two legs, and refuse when they are not the same sample.
+
+    Refused when the dataset key or the dataset size differs, or when either is
+    not recorded: two numbers from different samples are not a delta, and a
+    missing size is not a match. The refusal names both sides, so the reader is
+    told what to fix instead of being handed a misleading delta.
+
+    Returns ``{"comparable": bool, "why": str, "text": str}``.
+    """
+    groups = load_run_groups(db_path)
+    missing = [name for name in (leg_a, leg_b) if name not in groups]
+    if missing:
+        available = ", ".join(sorted(key for key in groups if key)) or "none"
+        return {
+            "comparable": False,
+            "why": f"no such leg: {', '.join(missing)}",
+            "text": f"NOT COMPARABLE: no such leg: {', '.join(missing)}. Legs in the store: {available}",
+            "exit": 2,
+        }
+
+    rows_a, rows_b = groups[leg_a], groups[leg_b]
+    first_a = sorted(rows_a, key=lambda row: str(row.get("created_at")))[0]
+    first_b = sorted(rows_b, key=lambda row: str(row.get("created_at")))[0]
+    key_a, key_b = first_a.get("dataset_key"), first_b.get("dataset_key")
+    size_a, size_b = first_a.get("dataset_size"), first_b.get("dataset_size")
+
+    lines = ["LEG COMPARISON", "=" * 70, ""]
+    lines.extend(_render_group(leg_a, rows_a))
+    lines.append("")
+    lines.extend(_render_group(leg_b, rows_b))
+    lines.append("")
+
+    why = ""
+    if key_a is None or key_b is None:
+        why = (
+            f"not comparable: the dataset is not recorded for "
+            f"{leg_a if key_a is None else leg_b}, so we cannot show these are the same sample"
+        )
+    elif str(key_a) != str(key_b):
+        why = f"not comparable: {leg_a} scored dataset {key_a} and {leg_b} scored {key_b}"
+    elif size_a is None or size_b is None:
+        why = (
+            f"not comparable: the dataset size is not recorded for "
+            f"{leg_a if size_a is None else leg_b}, so a delta cannot be sized"
+        )
+    elif int(size_a) != int(size_b):
+        why = f"not comparable: {leg_a} scored {size_a} placeholders and {leg_b} scored {size_b}"
+
+    if why:
+        lines.append(f"NOT COMPARABLE: {why}")
+        lines.append("  (same story files, same placeholder count - or a re-run - before a delta means anything)")
+        return {"comparable": False, "why": why, "text": "\n".join(lines), "exit": NOT_COMPARABLE_EXIT}
+
+    by_story_a = {str(row.get("story_id")): row for row in rows_a}
+    by_story_b = {str(row.get("story_id")): row for row in rows_b}
+    stories = sorted(set(by_story_a) | set(by_story_b))
+    lines.append(f"{'story':<10} {'gate1 A':>9} {'gate1 B':>9} {'delta':>6}  {'gate2 A':>7} {'gate2 B':>7}")
+    total_delta = 0
+    for story in stories:
+        row_a = by_story_a.get(story, {})
+        row_b = by_story_b.get(story, {})
+        correct_a = int(row_a.get("placeholders_correct") or 0)
+        correct_b = int(row_b.get("placeholders_correct") or 0)
+        delta = correct_b - correct_a
+        total_delta += delta
+        gate2_a = _row_gate2(row_a) if row_a else None
+        gate2_b = _row_gate2(row_b) if row_b else None
+        lines.append(
+            f"{story:<10} {correct_a:>4}/{int(row_a.get('placeholders_total') or 0):<4} "
+            f"{correct_b:>4}/{int(row_b.get('placeholders_total') or 0):<4} {delta:>+6}  "
+            f"{('-' if gate2_a is None else gate2_a):>7} {('-' if gate2_b is None else gate2_b):>7}"
+        )
+    lines.append(f"{'TOTAL':<10} delta {total_delta:+d} placeholder(s) from {leg_a} to {leg_b}")
+    lines.append("")
+    lines.append(f"COMPARABLE: same dataset {key_a} of {size_a} placeholders")
+    return {"comparable": True, "why": "", "text": "\n".join(lines), "exit": 0}
+
+
+# ---------------------------------------------------------------------------
 # Runner (unified entry point)
 # ---------------------------------------------------------------------------
 
@@ -873,6 +1343,9 @@ class EvalRunner:
         regenerate: bool = False,
         use_graph: bool = False,
         evidence_dir: Path | None = None,
+        run_group: str | None = None,
+        rag_store: str | None = None,
+        settings_declared: dict[str, Any] | None = None,
     ) -> None:
         self.dataset_dir = dataset_dir
         self.code_dir = code_dir
@@ -880,6 +1353,12 @@ class EvalRunner:
         self.test_output_dir = test_output_dir
         self.regenerate = regenerate
         self.use_graph = use_graph
+        # j-0273: the leg identity, what the RAG store held, and any setting the
+        # operator declares for this run (a launch config the pipeline cannot
+        # see, e.g. the llama-server args). None = not recorded.
+        self.run_group = run_group
+        self.rag_store = rag_store
+        self.settings_declared = dict(settings_declared or {})
         # B-093: when set, every run keeps its evidence here (emitted tests,
         # per-test outcomes, raw pytest output, per-placeholder result) so the
         # score can be recomputed with no model and no live run. See
@@ -1117,6 +1596,20 @@ class EvalRunner:
             git_commit = _get_git_commit()
             provider, model = self._loaded_model_identity()
             temperature_sent, server_defaults, thinking = self._sampling_identity(self.use_graph)
+            # j-0273: the leg identity and the settings this leg actually ran at.
+            # dataset_size is the DATASET's placeholder count, not the run's
+            # numerator, so "113 vs 114" cannot be read as a score difference.
+            settings: dict[str, Any] = {
+                "mode": mode,
+                "regenerate": self.regenerate,
+                "use_graph": self.use_graph,
+                "pytest_timeout": pytest_timeout,
+                "temperature_sent": temperature_sent,
+                "thinking": thinking,
+                "rag_store": self.rag_store,
+            }
+            if self.settings_declared:
+                settings["declared"] = self.settings_declared
             run_ids = persist_results(
                 self.db_path,
                 results,
@@ -1133,6 +1626,11 @@ class EvalRunner:
                 # B-093: store the per-criterion verification basis beside the row.
                 code_map=code_map,
                 outcomes=outcomes,
+                run_group=self.run_group,
+                dataset_key=dataset_key(self.dataset_dir),
+                dataset_size=_dataset_size(self.dataset_dir),
+                rag_store=self.rag_store,
+                run_settings=json.dumps(settings),
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 

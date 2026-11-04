@@ -17,6 +17,10 @@ Subcommands:
     run         Execute evaluation (mode: static, resolver, full)
     baseline    Save current results as the reference baseline
     compare     Compare current results against the baseline
+    rebuild     Rebuild eval_runs rows from a run's kept evidence
+    report      Rollup over eval_runs + eval_criteria for one story
+    runs        List every leg in the store, with the settings it ran at
+    diff-runs   Compare two legs; exits 6 when they are not the same dataset
     dataset     Validate golden key files
 
 Usage:
@@ -71,6 +75,13 @@ def _setup_logging(verbose: bool = False) -> None:
     )
 
 
+def _load_settings_json(path: str | None) -> dict:
+    """Read a declared-settings JSON file; an unreadable one is an error, not silence."""
+    if not path:
+        return {}
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: run
 # ---------------------------------------------------------------------------
@@ -78,9 +89,17 @@ def _setup_logging(verbose: bool = False) -> None:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute the evaluation harness."""
+    from eval_runner import persist_policy_error
+
+    # j-0273: refuse the wrong run BEFORE it costs a model or a live site.
+    refusal = persist_policy_error(args.mode, args.no_persist, getattr(args, "run_group", None))
+    if refusal is not None:
+        print(f"ERROR: {refusal}", file=sys.stderr)
+        return 2
+
     # t-0515: keep the eval's RAG reads/writes (and the generated-test
     # conftest's learning, which inherits the env) in the eval's own store.
-    from scripts.eval.eval_resolver import isolate_eval_store
+    from eval_resolver import isolate_eval_store
 
     isolate_eval_store()
 
@@ -127,6 +146,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         regenerate=args.regenerate,
         use_graph=args.use_graph,
         evidence_dir=evidence_dir,
+        run_group=getattr(args, "run_group", None),
+        rag_store=getattr(args, "rag_store", None),
+        settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
     )
 
     report = runner.run(
@@ -287,10 +309,50 @@ def _cmd_rebuild(args: argparse.Namespace) -> int:
     from eval_runner import rebuild_run_from_evidence
 
     db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
-    run_ids = rebuild_run_from_evidence(args.evidence_dir, db_path)
+    dataset_dir = Path(args.dataset) if getattr(args, "dataset", None) else None
+    # j-0273: every value the evidence cannot carry must be declared here, or it
+    # stays unknown. `--rag-enabled` is tri-state: omitted means "not recorded".
+    rag_enabled: bool | None = None
+    if getattr(args, "rag_enabled", None) == "on":
+        rag_enabled = True
+    elif getattr(args, "rag_enabled", None) == "off":
+        rag_enabled = False
+    run_ids = rebuild_run_from_evidence(
+        args.evidence_dir,
+        db_path,
+        dataset_dir,
+        run_group=getattr(args, "run_group", None),
+        rag_enabled=rag_enabled,
+        rag_store=getattr(args, "rag_store", None),
+        dataset_size=getattr(args, "dataset_size", None),
+        provider=getattr(args, "provider", None),
+        model=getattr(args, "model", None),
+        temperature_sent=getattr(args, "temperature", None),
+        thinking=getattr(args, "thinking", None),
+        settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
+    )
     print(f"Rebuilt {len(run_ids)} eval_runs row(s): {', '.join(run_ids)}")
-    print("Query them with: python scripts/eval/eval_harness.py report")
+    print("Query them with: python scripts/eval/eval_harness.py runs")
     return 0
+
+
+def _cmd_runs(args: argparse.Namespace) -> int:
+    """List every leg in the store, with the settings each ran at (j-0273)."""
+    from eval_runner import render_runs
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    print(render_runs(db_path))
+    return 0
+
+
+def _cmd_diff_runs(args: argparse.Namespace) -> int:
+    """Compare two legs; refuse when they are not the same sample (j-0273)."""
+    from eval_runner import compare_run_groups
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    result = compare_run_groups(db_path, args.leg_a, args.leg_b)
+    print(result["text"])
+    return int(result["exit"])
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +474,28 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--no-persist",
         action="store_true",
-        help="Skip persisting results to SQLite",
+        help=(
+            "Skip persisting results to SQLite. Allowed with --mode static only: a "
+            "model-bearing run must land in eval_runs (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--run-group",
+        help=(
+            "Name this leg so its rows can be selected and compared, e.g. "
+            "2026-11-04-leg1. Required for --mode full and --mode resolver (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--rag-store",
+        help=(
+            "What the RAG store held for this leg, e.g. 'bundled:113 golden + 35 docs' or "
+            "'empty:0'. rag_enabled alone cannot tell those two legs apart (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--settings-json",
+        help="JSON file of settings this run cannot see itself (launch config, box notes)",
     )
     run_parser.add_argument(
         "--semantic",
@@ -453,6 +536,33 @@ def main(argv: list[str] | None = None) -> int:
     rebuild_parser = subparsers.add_parser("rebuild", help="Rebuild an eval_runs row from kept evidence")
     rebuild_parser.add_argument("--evidence-dir", required=True, help="Run directory kept by --evidence-dir")
     rebuild_parser.add_argument("--db", help="Path to the SQLite database")
+    rebuild_parser.add_argument("--dataset", help="Golden keys to re-score against (default: the run's own)")
+    rebuild_parser.add_argument("--run-group", help="Name this leg (j-0273)")
+    rebuild_parser.add_argument(
+        "--rag-enabled",
+        choices=["on", "off"],
+        default=None,
+        help="RAG master for this leg. Omit when the evidence does not record it (stays unknown).",
+    )
+    rebuild_parser.add_argument("--rag-store", help="What the RAG store held, e.g. 'bundled:113 golden + 35 docs'")
+    rebuild_parser.add_argument("--dataset-size", type=int, help="Placeholders the dataset held (e.g. 113)")
+    rebuild_parser.add_argument("--provider", help="LLM provider this leg ran against")
+    rebuild_parser.add_argument("--model", help="Model this leg ran against")
+    rebuild_parser.add_argument("--temperature", type=float, help="Sampling temperature the leg sent")
+    rebuild_parser.add_argument("--thinking", help="Thinking mode this leg ran (e.g. off)")
+    rebuild_parser.add_argument("--settings-json", help="JSON file of further settings, each with its source")
+
+    # --- runs / diff-runs (j-0273) ---
+    runs_parser = subparsers.add_parser("runs", help="List every leg in eval_runs with its settings")
+    runs_parser.add_argument("--db", help="Path to the SQLite database")
+
+    diff_parser = subparsers.add_parser(
+        "diff-runs",
+        help="Compare two legs; exits 6 when they are not the same dataset",
+    )
+    diff_parser.add_argument("leg_a", help="First leg (a --run-group value)")
+    diff_parser.add_argument("leg_b", help="Second leg (a --run-group value)")
+    diff_parser.add_argument("--db", help="Path to the SQLite database")
 
     # --- dataset ---
     dataset_parser = subparsers.add_parser("dataset", help="Validate golden keys")
@@ -471,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
         "compare": _cmd_compare,
         "report": _cmd_report,
         "rebuild": _cmd_rebuild,
+        "runs": _cmd_runs,
+        "diff-runs": _cmd_diff_runs,
         "dataset": _cmd_dataset,
     }
 

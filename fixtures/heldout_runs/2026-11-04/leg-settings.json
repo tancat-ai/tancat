@@ -1,0 +1,212 @@
+{
+ "run": "2026-11-04",
+ "purpose": "Every value the backfill puts into eval_runs for these legs, and where it came from. A value no artefact records is null with a source that says 'unknown' - never guessed.",
+ "git_commit": {
+  "value": "d61bca7ba32080d61ecb6c8d13778e27e0364017",
+  "source": "manifest.json in each leg directory"
+ },
+ "dataset_size": {
+  "value": 114,
+  "source": "manifest.json gate1_placeholders_total"
+ },
+ "pytest_timeout_s": {
+  "value": 730,
+  "source": "each leg's summary.txt ('killed by the per-file clock at 746 s, limit 730 s')"
+ },
+ "launch_config": {
+  "model_file": {
+   "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "ctx_size": {
+   "value": 262144,
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "cache_type_k_v": {
+   "value": "q8_0/q8_0",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "flash_attn": {
+   "value": "on",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "temperature": {
+   "value": 0.0,
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "thinking": {
+   "value": "off",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "build": {
+   "value": "b11871-b3fa69955",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "server": {
+   "value": "llama.cpp Vulkan",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "spec_type": {
+   "value": "draft-mtp",
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "spec_draft_n_max": {
+   "value": 5,
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "batch": {
+   "value": 2048,
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  },
+  "ubatch": {
+   "value": 512,
+   "source": "clowder report t-1261, section 2 'Settings, captured before the legs'"
+  }
+ },
+ "legs": [
+  {
+   "run_group": "2026-11-04-t1261-leg1",
+   "directory": "leg1_rag_on_bundled",
+   "rag_enabled": {
+    "value": true,
+    "source": "clowder report t-1261, 'Leg 1 - RAG on, bundled pack'"
+   },
+   "rag_store": {
+    "value": "bundled pack (entry count not recorded)",
+    "source": "clowder report t-1261, 'Leg 1 - RAG on, bundled pack'"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t1261/leg1.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t1261/leg1.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t1261/leg1.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t1261/leg1.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-11-04-t1261-leg2",
+   "directory": "leg2_rag_off_bundled",
+   "rag_enabled": {
+    "value": false,
+    "source": "clowder report t-1261, 'Leg 2 - RAG off, bundled pack'"
+   },
+   "rag_store": {
+    "value": "bundled pack (never built: RAG_ENABLED=0)",
+    "source": "clowder report t-1261, 'Leg 2 - RAG off, bundled pack'"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t1261/leg2.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t1261/leg2.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t1261/leg2.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t1261/leg2.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-11-04-t1261-leg3",
+   "directory": "leg3_rag_on_empty",
+   "rag_enabled": {
+    "value": true,
+    "source": "clowder report t-1261, 'Leg 3 - RAG on, empty store' and its closing note"
+   },
+   "rag_store": {
+    "value": "empty: the store was moved aside for this leg",
+    "source": "clowder report t-1261, 'Leg 3 - RAG on, empty store' and its closing note"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t1261/leg3.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t1261/leg3.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t1261/leg3.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t1261/leg3.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-11-04-t1261-leg4",
+   "directory": "leg4_rag_off_empty",
+   "rag_enabled": {
+    "value": false,
+    "source": "clowder report t-1261, 'Leg 4 - RAG off, empty store'"
+   },
+   "rag_store": {
+    "value": "empty (never built: RAG_ENABLED=0)",
+    "source": "clowder report t-1261, 'Leg 4 - RAG off, empty store'"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t1261/leg4.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t1261/leg4.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t1261/leg4.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t1261/leg4.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  }
+ ]
+}
