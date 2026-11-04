@@ -1,0 +1,196 @@
+{
+ "run": "2026-10-31",
+ "purpose": "Every value the backfill puts into eval_runs for these legs, and where it came from. A value no artefact records is null with a source that says 'unknown' - never guessed.",
+ "git_commit": {
+  "value": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+  "source": "manifest.json in each leg directory"
+ },
+ "dataset_size": {
+  "value": 113,
+  "source": "manifest.json gate1_placeholders_total"
+ },
+ "pytest_timeout_s": {
+  "value": 300,
+  "source": "README ('eval-005's 6 tests timed out at 300 s in every leg')"
+ },
+ "launch_config": {
+  "model_file": {
+   "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "ctx_size": {
+   "value": 262144,
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "cache_type_k_v": {
+   "value": "q8_0/q8_0",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "flash_attn": {
+   "value": "on",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "temperature": {
+   "value": 0.0,
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "thinking": {
+   "value": "off",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "build": {
+   "value": "b11871-b3fa69955",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  },
+  "server": {
+   "value": "llama.cpp Vulkan, 127.0.0.1:8080",
+   "source": "scratch/t-1146/legs.json and scratch/t-1146/REPORT.md, 'Settings, identical on all four legs'"
+  }
+ },
+ "legs": [
+  {
+   "run_group": "2026-10-31-leg1",
+   "directory": "leg1_rag_on_bundled",
+   "rag_enabled": {
+    "value": true,
+    "source": "README table row 1; legs.json store_at_start"
+   },
+   "rag_store": {
+    "value": "bundled: 113 golden + 35 docs",
+    "source": "README table row 1; legs.json store_at_start"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t-1146/leg1_rag_on_bundled/run.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t-1146/leg1_rag_on_bundled/run.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t-1146/leg1_rag_on_bundled/run.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t-1146/leg1_rag_on_bundled/run.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-10-31-leg2",
+   "directory": "leg2_rag_off_bundled",
+   "rag_enabled": {
+    "value": false,
+    "source": "README table row 2; legs.json store_at_start"
+   },
+   "rag_store": {
+    "value": "bundled: 113 golden + 35 docs (never built: RAG_ENABLED=0)",
+    "source": "README table row 2; legs.json store_at_start"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t-1146/leg2_rag_off_bundled/run.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t-1146/leg2_rag_off_bundled/run.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t-1146/leg2_rag_off_bundled/run.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t-1146/leg2_rag_off_bundled/run.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-10-31-leg3",
+   "directory": "leg3_rag_on_empty",
+   "rag_enabled": {
+    "value": true,
+    "source": "README table row 3; legs.json store_at_start"
+   },
+   "rag_store": {
+    "value": "empty: 0 entries verified",
+    "source": "README table row 3; legs.json store_at_start"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t-1146/leg3_rag_on_empty/run.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t-1146/leg3_rag_on_empty/run.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t-1146/leg3_rag_on_empty/run.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t-1146/leg3_rag_on_empty/run.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  },
+  {
+   "run_group": "2026-10-31-leg4",
+   "directory": "leg4_rag_off_empty",
+   "rag_enabled": {
+    "value": false,
+    "source": "README table row 4; legs.json store_at_start"
+   },
+   "rag_store": {
+    "value": "empty: 0 entries verified (never built: RAG_ENABLED=0)",
+    "source": "README table row 4; legs.json store_at_start"
+   },
+   "provider": {
+    "value": "openai-local",
+    "source": "scratch/t-1146/leg4_rag_off_empty/run.log, the 'Calling provider=' line"
+   },
+   "model": {
+    "value": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "source": "scratch/t-1146/leg4_rag_off_empty/run.log, the 'Calling provider=' line (published as the file name; the log holds the full path)"
+   },
+   "temperature_sent": {
+    "value": 0.0,
+    "source": "scratch/t-1146/leg4_rag_off_empty/run.log, 'temp=0.0'"
+   },
+   "thinking": {
+    "value": "off",
+    "source": "scratch/t-1146/leg4_rag_off_empty/run.log, 'thinking=off'"
+   },
+   "server_defaults": {
+    "value": null,
+    "source": "unknown: the endpoint's /props snapshot was fetched by the pipeline but never written into this run's evidence"
+   },
+   "pom_mode": {
+    "value": null,
+    "source": "unknown: the harness did not record it in this run; the eval_runs column holds the code default 0"
+   }
+  }
+ ]
+}
