@@ -635,7 +635,7 @@ Docs: https://github.com/tancat-ai/tancat (README.md, docs/ci.md)
 """
 
 
-_PROVIDER_DEFAULTS_NOTE = "$LLM_PROVIDER, then the saved setting, else the provider's default"
+_PROVIDER_DEFAULTS_NOTE = "saved setting, then $LLM_PROVIDER, else the provider's default"
 
 
 def _version() -> str:
@@ -677,9 +677,9 @@ def _version_info() -> str:
 
     d-0132: a bug report needs the commit and the Python build, not only a
     version number, and the provider/model says which LLM the CLI is talking
-    about. The provider uses the SAME precedence the CLI uses (``$LLM_PROVIDER``,
-    then the saved setting, then the default); ``--version`` still succeeds on
-    an unknown name, and says so rather than inventing one.
+    about. The provider uses the SAME precedence the CLI uses (the saved
+    setting, then ``$LLM_PROVIDER``, then the default); ``--version`` still
+    succeeds on an unknown name, and says so rather than inventing one.
     """
     from .session import resolve_session_provider
 

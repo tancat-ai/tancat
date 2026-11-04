@@ -63,11 +63,12 @@ def validate_provider(provider: str) -> str:
 
     - ``tancat run --provider``: the flag only; its default is openai-local.
       The environment is never consulted on this path, and no session is built.
-    - ``tancat check-llm --provider``: flag, then ``$LLM_PROVIDER``, then the
-      persisted session setting, then openai-local. A valid flag outranks a
-      stale environment variable.
-    - ``tancat`` (interactive): ``$LLM_PROVIDER``, then the persisted session
-      setting, then openai-local.
+    - ``tancat check-llm --provider``: flag, then the persisted session setting,
+      then ``$LLM_PROVIDER``, then openai-local. A valid flag outranks a stale
+      environment variable, and a saved choice outranks one too (B-036) - a
+      stale env var must never hijack the provider the user saved in the tool.
+    - ``tancat`` (interactive): the persisted session setting, then
+      ``$LLM_PROVIDER``, then openai-local.
 
     Raises:
         ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
@@ -77,18 +78,20 @@ def validate_provider(provider: str) -> str:
     return provider
 
 
-def resolve_provider(*, flag: str = "", env: str = "", persisted: str = "") -> str:
-    """Pick and validate the provider: flag, then env, then saved setting, then the default.
+def resolve_provider(*, flag: str = "", persisted: str = "", env: str = "") -> str:
+    """Pick and validate the provider: flag, then saved setting, then env, then the default.
 
     d-0132: a name set in any of those places is validated, and the FIRST one
     that is set wins - so a valid --provider still wins over a stale
-    ``$LLM_PROVIDER``. An unknown name in a HIGHER-precedence source is refused
-    rather than skipped: an explicitly wrong flag is a mistake, not a default.
+    ``$LLM_PROVIDER``, and the provider the user saved in the tool wins over a
+    stale environment variable (B-036). An unknown name in a HIGHER-precedence
+    source is refused rather than skipped: an explicitly wrong flag is a
+    mistake, not a default.
 
     Raises:
         ValueError: when the winning name is not in ``SUPPORTED_PROVIDERS``.
     """
-    for candidate in (flag, env, persisted):
+    for candidate in (flag, persisted, env):
         name = candidate.strip()
         if name:
             return validate_provider(name)

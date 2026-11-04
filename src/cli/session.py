@@ -153,18 +153,18 @@ def resolve_session_provider(flag: str = "") -> str:
     """Resolve and validate the provider the CLI will use, before a Session exists.
 
     d-0132: one precedence for the session layer - the ``--provider`` flag,
-    then ``$LLM_PROVIDER``, then the persisted setting, then openai-local. A
-    valid flag outranks a stale environment variable, and an unknown name from
-    ANY of the three sources is refused instead of reaching the menu, the probe
-    or the pipeline.
+    then the persisted setting, then ``$LLM_PROVIDER``, then openai-local. A
+    valid flag outranks a stale environment variable, a saved choice outranks
+    one too (B-036), and an unknown name from ANY of the three sources is
+    refused instead of reaching the menu, the probe or the pipeline.
 
     Raises:
         ValueError: when the winning name is not a supported provider.
     """
     return resolve_provider(
         flag=flag,
-        env=os.environ.get("LLM_PROVIDER", ""),
         persisted=str(load_setting("provider", "") or ""),
+        env=os.environ.get("LLM_PROVIDER", ""),
     )
 
 

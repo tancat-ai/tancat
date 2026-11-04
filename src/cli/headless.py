@@ -440,7 +440,7 @@ def add_check_llm_parser(subparsers: Any) -> argparse.ArgumentParser:
         default="",
         help=(
             f"Provider ({', '.join(SUPPORTED_PROVIDERS)}); default: --provider, then "
-            "$LLM_PROVIDER, then the saved setting, then openai-local"
+            "the saved setting, then $LLM_PROVIDER, then openai-local"
         ),
     )
     parser.add_argument(

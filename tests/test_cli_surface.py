@@ -137,14 +137,49 @@ def test_check_llm_unreachable_exits_one(monkeypatch: pytest.MonkeyPatch, capsys
 #
 # A stale LLM_PROVIDER used to raise out of create_session as a raw traceback
 # with exit 1 - even when a valid --provider was passed on the command line.
-# The provider is now resolved and validated at the session boundary, flag
-# first, environment second.
+# The provider is now resolved and validated at the session boundary, and the
+# precedence is flag > saved setting (B-036) > environment > openai-local, so a
+# stale env var cannot hijack the choice the user saved in the tool.
 # ---------------------------------------------------------------------------
+
+
+def _nothing_saved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the settings store for this test, so the environment is the source."""
+    import src.cli.session as session_mod
+
+    monkeypatch.setattr(session_mod, "load_setting", lambda key, default=None: default)
+
+
+def _save_provider(monkeypatch: pytest.MonkeyPatch, provider: str) -> None:
+    """Make the settings store hold *provider* (and nothing else that matters)."""
+    import src.cli.session as session_mod
+
+    monkeypatch.setattr(
+        session_mod,
+        "load_setting",
+        lambda key, default=None: provider if key == "provider" else default,
+    )
+
+
+def _record_provider(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """Patch the health probe and record which provider the CLI actually used."""
+    import src.llm_health as health
+
+    used: dict[str, str] = {}
+
+    def fake_build(provider: str, base_url: str | None = None, model: str | None = None) -> object:
+        used["provider"] = provider
+        return object()
+
+    monkeypatch.setattr(health, "build_client", fake_build)
+    monkeypatch.setattr(health, "check_llm", lambda *a, **k: _healthy())
+    return used
 
 
 def test_check_llm_refuses_unknown_env_provider(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _nothing_saved(monkeypatch)
     monkeypatch.setenv("LLM_PROVIDER", "bogus")
     assert cli_main.main(["check-llm"]) == 2
     captured = capsys.readouterr()
@@ -155,34 +190,32 @@ def test_check_llm_refuses_unknown_env_provider(
 def test_valid_flag_wins_over_unknown_env_provider(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    import src.llm_health as health
-
-    used: dict[str, str] = {}
-
-    def fake_build(provider: str, base_url: str | None = None, model: str | None = None) -> object:
-        used["provider"] = provider
-        return object()
-
+    _nothing_saved(monkeypatch)
+    used = _record_provider(monkeypatch)
     monkeypatch.setenv("LLM_PROVIDER", "bogus")
-    monkeypatch.setattr(health, "build_client", fake_build)
-    monkeypatch.setattr(health, "check_llm", lambda *a, **k: _healthy())
 
     assert cli_main.main(["check-llm", "--provider", "openai-local", "--json"]) == 0
     assert used["provider"] == "openai-local"
     assert "Traceback" not in capsys.readouterr().err
 
 
+def test_saved_provider_wins_over_the_environment(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """B-036: a stale env var must never hijack the provider saved in the tool."""
+    _save_provider(monkeypatch, "lm-studio")
+    used = _record_provider(monkeypatch)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    assert cli_main.main(["check-llm", "--json"]) == 0
+    assert used["provider"] == "lm-studio"
+    assert "Traceback" not in capsys.readouterr().err
+
+
 def test_check_llm_refuses_unknown_persisted_provider(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    import src.cli.session as session_mod
-
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    monkeypatch.setattr(
-        session_mod,
-        "load_setting",
-        lambda key, default=None: "bogus" if key == "provider" else default,
-    )
+    _save_provider(monkeypatch, "bogus")
     assert cli_main.main(["check-llm"]) == 2
     captured = capsys.readouterr()
     assert "unknown LLM provider 'bogus'" in captured.err
@@ -192,23 +225,8 @@ def test_check_llm_refuses_unknown_persisted_provider(
 def test_valid_flag_wins_over_unknown_persisted_provider(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    import src.cli.session as session_mod
-    import src.llm_health as health
-
-    used: dict[str, str] = {}
-
-    def fake_build(provider: str, base_url: str | None = None, model: str | None = None) -> object:
-        used["provider"] = provider
-        return object()
-
-    monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    monkeypatch.setattr(
-        session_mod,
-        "load_setting",
-        lambda key, default=None: "bogus" if key == "provider" else default,
-    )
-    monkeypatch.setattr(health, "build_client", fake_build)
-    monkeypatch.setattr(health, "check_llm", lambda *a, **k: _healthy())
+    _save_provider(monkeypatch, "bogus")
+    used = _record_provider(monkeypatch)
 
     assert cli_main.main(["check-llm", "--provider", "lm-studio", "--json"]) == 0
     assert used["provider"] == "lm-studio"
@@ -217,7 +235,19 @@ def test_valid_flag_wins_over_unknown_persisted_provider(
 def test_interactive_start_refuses_unknown_env_provider(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _nothing_saved(monkeypatch)
     monkeypatch.setenv("LLM_PROVIDER", "bogus")
+    assert cli_main.main([]) == 2
+    captured = capsys.readouterr()
+    assert "unknown LLM provider 'bogus'" in captured.err
+    assert "Traceback" not in captured.err + captured.out
+
+
+def test_interactive_start_refuses_unknown_persisted_provider(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _save_provider(monkeypatch, "bogus")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
     assert cli_main.main([]) == 2
     captured = capsys.readouterr()
     assert "unknown LLM provider 'bogus'" in captured.err
