@@ -34,7 +34,7 @@ from urllib.parse import urlparse
 
 from src.ci_ignore import load_ignore_spec
 from src.journey_models import CredentialProfile
-from src.provider_config import SUPPORTED_PROVIDERS, get_provider_defaults, validate_provider
+from src.provider_config import SUPPORTED_PROVIDERS, get_provider_defaults
 from src.storage import init_storage
 from src.ui_pipeline import PipelineSessionState, run_pipeline
 from src.url_guard import UrlGuard
@@ -439,8 +439,8 @@ def add_check_llm_parser(subparsers: Any) -> argparse.ArgumentParser:
         "--provider",
         default="",
         help=(
-            f"Provider ({', '.join(SUPPORTED_PROVIDERS)}); default: persisted setting, "
-            "then $LLM_PROVIDER, then openai-local"
+            f"Provider ({', '.join(SUPPORTED_PROVIDERS)}); default: --provider, then "
+            "$LLM_PROVIDER, then the saved setting, then openai-local"
         ),
     )
     parser.add_argument(
@@ -455,17 +455,18 @@ def add_check_llm_parser(subparsers: Any) -> argparse.ArgumentParser:
 
 def check_llm_main(args: argparse.Namespace) -> int:
     """Run the health probe. Exit 0 when healthy, 1 otherwise."""
-    from src.cli.session import create_session
+    from src.cli.session import create_session, resolve_session_provider
     from src.llm_health import build_client, check_llm, render_report
 
-    session = create_session()
-    provider = args.provider or session.provider
+    # d-0132: resolve and validate BEFORE the session is built, with the flag
+    # first and the environment second. A stale $LLM_PROVIDER used to raise out
+    # of create_session as a traceback even when a valid --provider was given.
     try:
-        validate_provider(provider)
+        provider = resolve_session_provider(args.provider)
     except ValueError as exc:
-        # d-0132: same refusal as `run`, so a misspelt provider is named here too.
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
+    session = create_session(provider=provider)
     base_url = args.llm_base_url or session.provider_base_url
     model = args.model or session.model_name
     result = check_llm(

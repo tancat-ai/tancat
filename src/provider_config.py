@@ -20,6 +20,9 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
     OPENROUTER_PROVIDER,
 )
 
+# The documented default (AGENTS.md §5, README): llama.cpp on :8080.
+DEFAULT_PROVIDER = LOCAL_OPENAI_PROVIDER
+
 # The environment variable that carries each provider's API key. Keep this the
 # single source of truth so the UI field, the CLI prompt and the provider
 # factory all read and write the same variable.
@@ -53,8 +56,18 @@ LOCAL_MODEL_LIST_TIMEOUT = 15
 def validate_provider(provider: str) -> str:
     """Return *provider* unchanged, or raise for a name the tool does not know.
 
-    d-0132: one message, one rule, so the CLI, the health probe and the UI all
-    refuse a misspelt provider the same way instead of defaulting silently.
+    d-0132: one message, one rule, so every CLI entry point refuses a misspelt
+    provider the same way instead of defaulting silently.
+
+    Precedence is NOT the same on every entry point, so each one is named here:
+
+    - ``tancat run --provider``: the flag only; its default is openai-local.
+      The environment is never consulted on this path, and no session is built.
+    - ``tancat check-llm --provider``: flag, then ``$LLM_PROVIDER``, then the
+      persisted session setting, then openai-local. A valid flag outranks a
+      stale environment variable.
+    - ``tancat`` (interactive): ``$LLM_PROVIDER``, then the persisted session
+      setting, then openai-local.
 
     Raises:
         ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
@@ -62,6 +75,24 @@ def validate_provider(provider: str) -> str:
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(f"unknown LLM provider '{provider}' - choose one of: {', '.join(SUPPORTED_PROVIDERS)}")
     return provider
+
+
+def resolve_provider(*, flag: str = "", env: str = "", persisted: str = "") -> str:
+    """Pick and validate the provider: flag, then env, then saved setting, then the default.
+
+    d-0132: a name set in any of those places is validated, and the FIRST one
+    that is set wins - so a valid --provider still wins over a stale
+    ``$LLM_PROVIDER``. An unknown name in a HIGHER-precedence source is refused
+    rather than skipped: an explicitly wrong flag is a mistake, not a default.
+
+    Raises:
+        ValueError: when the winning name is not in ``SUPPORTED_PROVIDERS``.
+    """
+    for candidate in (flag, env, persisted):
+        name = candidate.strip()
+        if name:
+            return validate_provider(name)
+    return DEFAULT_PROVIDER
 
 
 def get_provider_defaults(provider: str) -> tuple[str, str]:

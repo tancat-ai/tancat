@@ -635,7 +635,7 @@ Docs: https://github.com/tancat-ai/tancat (README.md, docs/ci.md)
 """
 
 
-_PROVIDER_DEFAULTS_NOTE = "$LLM_PROVIDER, else the provider's default"
+_PROVIDER_DEFAULTS_NOTE = "$LLM_PROVIDER, then the saved setting, else the provider's default"
 
 
 def _version() -> str:
@@ -676,21 +676,25 @@ def _version_info() -> str:
     """Return the multi-line version block printed by ``tancat --version``.
 
     d-0132: a bug report needs the commit and the Python build, not only a
-    version number, and the provider/model says which LLM the help is talking
-    about. The provider is read from the environment exactly as the session
-    reads it, and named as such - a persisted setting is not consulted here.
+    version number, and the provider/model says which LLM the CLI is talking
+    about. The provider uses the SAME precedence the CLI uses (``$LLM_PROVIDER``,
+    then the saved setting, then the default); ``--version`` still succeeds on
+    an unknown name, and says so rather than inventing one.
     """
-    provider = os.environ.get("LLM_PROVIDER", "").strip() or "openai-local"
+    from .session import resolve_session_provider
+
     model = os.environ.get("LLM_MODEL", "").strip()
     try:
-        _base_url, provider_model = get_provider_defaults(provider)
-    except ValueError as exc:
-        provider_model = ""
-        model = model or f"({exc})"
+        provider = resolve_session_provider()
+    except ValueError:
+        provider = "unknown (set in the saved setting or $LLM_PROVIDER)"
+        provider_model = "(not set)"
+    else:
+        provider_model = get_provider_defaults(provider)[1] or "(not set)"
     lines = [
         f"tancat {_version()} (commit {_commit()})",
         f"Python {platform.python_version()} on {platform.platform()}",
-        f"Provider {provider}, model {model or provider_model or '(not set)'} ({_PROVIDER_DEFAULTS_NOTE})",
+        f"Provider {provider}, model {model or provider_model} ({_PROVIDER_DEFAULTS_NOTE})",
     ]
     return "\n".join(lines)
 

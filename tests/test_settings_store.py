@@ -181,9 +181,14 @@ class TestOcrBackendIntegration:
 class TestSessionSeeding:
     """CLI ``create_session`` seeds from the settings store (B-036 Phase 4)."""
 
-    def test_create_session_uses_persisted_values(self) -> None:
+    def test_create_session_uses_persisted_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from src.cli.session import create_session
 
+        # d-0132: a provider named in the environment outranks the saved one, so
+        # this test of B-036's seeding must start with the env unset (the repo's
+        # .env sets LLM_PROVIDER=openai-local). Everything else still seeds from
+        # the store first.
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
         save_settings(
             {
                 "provider": "lm-studio",
@@ -199,6 +204,18 @@ class TestSessionSeeding:
         assert session.consent_mode == "leave-as-is"
         assert session.pom_mode is True
         assert session.jira_project_key == "PAYMENTS"
+
+    def test_env_provider_outranks_persisted_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """d-0132: ``$LLM_PROVIDER`` wins over the saved setting, and is validated."""
+        from src.cli.session import create_session
+
+        save_settings({"provider": "lm-studio"})
+        monkeypatch.setenv("LLM_PROVIDER", "openai")
+        assert create_session().provider == "openai"
+
+        monkeypatch.setenv("LLM_PROVIDER", "bogus")
+        with pytest.raises(ValueError, match="unknown LLM provider 'bogus'"):
+            create_session()
 
     def test_create_session_defaults_without_settings(self) -> None:
         from src.cli.session import create_session
