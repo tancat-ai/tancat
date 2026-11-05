@@ -848,7 +848,15 @@ def check_page_schema(golden: dict[str, Any]) -> list[str]:
                 continue
             target = str(ph.get("target_page") or "").strip()
             outcome = str(ph.get("outcome_page") or "").strip()
-            url_kind = str(ph.get("expected_type") or "") == "url_assertion" or action in _NO_TARGET_ACTIONS
+            # A URL assertion is recognised by its classification OR by its
+            # locator: a golden that names `to_have_url(...)` but forgets the
+            # expected_type is still asserting a URL, and must not be told it
+            # needs an element target.
+            url_kind = (
+                str(ph.get("expected_type") or "") == "url_assertion"
+                or action in _NO_TARGET_ACTIONS
+                or str(ph.get("expected_locator") or "").strip().startswith("expect(page).to_have_url")
+            )
 
             if action in _NO_TARGET_ACTIONS or url_kind:
                 if target:

@@ -1,12 +1,12 @@
 {
-  "recorded_at": "2026-10-30",
-  "record_kind": "static leg (no model) - the headline is now the held-out split",
-  "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+  "recorded_at": "2026-11-05",
+  "record_kind": "static leg (no model) - the headline is the held-out split, re-measured after the target/outcome split (d-0149)",
+  "label": "20/30 (66.7%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 114 placeholders)",
   "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
   "seed": "bundled pack minus the 3 held-out story files (83 of 113 patterns)",
-  "gate1_correct": 12,
+  "gate1_correct": 20,
   "gate1_total": 30,
-  "gate1_accuracy_pct": 40.0,
+  "gate1_accuracy_pct": 66.7,
   "gate2_false_greens": null,
   "gate2_note": "Not measured here: gate 2 (hollow passes) needs generated tests executed against a live site. This record is a static resolver leg and says nothing about gate 2. The last gate-2 reading is the 89/113 full-mode run under 'previous' (0 hollow passes).",
   "targets": {
@@ -17,8 +17,8 @@
     "gate1_gate_cadence": "The full dataset (114 placeholders) in full --regenerate (model) mode is the ONLY gate - run it at milestones and at release. Owner's decision, 2026-11-01, his words: 'i don't really understand the second gate yes so just regression for now but we should look at it as a pre launch check'.",
     "heldout_split_role": "The held-out 30 is NOT a gate: it is a static regression check run on every change - resolver only, no model, no GPU - held to 'no worse than the recorded 12/30', and it is reviewed as a PRE-LAUNCH check at launch (same owner decision, 2026-11-01). It says nothing about the gate; a 40% reading there is a regression floor, not a threshold that failed."
   },
-  "verdict": "gate 1: target MET on the full dataset (114 placeholders) in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, cell full_mode_2026_10_31.cells.rag_on_bundled (evidence fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled; re-scores from the tracked tree with no model). This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous').",
-  "source": "scripts/eval/eval_resolver.py --mode static (held-out) with and without RAG_ENABLED=0, four runs, 2026-10-30, no model and no browser",
+  "verdict": "gate 1 on the held-out static leg: 20/30 (66.7%), measured 2026-11-05 after the target/outcome split - it reaches the 20/30 ceiling exactly. The 12/30 it replaces is kept under static_leg_2026_10_30 and is labelled pre-schema-split: not comparable, because the field the resolver filtered on changed meaning. The 10 misses that remain are named under static_leg_2026_11_05.unreachable_misses; none of them is reachable by this fix. The gate-1 target on the full dataset (114 placeholders, full --regenerate) is unchanged; gate 2 is NOT MEASURED in this mode.",
+  "source": "scripts/eval/eval_resolver.py --mode static --heldout, 2026-11-05, against the split dataset (target_page/outcome_page); no model, no browser, no generated tests",
   "heldout_split": {
     "files": [
       "eval-007_banking_mock.json",
@@ -61,7 +61,10 @@
         "comparability": "The headline. 30 placeholders from the three held-out files: numerically NOT comparable to 89/113 at all (30 vs 113 placeholders, and a different mode), and never should be quoted against it. Comparable with heldout_without_pack only - same split, same mode, only the seed differs. A different split (a rotated run) is a different sample, so it is not comparable with this figure either; read the per_file breakdown beside both numbers before comparing two splits at all.",
         "comparable_with": [
           "heldout_without_pack"
-        ]
+        ],
+        "label_kind": "pre-schema-split",
+        "not_comparable_with_new_reading": true,
+        "why_not_comparable": "Not comparable with the post-split reading: this cell scored a dataset where one page field carried two facts, and the resolver filtered its candidate pool on it. On 2026-11-05 the field was split into target_page (the pool) and outcome_page (the arrival), and the resolver now filters on target_page; the same command therefore runs a different mechanism, not the same mechanism on a different product. The 8 rows whose target_page changed are the difference, so each side's number is honest for its own rule and neither may be subtracted from the other."
       },
       "heldout_without_pack": {
         "gate1_correct": 12,
@@ -168,7 +171,11 @@
       "eval-007": "7/13",
       "eval-008": "4/13",
       "eval-010": "1/4"
-    }
+    },
+    "label_kind": "pre-schema-split",
+    "pre_split": true,
+    "not_comparable_with_new_reading": true,
+    "why_not_comparable": "Not comparable with the post-split reading: this cell scored a dataset where one page field carried two facts, and the resolver filtered its candidate pool on it. On 2026-11-05 the field was split into target_page (the pool) and outcome_page (the arrival), and the resolver now filters on target_page; the same command therefore runs a different mechanism, not the same mechanism on a different product. The 8 rows whose target_page changed are the difference, so each side's number is honest for its own rule and neither may be subtracted from the other."
   },
   "full_mode_2026_10_31": {
     "cells": {
@@ -938,7 +945,7 @@
     }
   },
   "open_decision": "Whether the headline figure should stay the held-out split's static cell (12/30) now that the gate-1 target is read against the full dataset (114 placeholders) in full --regenerate mode (102/113), or move to that full-mode cell.",
-  "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+  "split": "held-out: eval-007, eval-008, eval-010 (30 of 114 placeholders)",
   "split_key": "eval-007|eval-008|eval-010",
   "split_kind": "heldout",
   "split_files": [
@@ -954,8 +961,8 @@
   "split_placeholders": 30,
   "split_rotation": "Fixed default split (eval-007/008/010). `eval_resolver.py --heldout-split <default|date|date:YYYY-MM-DD|seed:X|file1,file2,file3>` chooses another split deterministically (SHA-256 of selector + file name), so the sample grows instead of the same 30 being scored forever.",
   "per_file": {
-    "eval-007": "7/13",
-    "eval-008": "4/13",
+    "eval-007": "12/13",
+    "eval-008": "7/13",
     "eval-010": "1/4"
   },
   "split_site_rule": "A split holds out whole sites (t-1119): files are grouped by the site_hash their dataset gives them, and the seed's +20 golden bonus answers on site_hash, so holding one file of a site out while seeding its sibling would hand the answer back. eval-007_banking_mock and eval-008_goto_navigation share site_hash bebd95a0fea633c3 and are therefore always held out together.",
@@ -985,5 +992,103 @@
     "e65c38d064ba929d": [
       "eval-003_demoqa_forms.json"
     ]
+  },
+  "schema_split": {
+    "defect": "d-0149, spec t-1303",
+    "what_changed": "one page field (expected_page) became two: target_page (the DOM holding the element - the resolver pool) and outcome_page (the page the step must reach).",
+    "when": "2026-11-05",
+    "why_12_30_is_not_comparable": "Not comparable with the post-split reading: this cell scored a dataset where one page field carried two facts, and the resolver filtered its candidate pool on it. On 2026-11-05 the field was split into target_page (the pool) and outcome_page (the arrival), and the resolver now filters on target_page; the same command therefore runs a different mechanism, not the same mechanism on a different product. The 8 rows whose target_page changed are the difference, so each side's number is honest for its own rule and neither may be subtracted from the other.",
+    "ceiling_before_measuring": {
+      "correct": 20,
+      "total": 30,
+      "note": "16 rows were wrong; 8 of them were resolving by accident already, so the fix could lift at most 8 of the 30."
+    },
+    "measured": {
+      "correct": 20,
+      "total": 30,
+      "accuracy_pct": 66.7
+    },
+    "ceiling_reached": true,
+    "still_unreachable": "the 10 misses named under static_leg_2026_11_05.unreachable_misses"
+  },
+  "static_leg_2026_11_05": {
+    "measured_at": "2026-11-05",
+    "source": "scripts/eval/eval_resolver.py --mode static --heldout, 2026-11-05, against the split dataset (target_page/outcome_page); no model, no browser, no generated tests",
+    "label_kind": "post-schema-split",
+    "ceiling": {
+      "correct": 20,
+      "total": 30,
+      "accuracy_pct": 66.7,
+      "why": "16 of 30 rows carried a page that meant the wrong thing; 8 of those 16 already resolved by luck, so the split could lift at most 8."
+    },
+    "cells": {
+      "heldout_with_pack": {
+        "gate1_correct": 20,
+        "gate1_total": 30,
+        "gate1_accuracy_pct": 66.7,
+        "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
+        "seed": "bundled pack minus the 3 held-out story files (83 of 113 patterns)",
+        "split": "held-out: eval-007, eval-008, eval-010 (30 of 114 placeholders)",
+        "split_key": "eval-007|eval-008|eval-010",
+        "split_kind": "heldout",
+        "split_files": [
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
+        "label": "20/30 (66.7%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 114 placeholders)",
+        "per_file": {
+          "eval-007": "12/13",
+          "eval-008": "7/13",
+          "eval-010": "1/4"
+        },
+        "comparability": "comparable with any later held-out static reading on the same split and the same target_page/outcome_page schema; NOT comparable with static_leg_2026_10_30, whose goldens predate the split.",
+        "comparable_with": [],
+        "note": "Measured 2026-11-05 with the split goldens. eval-007 12/13, eval-008 7/13, eval-010 1/4. It reaches the ceiling exactly; the remaining 10 misses are the classes below, not a shortfall."
+      }
+    },
+    "unreachable_misses": {
+      "total": 10,
+      "classes": [
+        {
+          "class": "url_assertion",
+          "count": 4,
+          "rows": [
+            "eval-007 c0 bank sign-in page loaded",
+            "eval-008 c0 bank sign-in page loaded",
+            "eval-008 c2 accounts dashboard loaded",
+            "eval-010 c0 store home page loaded"
+          ],
+          "why": "the resolver answers a URL assertion only from the URL branch, and the static harness has no navigation: the row resolves to None by design (the no-fall-through guard, B-093). A page-arrival check needs the browser."
+        },
+        {
+          "class": "goto",
+          "count": 2,
+          "rows": [
+            "eval-008 c3 go to the transfer page",
+            "eval-008 c6 navigate to bill payments"
+          ],
+          "why": "a GOTO must be answered with a URL, and the flow store shipped with the workspace does not carry the banking hops, so element ranking answers with an element. Needs a learned flow (live) or a seeded store."
+        },
+        {
+          "class": "missing_capture",
+          "count": 2,
+          "rows": [
+            "eval-010 quantity",
+            "eval-010 Place Order button"
+          ],
+          "why": "eval-010's own pages are not in scripts/eval/scraped_pages, so the resolver pool falls back to every page and answers with a saucedemo element. A capture of the ambiguous mock is what this needs, not a resolver change."
+        },
+        {
+          "class": "sibling_tie",
+          "count": 2,
+          "rows": [
+            "eval-008 c5 transfer success message",
+            "eval-008 c8 payment success message"
+          ],
+          "why": "the scorer picks #transfer-success-message / #payment-success-message while the golden names the -title element: two siblings with near-identical text. It needs a tie-break rule (or a tolerance), not the page split."
+        }
+      ]
+    }
   }
 }

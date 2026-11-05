@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 _EVAL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "eval"
 sys.path.insert(0, str(_EVAL_DIR))
@@ -51,7 +52,7 @@ def _pages() -> dict[str, dict]:
     return pages
 
 
-def _walk() -> list[tuple[str, int, dict, str]]:
+def _walk(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str]]:
     """Every placeholder in story order, with the page the walk is on at it.
 
     The trail is the story's own order: the last page a step named (its target
@@ -61,7 +62,7 @@ def _walk() -> list[tuple[str, int, dict, str]]:
     no caller has to re-identify a dict.
     """
     walked: list[tuple[str, int, dict, str]] = []
-    for path in sorted(DATASET.glob("*.json")):
+    for path in sorted(dataset_dir.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         current = ""
         for crit in data["golden_resolutions"]:
@@ -71,8 +72,8 @@ def _walk() -> list[tuple[str, int, dict, str]]:
     return walked
 
 
-def _clicks() -> list[tuple[str, int, dict, str]]:
-    return [row for row in _walk() if row[2].get("action") == "CLICK"]
+def _clicks(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str]]:
+    return [row for row in _walk(dataset_dir) if row[2].get("action") == "CLICK"]
 
 
 def _holds(page: dict, locator: str) -> bool:
@@ -102,6 +103,40 @@ def _holders(locator: str, pages: dict[str, dict]) -> list[str]:
 
 def _row_name(story: str, crit: int, ph: dict) -> str:
     return f"{story} c{crit} {ph.get('expected_locator')}"
+
+
+def decide(dataset_dir: Path = DATASET) -> dict[str, Any]:
+    """Run the target decision over a dataset directory.
+
+    Returns the rows settled each way and the rows that fail either rule, so a
+    caller (or the negative test) can see what a swapped page does.
+    """
+    pages = _pages()
+    violations: list[str] = []
+    unsettled: list[str] = []
+    counts = {"unique": 0, "trail": 0, "uncheckable": 0}
+    for story, crit, ph, trail_page in _clicks(dataset_dir):
+        locator = str(ph.get("expected_locator") or "")
+        target = str(ph.get("target_page") or "").rstrip("/")
+        holders = _holders(locator, pages)
+        if not holders:
+            counts["uncheckable"] += 1
+            continue
+        if len(holders) == 1:
+            want = holders[0]
+            counts["unique"] += 1
+        else:
+            want = str(trail_page or "").rstrip("/")
+            if not want or want not in holders:
+                unsettled.append(_row_name(story, crit, ph))
+                continue
+            counts["trail"] += 1
+        if target != want:
+            violations.append(f"{_row_name(story, crit, ph)}: target {target} != {want}")
+    decided: dict[str, Any] = dict(counts)
+    decided["violations"] = violations
+    decided["unsettled"] = unsettled
+    return decided
 
 
 class TestClickTargets:
@@ -191,3 +226,52 @@ class TestTheCorrectedRows:
         assert _holds(_pages()[expected], row["expected_locator"])
         # the arrival the click really has lives in outcome_page, and is captured
         assert row["outcome_page"].rstrip("/") in _pages()
+
+
+class TestTheNegativeCase:
+    """Swap two target pages and the scrape-backed check must name both rows.
+
+    This is the check the *static* schema gate cannot make: a swapped page
+    leaves every row schema-valid (both pages are non-empty URLs), so only the
+    capture decides it. The test asserts both halves, because "the gate catches
+    it" would be false for `check_page_schema`.
+    """
+
+    def test_a_swap_between_two_pages_is_caught_by_name(self, tmp_path: Path) -> None:
+        import json as _json
+        import shutil
+
+        copy = tmp_path / "dataset"
+        shutil.copytree(DATASET, copy)
+        # Two CLICK rows with different captured targets: eval-007 c1 'sign in
+        # button' (index.html) and eval-007 c4 'Transfer Funds button' (transfer.html).
+        path = next(copy.glob("eval-007_*.json"))
+        data = _json.loads(path.read_text(encoding="utf-8"))
+
+        def _row(crit_index: int, description: str) -> dict:
+            return next(
+                ph
+                for c in data["golden_resolutions"]
+                if c["criterion_index"] == crit_index
+                for ph in c["placeholders"]
+                if ph["description"] == description
+            )
+
+        sign_in, transfer = _row(1, "sign in button"), _row(4, "Transfer Funds button")
+        sign_in["target_page"], transfer["target_page"] = transfer["target_page"], sign_in["target_page"]
+        path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+
+        result = decide(copy)
+
+        joined = "\n".join(result["violations"])
+        assert "eval-007 c1 #login-button" in joined, joined
+        assert "eval-007 c4 #transfer-submit" in joined, joined
+        assert len(result["violations"]) == 2, result["violations"]
+
+        # ... and the static gate cannot see it: every swapped row is still valid.
+        import sys as _sys
+
+        _sys.path.insert(0, str(_EVAL_DIR))
+        from golden_validator import check_page_schema
+
+        assert check_page_schema(data) == []

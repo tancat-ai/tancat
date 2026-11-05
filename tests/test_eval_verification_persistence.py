@@ -55,6 +55,8 @@ _GOLDEN = {
                     "description": "backpack in cart",
                     "expected_locator": "#backpack",
                     "tolerance_selectors": [],
+                    "target_page": "https://example.com/cart.html",
+                    "outcome_page": "https://example.com/cart.html",
                 },
             ],
         },
