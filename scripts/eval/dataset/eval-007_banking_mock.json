@@ -97,8 +97,8 @@
             "a[href=\"/transfer.html\"]",
             "a[href=\"transfer.html\"]"
           ],
-          "target_page": "http://localhost:8781/transfer.html",
-          "outcome_page": ""
+          "target_page": "http://localhost:8781/dashboard.html",
+          "outcome_page": "http://localhost:8781/transfer.html"
         }
       ]
     },

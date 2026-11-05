@@ -1,20 +1,28 @@
-"""Scrape-backed check of the CLICK rows' pages (t-1303 step 2).
+"""Scrape-backed check of the CLICK rows' pages (t-1303 steps 2-3).
 
 The static schema gate (`golden_validator.check_page_schema`) can see that a
 CLICK *has* a target page. It cannot see whether that page is the one holding
-the control - the defect this step corrects (eval-007 c1/c3/c4/c6x2, eval-008
+the control - the defect step 2 corrected (eval-007 c1/c3/c4/c6x2, eval-008
 c1/c4/c7 pointed at the page the click LANDS on).
 
 This reads the captures under `scripts/eval/scraped_pages/` and asks the question
-the gate cannot: for a CLICK whose target page was captured and whose locator
-appears in the captures at all, is that locator on its target page? And does its
-outcome page exist as a capture?
+the gate cannot: for a CLICK whose target page was captured, is the locator on
+that page? And is its outcome page a captured page?
 
-A locator that appears in no capture is not checkable here - a stale or missing
-capture is not a wrong target, and this test says so by leaving it out rather
-than failing it. The one row where a locator appears on two pages is listed
-below: a duplicate selector means the target is not decidable from the captures,
-so it is pinned as a known exception rather than silently chosen.
+Deciding a target, in the order the owner set (2026-11-05):
+
+1. **A unique capture** settles it: exactly one captured page holds the locator.
+2. **The trail** settles a locator that sits on several pages. A nav link is on
+   most pages of a real site, so uniqueness alone was too strict (it blocked
+   eval-007 c3 `#transfer-link`, which is on account.html and dashboard.html).
+   The product's own rule is used instead: a CLICK's target is the page the walk
+   is on when it gets there - the page of the step immediately before it in the
+   story.
+3. Otherwise it is **unsettled** and this suite fails: neither rule decided it.
+
+A locator that appears in no capture at all is not a wrong target, it is an
+uncheckable row (a stale or missing capture); it is counted, not silently
+dropped.
 """
 
 from __future__ import annotations
@@ -31,13 +39,6 @@ import pytest  # noqa: E402
 DATASET = _EVAL_DIR / "dataset"
 SCRAPED = _EVAL_DIR / "scraped_pages"
 
-#: A locator that sits on two captured pages of the same site cannot be resolved
-#: to a target by the captures. eval-007 c3 "Transfer Money link" is the one such
-#: row: `#transfer-link` is on account.html AND dashboard.html (the same nav
-#: button in the mock's template). Pinned by name so it is revisited, not
-#: forgotten - and so a second such row fails this suite.
-KNOWN_UNDECIDABLE = {"eval-007 c3 #transfer-link"}
-
 
 def _pages() -> dict[str, dict]:
     """Every captured page, keyed by its URL."""
@@ -50,15 +51,28 @@ def _pages() -> dict[str, dict]:
     return pages
 
 
-def _click_rows() -> list[tuple[str, int, dict]]:
-    rows: list[tuple[str, int, dict]] = []
+def _walk() -> list[tuple[str, int, dict, str]]:
+    """Every placeholder in story order, with the page the walk is on at it.
+
+    The trail is the story's own order: the last page a step named (its target
+    for an element row, its outcome for a navigation). That is the product's
+    previous-landing idea and it is what the owner's rule says decides a CLICK
+    whose locator sits on more than one page. It is carried alongside the row so
+    no caller has to re-identify a dict.
+    """
+    walked: list[tuple[str, int, dict, str]] = []
     for path in sorted(DATASET.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
+        current = ""
         for crit in data["golden_resolutions"]:
             for ph in crit["placeholders"]:
-                if ph.get("action") == "CLICK":
-                    rows.append((str(data["id"]), int(crit["criterion_index"]), ph))
-    return rows
+                walked.append((str(data["id"]), int(crit["criterion_index"]), ph, current))
+                current = str(ph.get("target_page") or ph.get("outcome_page") or "") or current
+    return walked
+
+
+def _clicks() -> list[tuple[str, int, dict, str]]:
+    return [row for row in _walk() if row[2].get("action") == "CLICK"]
 
 
 def _holds(page: dict, locator: str) -> bool:
@@ -67,7 +81,7 @@ def _holds(page: dict, locator: str) -> bool:
     Only the shapes a capture can express are matched: an id selector, an exact
     CSS selector, or a ``text=`` / ``button:has-text`` phrase. A Playwright-only
     construction that a capture never records is simply not found - which is why
-    a locator absent from every capture is left out of the check.
+    a locator absent from every capture is counted as uncheckable.
     """
     locator = locator.strip()
     elements = page.get("elements", [])
@@ -82,57 +96,79 @@ def _holds(page: dict, locator: str) -> bool:
     return any(e.get("selector") == locator for e in elements)
 
 
-def _holders(locator: str, pages: dict[str, dict], *, site: str | None = None) -> list[str]:
-    return [url for url, page in pages.items() if (site is None or url.startswith(site)) and _holds(page, locator)]
+def _holders(locator: str, pages: dict[str, dict]) -> list[str]:
+    return [url for url, page in pages.items() if _holds(page, locator)]
 
 
 def _row_name(story: str, crit: int, ph: dict) -> str:
     return f"{story} c{crit} {ph.get('expected_locator')}"
 
 
-class TestCapturedClickTargets:
-    def test_every_checkable_click_target_holds_its_locator(self) -> None:
+class TestClickTargets:
+    def test_every_click_target_is_decided_and_correct(self) -> None:
         pages = _pages()
+        by_unique = by_trail = uncheckable = 0
         violations: list[str] = []
-        checked = 0
-        for story, crit, ph in _click_rows():
+        unsettled: list[str] = []
+        for story, crit, ph, trail_page in _clicks():
             locator = str(ph.get("expected_locator") or "")
             target = str(ph.get("target_page") or "").rstrip("/")
-            if not target or target not in pages:
-                continue  # no capture of the target page: this test cannot speak
-            if not _holders(locator, pages):
-                continue  # the locator is in no capture: a stale capture, not a target
-            checked += 1
-            if not _holds(pages[target], locator):
-                violations.append(_row_name(story, crit, ph))
-        assert checked >= 8, f"only {checked} CLICK rows were checkable - the check has gone blind"
-        assert set(violations) == KNOWN_UNDECIDABLE, (
-            "a CLICK row's target_page does not hold its locator: "
-            f"{sorted(set(violations) - KNOWN_UNDECIDABLE)} (known-undecidable: {sorted(KNOWN_UNDECIDABLE)})"
+            holders = _holders(locator, pages)
+            if not holders:
+                uncheckable += 1
+                continue
+            if len(holders) == 1:
+                want = holders[0]
+                by_unique += 1
+            else:
+                # A locator on several pages: the trail decides, never a guess.
+                want = str(trail_page or "").rstrip("/")
+                if not want or want not in holders:
+                    unsettled.append(_row_name(story, crit, ph))
+                    continue
+                by_trail += 1
+            if target != want:
+                violations.append(f"{_row_name(story, crit, ph)}: target {target} != {want}")
+        assert by_unique + by_trail >= 8, (
+            f"only {by_unique + by_trail} CLICK rows were decided - the check has gone blind"
         )
+        assert unsettled == [], f"neither a unique capture nor the trail settles: {unsettled}"
+        assert violations == [], f"a CLICK target is not the page that holds it: {violations}"
+        # Counts are pinned so a shrinking check is visible. Of the 36 CLICK
+        # rows: 14 are settled by a unique capture, 7 by the trail (their
+        # locator sits on more than one captured page), and 15 are uncheckable
+        # because no capture holds their locator (stale or missing captures).
+        assert (by_unique, by_trail, uncheckable) == (14, 7, 15), (by_unique, by_trail, uncheckable)
 
-    def test_the_undecidable_row_is_still_exactly_the_duplicate_selector(self) -> None:
-        """If the captures change, the exception above must be revisited."""
-        holders = _holders("#transfer-link", _pages(), site="http://localhost:8781/")
-        assert sorted(h.rsplit("/", 1)[-1] for h in holders) == ["account.html", "dashboard.html"]
+    def test_the_nav_link_is_settled_by_the_trail_not_by_uniqueness(self) -> None:
+        """eval-007 c3 `#transfer-link` is on two captured pages."""
+        pages = _pages()
+        holders = sorted(h.rsplit("/", 1)[-1] for h in _holders("#transfer-link", pages))
+        assert holders == ["account.html", "dashboard.html"]
+        story, crit, row, trail_page = next(
+            r for r in _clicks() if r[0] == "eval-007" and r[1] == 3 and r[2]["expected_locator"] == "#transfer-link"
+        )
+        assert trail_page == "http://localhost:8781/dashboard.html"
+        assert row["target_page"] == "http://localhost:8781/dashboard.html"
 
     def test_every_recorded_click_outcome_is_a_captured_page(self) -> None:
         pages = _pages()
         missing = [
             _row_name(story, crit, ph)
-            for story, crit, ph in _click_rows()
+            for story, crit, ph, _trail in _clicks()
             if str(ph.get("outcome_page") or "").rstrip("/") and str(ph["outcome_page"]).rstrip("/") not in pages
         ]
         assert missing == [], f"a CLICK names an outcome page nobody captured: {missing}"
 
 
-class TestTheSevenCorrectedRows:
-    """The rows step 2 corrected point at the page that holds the control."""
+class TestTheCorrectedRows:
+    """Every corrected row points at the page that holds the control."""
 
     @pytest.mark.parametrize(
         ("story", "crit", "description", "page"),
         [
             ("eval-007", 1, "sign in button", "index.html"),
+            ("eval-007", 3, "Transfer Money link", "dashboard.html"),
             ("eval-007", 4, "Transfer Funds button", "transfer.html"),
             ("eval-007", 6, "Pay a Bill link", "dashboard.html"),
             ("eval-007", 6, "Pay Bill button", "payments.html"),
@@ -153,5 +189,5 @@ class TestTheSevenCorrectedRows:
         expected = f"http://localhost:8781/{page}"
         assert row["target_page"] == expected
         assert _holds(_pages()[expected], row["expected_locator"])
-        # the arrival the click really has now lives in outcome_page, and is captured
+        # the arrival the click really has lives in outcome_page, and is captured
         assert row["outcome_page"].rstrip("/") in _pages()

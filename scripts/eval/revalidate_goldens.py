@@ -39,6 +39,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DATASET_DIR = Path(__file__).resolve().parent / "dataset"
+#: This script's own directory, so `golden_validator` resolves both when run as
+#: a script and when a test loads the file directly (t-1303 step 3).
+_EVAL_DIR = Path(__file__).resolve().parent
+if str(_EVAL_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVAL_DIR))
 DEFAULT_OUT = Path(__file__).resolve().parent / "revalidation" / "latest.json"
 
 # Datasets whose mock server supplies the DOM (deterministic, local).
@@ -53,11 +58,13 @@ MOCK_DATASET_IDS["eval-008"] = "mock_sites/banking"
 # Datasets with no locally-servable target → honestly marked static-only.
 STATIC_ONLY_DATASET_IDS = {"eval-005"}
 
-# State-dependent pages: their DOM only exists with seeded cart / a login
-# session (B-022 class). Golden keys on these pages are validated by the
-# harness's execution path (cart-seeding / stateful scrapes), not by a static
-# load — a static re-validation would report false decay. dataset_id → path
-# fragments that are stateful.
+# State-dependent pages: their DOM only exists with a seeded cart / a login
+# session (B-022 class), so a plain load would report false decay. t-1303 step 3
+# removed the SKIP these used to drive: a row on one of these pages is now
+# checked against its frozen capture in scraped_pages/ (the DOM the tool recorded
+# when the page was really served), and only a row with no capture is reported as
+# "needs a session" - unproven, never a silent pass. The map survives as the
+# classifier that chooses the capture path. dataset_id → path fragments.
 STATEFUL_PATHS: dict[str, list[str]] = {
     "eval-001": ["/inventory", "/cart", "/checkout"],  # saucedemo (login-gated + sessionStorage cart)
     "eval-002": ["/view_cart"],  # automationexercise (session cookie cart)
@@ -141,6 +148,89 @@ def _page_url_matches(page_url: str, expected: str) -> bool:
     return a == b
 
 
+#: Frozen captures of the pages these goldens name (`scraped_pages/`), keyed by
+#: URL. A stateful row is checked against its capture instead of being skipped
+#: (t-1303 step 3): the capture is the DOM the tool itself recorded when the page
+#: was really served, so a locator in it was on the page, and a miss reads as
+#: "the capture does not hold it" rather than "the live page decayed".
+CAPTURES_DIR = Path(__file__).resolve().parent / "scraped_pages"
+
+
+def load_captures(directory: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Every frozen page capture, keyed by its URL (trailing slash normalised)."""
+    captures: dict[str, dict[str, Any]] = {}
+    for path in sorted((directory or CAPTURES_DIR).glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            continue
+        if isinstance(data, dict) and "elements" in data and data.get("url"):
+            captures[str(data["url"]).rstrip("/")] = data
+    return captures
+
+
+def _capture_holds(capture: dict[str, Any], selector: str) -> bool:
+    """Whether a frozen capture holds this selector (id, exact CSS, or text)."""
+    selector = selector.strip()
+    elements = capture.get("elements") or []
+    if not selector:
+        return True
+    if selector.startswith("#") and " " not in selector:
+        return any(e.get("id") == selector[1:] or e.get("selector") == selector for e in elements)
+    if ":has-text(" in selector:
+        want = selector.split(":has-text(", 1)[1].rstrip(")").strip().strip("\"'").lower()
+        return any(want in str(e.get("text") or "").lower() for e in elements)
+    return any(e.get("selector") == selector for e in elements)
+
+
+def _capture_check(placeholder: dict[str, Any], captures: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """Check one row against the frozen captures, or ``None`` when they cannot decide.
+
+    The same three facts the live path checks: the locator is on ``target_page``,
+    ``outcome_page`` exists as a page, and (for an element ASSERT) the locator is
+    on ``outcome_page``. ``None`` means a capture the row needs is missing - the
+    caller says so instead of counting a skip as a pass.
+    """
+    from golden_validator import accepts_page_arrival
+
+    target = str(placeholder.get("target_page") or "").rstrip("/")
+    outcome = str(placeholder.get("outcome_page") or "").rstrip("/")
+    url_row = _is_url_assert(placeholder) or placeholder.get("action") in ("GOTO", "URL")
+    problems: list[dict[str, Any]] = []
+    needed: list[str] = []
+
+    if url_row:
+        if not outcome:
+            return {"status": "unchecked", "reason": "a URL row must name outcome_page"}
+        needed.append(outcome)
+        if outcome not in captures:
+            return None
+        if not _page_url_matches(str(captures[outcome].get("url") or ""), outcome):
+            problems.append({"outcome_page": outcome, "actual_url": captures[outcome].get("url")})
+    else:
+        if not target:
+            return {"status": "unchecked", "reason": "an element row must name target_page"}
+        needed.append(target)
+        if target not in captures:
+            return None
+        missing = [s for s in _selectors_to_check(placeholder) if not _capture_holds(captures[target], s)]
+        if missing:
+            problems.append({"target_page": target, "missing_selectors": missing})
+        if outcome and placeholder.get("action") == "ASSERT" and not accepts_page_arrival(placeholder):
+            needed.append(outcome)
+            if outcome not in captures:
+                return None
+            outcome_missing = [s for s in _selectors_to_check(placeholder) if not _capture_holds(captures[outcome], s)]
+            if outcome_missing and outcome != target:
+                problems.append({"outcome_page": outcome, "missing_selectors": outcome_missing})
+
+    return {
+        "status": "ok" if not problems else "missing",
+        "problems": problems,
+        "pages": needed,
+    }
+
+
 def _is_stateful_golden(dataset: dict[str, Any], placeholder: dict[str, Any]) -> bool:
     """True when this golden can only be truthfully validated by the harness's
     execution path (stateful page / post-submit element), not a static load."""
@@ -155,15 +245,38 @@ def _is_stateful_golden(dataset: dict[str, Any], placeholder: dict[str, Any]) ->
     return any(f in desc for f in STATEFUL_DESCRIPTION_FRAGMENTS)
 
 
-def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -> dict[str, Any]:
-    """Run all golden checks for a dataset against a live/mock page."""
+def _check_live_dataset(
+    dataset: dict[str, Any],
+    *,
+    page: Any,
+    timeout_s: int,
+    captures: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Check every golden row: schema, target, outcome page, outcome element.
 
+    The three facts are separate on purpose (t-1303). ``target_page`` is where
+    the locator must be; ``outcome_page`` is where the step lands, so it must be
+    a page that exists; and for an element-kind ASSERT the locator must be on the
+    page the claim is judged on.
+
+    A row on a state-dependent page is **not skipped any more**. It is checked
+    against its frozen capture (``scraped_pages/``): the DOM the tool recorded
+    when that page was really served. If no capture of the page exists, the row
+    is reported as ``needs-a-session`` - unproven, never a pass and never a silent
+    skip. That is what replaced ``STATEFUL_PATHS``: the list was blind to exactly
+    the banking rows this job corrects.
+    """
+    from golden_validator import accepts_page_arrival, check_page_schema
+
+    captures = captures or {}
     base_url = dataset.get("base_url", "")
     pages_checked: list[str] = []
     missing: list[dict[str, Any]] = []
     checked = 0
     matched = 0
-    stateful_skips: list[dict[str, Any]] = []
+    from_capture: list[dict[str, Any]] = []
+    needs_session: list[dict[str, Any]] = []
+    schema_errors = check_page_schema(dataset)
 
     page.set_default_timeout(timeout_s * 1000)
 
@@ -176,57 +289,114 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
         pages_checked.append(target)
 
     for placeholder in _golden_placeholders(dataset):
-        if _is_stateful_golden(dataset, placeholder):
-            # Honest skip: not a decay — the DOM only exists with state
-            # (seeded cart / login session / after submit). Recorded so the
-            # recency record never reads as "untested".
-            stateful_skips.append(
+        label = str(placeholder.get("description") or "")
+        # 1. Schema. A row the two-page schema refuses is reported, not checked:
+        #    checking it would judge a key whose pages are the wrong way round.
+        row_schema = [problem for problem in schema_errors if label and label in problem]
+        if row_schema:
+            missing.append(
                 {
                     "action": placeholder.get("action"),
-                    "description": placeholder.get("description"),
-                    "target_page": placeholder.get("target_page"),
-                    "outcome_page": placeholder.get("outcome_page"),
-                    "reason": "stateful page / post-submit element — validated via the harness execution path",
+                    "description": label,
+                    "schema": row_schema[0],
                 }
             )
             continue
-        checked += 1
-        if _is_url_assert(placeholder):
-            # t-1303: a URL assertion is about the page it must REACH.
-            target = placeholder.get("outcome_page") or base_url
-            if not target:
+
+        # 2. State-dependent pages: the frozen capture settles the row.
+        if _is_stateful_golden(dataset, placeholder):
+            verdict = _capture_check(placeholder, captures)
+            if verdict is None or verdict.get("status") == "unchecked":
+                reason = (verdict or {}).get(
+                    "reason"
+                ) or "stateful page with no capture of it - needs a session to check"
+                needs_session.append(
+                    {
+                        "action": placeholder.get("action"),
+                        "description": label,
+                        "target_page": placeholder.get("target_page"),
+                        "outcome_page": placeholder.get("outcome_page"),
+                        "reason": reason,
+                    }
+                )
                 continue
-            _goto(target)
-            if _page_url_matches(page.url, target):
+            checked += 1
+            pages_checked.extend(verdict.get("pages") or [])
+            from_capture.append({"description": label, "status": verdict["status"]})
+            if verdict["status"] == "ok":
+                matched += 1
+            else:
+                for problem in verdict.get("problems") or []:
+                    missing.append(
+                        {
+                            "action": placeholder.get("action"),
+                            "description": label,
+                            "basis": "capture",
+                            **problem,
+                        }
+                    )
+            continue
+
+        # 3. Outcome page: a URL row must reach the page it names.
+        if _is_url_assert(placeholder) or placeholder.get("action") in ("GOTO", "URL"):
+            outcome = placeholder.get("outcome_page") or base_url
+            if not outcome:
+                continue
+            checked += 1
+            _goto(outcome)
+            if _page_url_matches(page.url, outcome):
                 matched += 1
             else:
                 missing.append(
                     {
                         "action": placeholder.get("action"),
-                        "description": placeholder.get("description"),
-                        "outcome_page": target,
+                        "description": label,
+                        "outcome_page": outcome,
                         "actual_url": page.url,
                     }
                 )
             continue
 
+        # 4. Target: the locator must be on the page that holds it.
         target = placeholder.get("target_page") or base_url
         if not target:
             continue
+        checked += 1
         _goto(target)
         selectors = _selectors_to_check(placeholder)
         ok, miss = _check_selectors_on_page(page, selectors)
-        if ok:
-            matched += 1
-        else:
+        if not ok:
             missing.append(
                 {
                     "action": placeholder.get("action"),
-                    "description": placeholder.get("description"),
+                    "description": label,
                     "target_page": target,
                     "missing_selectors": miss,
                 }
             )
+            continue
+
+        # 5. Outcome element: an element ASSERT must be true on the page it names.
+        outcome = str(placeholder.get("outcome_page") or "")
+        if (
+            placeholder.get("action") == "ASSERT"
+            and outcome
+            and outcome.rstrip("/") != target.rstrip("/")
+            and not accepts_page_arrival(placeholder)
+        ):
+            _goto(outcome)
+            outcome_ok, outcome_miss = _check_selectors_on_page(page, selectors)
+            if not outcome_ok:
+                missing.append(
+                    {
+                        "action": placeholder.get("action"),
+                        "description": label,
+                        "outcome_page": outcome,
+                        "missing_selectors": outcome_miss,
+                    }
+                )
+                continue
+        matched += 1
 
     return {
         "dataset_id": dataset.get("id"),
@@ -237,10 +407,14 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
         "checked_at": datetime.now(UTC).isoformat(),
         "goldens_checked": checked,
         "goldens_matched": matched,
-        "stateful_skipped": len(stateful_skips),
+        # Kept for older readers: rows that are still unproven, now with a reason.
+        "stateful_skipped": len(needs_session),
+        "stateful_needs_session": needs_session,
+        "stateful_checked_from_capture": from_capture,
+        "schema_errors": schema_errors,
         "pages_checked": sorted(set(pages_checked)),
         "missing": missing,
-        "stateful": stateful_skips,
+        "stateful": needs_session,
     }
 
 
@@ -300,7 +474,7 @@ def _check_mock_dataset(dataset: dict[str, Any], mock_dir: str, *, port: int) ->
                 old_origin = _origin_of(dataset.get("base_url", ""))
                 d = _rewrite_mock_expected_pages(dataset, old_origin=old_origin, new_origin=base_url)
                 d["base_url"] = base_url
-                return _check_live_dataset(d, page=page, timeout_s=10)
+                return _check_live_dataset(d, page=page, timeout_s=10, captures=load_captures())
             finally:
                 browser.close()
 
@@ -370,7 +544,9 @@ def run_revalidation(
                 browser = p.chromium.launch()
                 page = browser.new_page()
                 try:
-                    records.append(_check_live_dataset(ds, page=page, timeout_s=live_timeout_s))
+                    records.append(
+                        _check_live_dataset(ds, page=page, timeout_s=live_timeout_s, captures=load_captures())
+                    )
                 finally:
                     browser.close()
         except Exception as exc:
