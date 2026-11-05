@@ -35,10 +35,12 @@ from eval_metrics import ResolutionResult, StoryResult  # noqa: E402
 from eval_runner import (  # noqa: E402
     _EVAL_SCHEMA_SQL,
     NOT_COMPARABLE_EXIT,
+    EvalRunner,
     _ensure_eval_table,
     _resolve_dataset_dir,
     compare_run_groups,
     dataset_key,
+    dataset_key_from_story_ids,
     describe_model,
     load_eval_history,
     persist_policy_error,
@@ -288,10 +290,12 @@ class TestRebuildKeepsWhatIsKnowable:
     """A rebuilt row carries the run's own facts and nothing invented."""
 
     def test_the_run_keeps_its_own_date_and_size(self, tmp_path: Path) -> None:
+        # d-0136: the declared count must equal the dataset the rebuild scores
+        # against; the fixture dataset holds one placeholder.
         run_dir = _evidence(
             tmp_path,
             created_at="2026-10-31T19:49:14.074731+00:00",
-            gate1_placeholders_total=113,
+            gate1_placeholders_total=1,
             git_commit="f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
         )
         db = tmp_path / "run_results.sqlite"
@@ -300,7 +304,7 @@ class TestRebuildKeepsWhatIsKnowable:
 
         row = load_eval_history(db)[0]
         assert row["created_at"] == "2026-10-31T19:49:14.074731+00:00"  # not "now"
-        assert row["dataset_size"] == 113
+        assert row["dataset_size"] == 1
         assert row["git_commit"] == "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd"
         assert row["run_group"] == "2026-10-31-leg1"
 
@@ -356,6 +360,91 @@ class TestRebuildKeepsWhatIsKnowable:
         assert load_eval_history(db)[0]["dataset_key"] == dataset_key(tmp_path / "dataset")
 
 
+class TestComparabilityGuards:
+    """d-0136/d-0137/d-0138: the store must refuse what it cannot fairly compare."""
+
+    def test_an_edited_expected_locator_changes_the_key(self, tmp_path: Path) -> None:
+        """d-0137: same story ids, different golden content = a different sample."""
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        edited_golden = json.loads(json.dumps(_GOLDEN))
+        edited_golden["golden_resolutions"][0]["placeholders"][0]["expected_locator"] = "#backpack-v2"
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(edited_golden), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
+        assert dataset_key(before) == dataset_key(before)  # and it is stable
+
+    def test_the_key_covers_the_tolerance_selectors(self, tmp_path: Path) -> None:
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        changed = json.loads(json.dumps(_GOLDEN))
+        changed["golden_resolutions"][0]["placeholders"][0]["tolerance_selectors"] = [".cart-badge"]
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(changed), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
+
+    def test_an_ids_only_key_never_matches_a_golden_key(self, tmp_path: Path) -> None:
+        dataset_dir = tmp_path / "dataset"
+        dataset_dir.mkdir()
+        (dataset_dir / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        ids_only = dataset_key_from_story_ids(["eval-999"])
+        assert ids_only is not None and ids_only.startswith("ids:")
+        assert ids_only != dataset_key(dataset_dir)
+
+    def test_a_declared_size_that_disagrees_with_the_scored_dataset_is_refused(self, tmp_path: Path) -> None:
+        """d-0136: 113 declared, 1 scored - refuse and name both."""
+        run_dir = _evidence(tmp_path, gate1_placeholders_total=113)
+        db = tmp_path / "run_results.sqlite"
+
+        with pytest.raises(ValueError) as excinfo:
+            rebuild_run_from_evidence(run_dir, db, run_group="2026-10-31-leg1")
+
+        message = str(excinfo.value)
+        assert "113" in message and "1" in message
+        assert "--dataset" in message
+        assert load_eval_history(db) == []
+
+    def test_the_cli_rebuild_refuses_with_exit_two(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        run_dir = _evidence(tmp_path, gate1_placeholders_total=113)
+        db = tmp_path / "run_results.sqlite"
+
+        rc = eval_harness.main(["rebuild", "--evidence-dir", str(run_dir), "--db", str(db), "--dataset-size", "113"])
+
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "113" in err and "1" in err
+        assert "ERROR:" in err
+
+    def test_a_matching_declared_size_still_stores(self, tmp_path: Path) -> None:
+        run_dir = _evidence(tmp_path, gate1_placeholders_total=1)
+        db = tmp_path / "run_results.sqlite"
+
+        rebuild_run_from_evidence(run_dir, db, run_group="leg-ok")
+
+        assert load_eval_history(db)[0]["dataset_size"] == 1
+
+    def test_a_direct_runner_call_refuses_the_same_way(self, tmp_path: Path) -> None:
+        """d-0138: ci_summary's direct call reaches the rule, not only the CLI."""
+        runner = EvalRunner(
+            dataset_dir=tmp_path / "dataset", code_dir=tmp_path / "captures", db_path=tmp_path / "db.sqlite"
+        )
+
+        with pytest.raises(ValueError, match="--no-persist"):
+            runner.run(mode="full", persist=False)
+
+        with pytest.raises(ValueError, match="--run-group"):
+            runner.run(mode="full", persist=True)
+
+
 class TestRebuildDatasetResolution:
     def test_a_relative_recorded_dataset_is_not_read_against_the_cwd(self) -> None:
         r"""`..\..\scripts\eval\dataset` is what the t1261 manifests record."""
@@ -368,6 +457,60 @@ class TestRebuildDatasetResolution:
     def test_a_missing_explicit_dataset_is_a_refusal(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="dataset directory not found"):
             _resolve_dataset_dir(None, tmp_path / "nope")
+
+
+class TestCiSummaryReadsTheStore:
+    """Review F1 (d-0138 follow-up): a summary must not re-run a leg to report it.
+
+    The CI workflow used to call ``ci_summary --mode full``, which dispatched a
+    second run with persist=False; once the persist rule moved into
+    EvalRunner.run that path exited 2 and the PR comment was never posted.
+    """
+
+    def _store_with_leg(self, tmp_path: Path) -> Path:
+        db = tmp_path / "store.sqlite"
+        _leg(db, "ci-abc123", "eval-001", correct=1, total=2)
+        _leg(db, "ci-abc123", "eval-002", correct=2, total=2)
+        return db
+
+    def test_a_full_mode_summary_path_does_not_exit_two(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import ci_summary
+        from eval_runner import EvalRunner
+
+        db = self._store_with_leg(tmp_path)
+        output = tmp_path / "summary.md"
+
+        def must_not_run(*args: object, **kwargs: object) -> None:
+            raise AssertionError("the summary dispatched a run instead of reading the store")
+
+        monkeypatch.setattr(EvalRunner, "run", must_not_run)
+
+        rc = ci_summary.main(["--run-group", "ci-abc123", "--db", str(db), "--output", str(output)])
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "--no-persist" not in captured.out + captured.err
+        text = output.read_text(encoding="utf-8")
+        assert "# Evaluation Harness Results" in text
+        assert "| Stories | 2 |" in text
+        assert "| Resolution accuracy | 75.0% |" in text
+
+    def test_a_missing_leg_says_so_and_names_the_ones_present(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import ci_summary
+
+        db = self._store_with_leg(tmp_path)
+        output = tmp_path / "summary.md"
+
+        rc = ci_summary.main(["--run-group", "ci-nope", "--db", str(db), "--output", str(output)])
+
+        assert rc == 3
+        assert "no stored leg named 'ci-nope'" in capsys.readouterr().err
+        text = output.read_text(encoding="utf-8")
+        assert "No summary" in text and "ci-abc123" in text
 
 
 class TestDescribeModel:
@@ -513,6 +656,18 @@ class TestDiffRuns:
         assert result["comparable"] is False
         assert "no such leg: leg9" in result["why"]
         assert "leg1" in result["text"]  # says what IS there
+
+    def test_the_refusal_states_the_reason_once(self, tmp_path: Path) -> None:
+        """d-0138(4): "NOT COMPARABLE: not comparable: ..." said it twice."""
+        db = tmp_path / "run_results.sqlite"
+        _leg(db, "2026-10-31-leg1", "eval-001", dataset_size=113)
+        _leg(db, "2026-11-04-leg1", "eval-001", dataset_size=114)
+
+        text = compare_run_groups(db, "2026-10-31-leg1", "2026-11-04-leg1")["text"]
+
+        assert text.count("NOT COMPARABLE") == 1
+        assert text.count("not comparable") == 0  # the label already says it
+        assert "NOT COMPARABLE: not comparable" not in text
 
     def test_the_cli_exits_six_when_it_refuses(self, tmp_path: Path) -> None:
         db = tmp_path / "run_results.sqlite"

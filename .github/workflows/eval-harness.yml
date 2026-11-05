@@ -70,10 +70,20 @@ jobs:
         continue-on-error: true
 
       - name: Generate markdown summary
+        # d-0138 follow-up (review F1): a summary must not re-run a leg to report
+        # on it. static is offline and cheap, so it still computes; a
+        # model-bearing dispatch reads the leg the run step already stored.
         run: |
-          uv run python scripts/eval/ci_summary.py \
-            --mode ${{ inputs.mode }} \
-            --min-accuracy ${{ inputs.min_accuracy }}
+          if [ "${{ inputs.mode }}" = "static" ]; then
+            uv run python scripts/eval/ci_summary.py \
+              --mode static \
+              --min-accuracy ${{ inputs.min_accuracy }}
+          else
+            uv run python scripts/eval/ci_summary.py \
+              --run-group "ci-${{ github.sha }}" \
+              --db ci_eval.sqlite \
+              --min-accuracy ${{ inputs.min_accuracy }}
+          fi
 
       - name: Post summary as PR comment
         if: github.event_name == 'pull_request'
