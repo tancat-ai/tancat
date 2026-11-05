@@ -50,6 +50,11 @@ class Session:
     pipeline_local_report_path: str = ""
     pipeline_jira_report_path: str = ""
     pipeline_html_report_path: str = ""
+    # j-0286: the JSON report the service already writes, and the three evidence
+    # exports (csv/ndjson/junit) the menu now offers alongside it. Keyed by
+    # format name so the viewer lists whatever was actually produced.
+    pipeline_local_json_path: str = ""
+    pipeline_export_paths: dict[str, str] = field(default_factory=dict)
 
     # Bug report
     pipeline_bug_report: str = ""
