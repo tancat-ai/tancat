@@ -65,7 +65,14 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     -- All nullable on purpose: NULL means "this run did not record it" and must
     -- never be read as a measured empty value.
     run_group    TEXT,
+    -- d-0137: dataset_key covers the sorted story ids AND the golden content
+    -- (each placeholder's action, description, expected locator and tolerance
+    -- selectors). An edited golden file therefore yields a NEW key, so a leg
+    -- scored before the edit refuses to compare with one scored after it. A
+    -- key built from story ids alone is prefixed "ids:" and never matches.
     dataset_key  TEXT,
+    -- Placeholders the dataset held (read from the golden files), never the
+    -- run's own numerator: a run that missed a story must not look smaller.
     dataset_size INTEGER,
     rag_store    TEXT,
     run_settings TEXT
@@ -122,35 +129,79 @@ def persist_policy_error(mode: str, no_persist: bool, run_group: str | None) -> 
     return None
 
 
+def _golden_fingerprint(data: dict[str, Any]) -> str:
+    """The golden content a dataset key must cover (d-0137).
+
+    Story ids alone cannot see an edit to an expected locator, so a pair that
+    should be refused compared as the same sample. This is one line per
+    criterion plus one line per placeholder: what the run was asked to hit.
+    Order is the file's own, so a reordered file is a different key too.
+    """
+    parts: list[str] = []
+    resolutions = data.get("golden_resolutions")
+    for criterion in resolutions if isinstance(resolutions, list) else []:
+        if not isinstance(criterion, dict):
+            continue
+        parts.append(f"c{criterion.get('criterion_index') or 0}")
+        placeholders = criterion.get("placeholders")
+        for placeholder in placeholders if isinstance(placeholders, list) else []:
+            if not isinstance(placeholder, dict):
+                continue
+            tolerance = placeholder.get("tolerance_selectors")
+            parts.append(
+                "|".join(
+                    (
+                        str(placeholder.get("action", "")),
+                        str(placeholder.get("description", "")),
+                        str(placeholder.get("expected_locator", "")),
+                        ",".join(str(item) for item in tolerance) if isinstance(tolerance, list) else "",
+                    )
+                )
+            )
+    return "\n".join(parts)
+
+
 def dataset_key(dataset_dir: Path) -> str | None:
-    """A stable identity for the story files a run was scored on.
+    """A stable identity for the SAMPLE a run was scored on (d-0137).
 
     Two runs whose golden files differ are scores on different samples and must
-    not be compared. The key is the sorted story ids, so adding, removing or
-    renaming a story changes it; the placeholder count is stored beside it as
-    ``dataset_size`` because a story can also gain a criterion.
+    not be compared - and "differ" includes an edited expected locator, not only
+    a changed story set. The key therefore hashes the sorted story ids AND
+    their golden content (see :func:`_golden_fingerprint`). Adding, removing or
+    renaming a story changes it; so does any change to what a placeholder is
+    expected to hit. A long key is fine; a silently comparable pair is not.
 
-    Story ids, not filenames: a run rebuilt from kept evidence knows its story
-    ids and not the golden filenames, and both sides must produce the same key
-    for the same sample.
+    Story ids, not filenames: a run rebuilt from kept evidence re-scores against
+    a dataset directory, so both sides read the same content.
     """
-    ids: list[str] = []
+    entries: list[str] = []
     try:
         for path in sorted(dataset_dir.glob("*.json")):
             data = json.loads(path.read_text(encoding="utf-8"))
-            ids.append(str(data.get("id") or path.stem))
+            if not isinstance(data, dict):
+                continue
+            story_id = str(data.get("id") or path.stem)
+            entries.append(f"{story_id}\n{_golden_fingerprint(data)}")
     except OSError, ValueError:
         return None
-    return dataset_key_from_story_ids(ids)
+    if not entries:
+        return None
+    digest = hashlib.sha256("\n\n".join(entries).encode("utf-8")).hexdigest()[:12]
+    return f"{len(entries)}:{digest}"
 
 
 def dataset_key_from_story_ids(story_ids: list[str] | tuple[str, ...]) -> str | None:
-    """The same key from story ids alone (used by the rebuild from evidence)."""
+    """A story-ids-only key, for the one case where the golden files are gone.
+
+    d-0137: ids alone cannot see an edited expected locator, so this key is
+    prefixed ``ids:`` and can never equal a golden-content key. That makes a
+    comparison against a normally-keyed leg a refusal instead of a false match.
+    """
     ids = sorted({str(sid) for sid in story_ids if str(sid).strip()})
     if not ids:
         return None
     digest = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:12]
-    return f"{len(ids)}:{digest}"
+    return f"ids:{len(ids)}:{digest}"
 
 
 def describe_model(provider: str | None, model: str | None) -> str:
@@ -221,7 +272,9 @@ def _ensure_eval_table(conn: sqlite3.Connection) -> None:
         # existing row honestly has no group, and the readers say so instead of
         # inventing one.
         "run_group TEXT",
+        # d-0137: ids + golden content; see the CREATE TABLE comment above.
         "dataset_key TEXT",
+        # Placeholders the dataset held, never the run's numerator.
         "dataset_size INTEGER",
         "rag_store TEXT",
         "run_settings TEXT",
@@ -951,6 +1004,20 @@ def rebuild_run_from_evidence(
     else:
         size = None
 
+    # d-0136: the declared size describes a sample, and the number just written
+    # came from fielding the resolved dataset - which may be today's, not the
+    # run's. Storing both without a comparison is how a leg ends up saying size
+    # 113 while scoring out of 114, so refuse and name both numbers.
+    actual_size = _dataset_size(dataset)
+    if size is not None and actual_size is not None and size != actual_size:
+        raise ValueError(
+            f"this run declares {size} placeholders but the dataset it was re-scored against "
+            f"({dataset}) holds {actual_size}. Refusing to store a leg whose declared size and "
+            f"scored sample disagree: pass --dataset-size {actual_size} if {actual_size} is the "
+            f"sample this run really used, or pass --dataset pointing at the golden keys it was "
+            "actually scored on."
+        )
+
     declared: dict[str, Any] = dict(settings_declared or {})
     for name, value in (
         ("rag_enabled", rag_enabled),
@@ -998,7 +1065,10 @@ def rebuild_run_from_evidence(
         rag_enabled=rag_enabled,
         rag_store=rag_store,
         run_group=run_group,
-        dataset_key=dataset_key_from_story_ids(list(evidence.code_map)),
+        # d-0137: the key of the dataset this rebuild actually scored against,
+        # content included, so it can only equal a live run on the same sample.
+        # Ids alone (the old key) cannot see an edited expected locator.
+        dataset_key=dataset_key(dataset) or dataset_key_from_story_ids(list(evidence.code_map)),
         dataset_size=size,
         run_settings=json.dumps(settings),
         created_at=(str(manifest["created_at"]) if manifest.get("created_at") else None),
@@ -1262,20 +1332,18 @@ def compare_run_groups(db_path: str | Path, leg_a: str, leg_b: str) -> dict[str,
     why = ""
     if key_a is None or key_b is None:
         why = (
-            f"not comparable: the dataset is not recorded for "
+            f"the dataset is not recorded for "
             f"{leg_a if key_a is None else leg_b}, so we cannot show these are the same sample"
         )
     elif str(key_a) != str(key_b):
-        why = f"not comparable: {leg_a} scored dataset {key_a} and {leg_b} scored {key_b}"
+        why = f"{leg_a} scored dataset {key_a} and {leg_b} scored {key_b}"
     elif size_a is None or size_b is None:
-        why = (
-            f"not comparable: the dataset size is not recorded for "
-            f"{leg_a if size_a is None else leg_b}, so a delta cannot be sized"
-        )
+        why = f"the dataset size is not recorded for {leg_a if size_a is None else leg_b}, so a delta cannot be sized"
     elif int(size_a) != int(size_b):
-        why = f"not comparable: {leg_a} scored {size_a} placeholders and {leg_b} scored {size_b}"
+        why = f"{leg_a} scored {size_a} placeholders and {leg_b} scored {size_b}"
 
     if why:
+        # d-0138(4): the reason already says why, so the label states it once.
         lines.append(f"NOT COMPARABLE: {why}")
         lines.append("  (same story files, same placeholder count - or a re-run - before a delta means anything)")
         return {"comparable": False, "why": why, "text": "\n".join(lines), "exit": NOT_COMPARABLE_EXIT}
@@ -1540,7 +1608,22 @@ class EvalRunner:
 
         Returns:
             HarnessReport with all metrics computed.
+
+        Raises:
+            ValueError: when the persist rule refuses this run (d-0138).
+                ``--no-persist`` on a model-bearing mode, or a model-bearing
+                mode with no leg name, is refused HERE, because this is the
+                method every caller reaches - the CLI check only saves a caller
+                the cost of a run it would refuse anyway.
         """
+        # d-0138: the store's rule belongs at the chokepoint, not in one caller.
+        # ci_summary's direct EvalRunner(...).run(mode="full", persist=False)
+        # used to produce a full leg that wrote nothing, which is the fault the
+        # CLI check was protecting against for the CLI only.
+        refusal = persist_policy_error(mode, no_persist=not persist, run_group=self.run_group)
+        if refusal is not None:
+            raise ValueError(refusal)
+
         # Auto-manage mock serving (Phase 6 6a follow-up): the :8781 server is
         # (re)started per story so each mock family is served at root (golden
         # keys reference root-relative URLs). No server starts until a mock

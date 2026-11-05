@@ -317,20 +317,27 @@ def _cmd_rebuild(args: argparse.Namespace) -> int:
         rag_enabled = True
     elif getattr(args, "rag_enabled", None) == "off":
         rag_enabled = False
-    run_ids = rebuild_run_from_evidence(
-        args.evidence_dir,
-        db_path,
-        dataset_dir,
-        run_group=getattr(args, "run_group", None),
-        rag_enabled=rag_enabled,
-        rag_store=getattr(args, "rag_store", None),
-        dataset_size=getattr(args, "dataset_size", None),
-        provider=getattr(args, "provider", None),
-        model=getattr(args, "model", None),
-        temperature_sent=getattr(args, "temperature", None),
-        thinking=getattr(args, "thinking", None),
-        settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
-    )
+    try:
+        run_ids = rebuild_run_from_evidence(
+            args.evidence_dir,
+            db_path,
+            dataset_dir,
+            run_group=getattr(args, "run_group", None),
+            rag_enabled=rag_enabled,
+            rag_store=getattr(args, "rag_store", None),
+            dataset_size=getattr(args, "dataset_size", None),
+            provider=getattr(args, "provider", None),
+            model=getattr(args, "model", None),
+            temperature_sent=getattr(args, "temperature", None),
+            thinking=getattr(args, "thinking", None),
+            settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
+        )
+    except ValueError as exc:
+        # d-0136: a declared size and the dataset actually scored are refused
+        # here with both numbers, instead of becoming a stored leg nobody can
+        # compare. A missing --dataset is refused the same way.
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     print(f"Rebuilt {len(run_ids)} eval_runs row(s): {', '.join(run_ids)}")
     print("Query them with: python scripts/eval/eval_harness.py runs")
     return 0

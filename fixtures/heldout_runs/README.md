@@ -59,6 +59,21 @@ python scripts/eval/eval_harness.py rebuild \
   --settings-json fixtures/heldout_runs/2026-11-04/launch-settings.json
 ```
 
+A rebuild re-scores the kept code against the dataset it resolves, and today's dataset holds 114
+placeholders while the 2026-10-31 legs scored 113. Name the sample explicitly, or the rebuild
+scores old evidence against today's golden keys:
+
+```bash
+python scripts/eval/eval_harness.py rebuild \
+  --evidence-dir fixtures/heldout_runs/2026-10-31/leg1 \
+  --run-group 2026-10-31-leg1 \
+  --dataset <the 2026-10-31 dataset dir> --dataset-size 113
+```
+
+The dataset directory for that date comes from the `git archive` line in
+`2026-10-31/README.md`. `rebuild` refuses (exit 2, both numbers named) when the declared size and
+the dataset it actually scored disagree, so a leg can no longer say size 113 and score out of 114.
+
 One `--run-group` per leg: that is the name `runs` lists and `diff-runs` takes. A rebuild never
 invents a setting - anything not passed stays unknown in `run_settings`, and `runs` prints
 `unknown`, not an empty string.

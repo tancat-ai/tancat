@@ -78,7 +78,14 @@ def main() -> None:
         code_dir=captures_dir,
         db_path=_PROJECT_ROOT / "evidence" / "run_results.sqlite",
     )
-    report = runner.run(mode=args.mode, persist=False)
+    try:
+        report = runner.run(mode=args.mode, persist=False)
+    except ValueError as exc:
+        # d-0138: the persist rule now lives in the runner, so a model-bearing
+        # mode reaches it here too. Say the rule once and stop, instead of a
+        # traceback or a full leg that silently writes nothing.
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
     lines = build_summary(report, args.min_accuracy)
 
