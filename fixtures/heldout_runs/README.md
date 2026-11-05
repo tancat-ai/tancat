@@ -60,26 +60,52 @@ python scripts/eval/eval_harness.py rebuild \
 ```
 
 A rebuild re-scores the kept code against the dataset it resolves, and today's dataset holds 114
-placeholders while the 2026-10-31 legs scored 113. Name that sample, or the rebuild scores old
-evidence against today's golden keys - and refuses, because the declared size would not match:
+placeholders while the 2026-10-31 legs scored 113. The 113-placeholder sample must be built from the
+**current** goldens, not from an archived copy of the tree:
 
 ```bash
-mkdir -p scratch/dataset-f538d4b
-git archive f538d4b scripts/eval/dataset | tar -x -C scratch/dataset-f538d4b
+python - <<'PY'
+import json, shutil
+from pathlib import Path
+
+out = Path("scratch/dataset-113")
+shutil.rmtree(out, ignore_errors=True)
+out.mkdir(parents=True)
+for src in Path("scripts/eval/dataset").glob("*.json"):
+    data = json.loads(src.read_text(encoding="utf-8"))
+    if data["id"] == "eval-005":
+        for crit in data["golden_resolutions"]:
+            if crit["criterion_index"] == 0:
+                crit["placeholders"] = [p for p in crit["placeholders"] if p["description"] != "date of birth"]
+    (out / src.name).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+PY
 
 python scripts/eval/eval_harness.py rebuild \
   --evidence-dir fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled \
   --run-group 2026-10-31-leg1 \
-  --dataset scratch/dataset-f538d4b/scripts/eval/dataset --dataset-size 113
+  --dataset scratch/dataset-113 --dataset-size 113
 ```
 
-(`scratch/` is gitignored, so the extracted dataset leaves the tree clean; delete the folder
-afterwards if you like. It is named relatively so Python resolves it on Windows too.)
+The sample that produces is 113 placeholders and keys `9:9c867a239c27`; it re-scores the four
+2026-10-31 legs to 102/113, 101/113, 101/113, 101/113 with gate 2 of 6, 4, 6 and 5.
+
+**Do not build it with `git archive f538d4b scripts/eval/dataset`.** Those goldens predate the
+target_page/outcome_page split: they carry `expected_page` and no `outcome_page`, so the re-score
+reads an empty page and falls back to looking for a URL inside the locator. Every ASSERT whose
+locator is `expect(page).to_have_url(...)` still matches that way, but the two page criteria keyed to
+an element (`eval-001` c0 `product list`, `eval-004` c1 `alert demonstration header`) do not - gate 2
+then reports 8, 6, 8 and 7 and looks like a change in the run. It is not: it is a stale sample. The
+rebuild now refuses that dataset by name (d-0156), but the recipe must not tempt anyone to restore
+it.
+
+(`scratch/` is gitignored, so neither sample leaves the tree dirty; delete the folder afterwards if
+you like. The paths are named relatively so Python resolves them on Windows too.)
 
 The other three legs are the same command with `leg2_rag_off_bundled`, `leg3_rag_on_empty` and
-`leg4_rag_off_empty` in `--evidence-dir` and their own `--run-group`. A rebuild refuses (exit 2,
-both numbers named) when the declared size and the dataset it actually scored disagree, so a leg
-can no longer say size 113 and score out of 114.
+`leg4_rag_off_empty` in `--evidence-dir` and their own `--run-group`. A rebuild refuses (exit 2) when
+the declared size and the dataset it actually scored disagree, and when the dataset's goldens predate
+the page split - both with the numbers and the rows named, so a leg cannot be stored against a sample
+it was not scored on.
 
 One `--run-group` per leg: that is the name `runs` lists and `diff-runs` takes. A rebuild never
 invents a setting - anything not passed stays unknown in `run_settings`, and `runs` prints

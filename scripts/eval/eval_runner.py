@@ -964,6 +964,28 @@ def _resolve_dataset_dir(recorded: Any, dataset_dir: Path | None) -> Path:
     )
 
 
+def _dataset_schema_problems(dataset: Path) -> list[str]:
+    """Page-schema problems in a golden set, named per file and row (d-0156).
+
+    Empty list = the set carries the two page fields and can be scored. A set
+    that predates the split returns a message per row naming the retired field,
+    which is what a rebuild refuses on.
+    """
+    from golden_validator import check_page_schema
+
+    problems: list[str] = []
+    for path in sorted(dataset.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            problems.append(f"{path.name}: cannot be read ({exc})")
+            continue
+        if not isinstance(data, dict):
+            continue
+        problems.extend(f"{path.name}: {problem}" for problem in check_page_schema(data))
+    return problems
+
+
 def rebuild_run_from_evidence(
     evidence_dir: str | Path,
     db_path: str | Path,
@@ -1001,6 +1023,22 @@ def rebuild_run_from_evidence(
     evidence = read_run_evidence(evidence_dir)
     manifest = evidence.manifest
     dataset = _resolve_dataset_dir(manifest.get("dataset"), dataset_dir)
+    # d-0156: refuse a dataset that predates the target/outcome split. The re-score
+    # reads `outcome_page`; handed goldens that only have `expected_page`, it sees
+    # an empty page and falls back to the URL-in-locator rule, which reports two
+    # element-keyed page ASSERTs as unverified. That silently moved gate 2 by +2
+    # on the 2026-10-31 legs (t-1320). Refuse by name instead of storing a changed
+    # number, so a stale sample can never be measured as if it were the sample.
+    schema_problems = _dataset_schema_problems(dataset)
+    if schema_problems:
+        shown = "; ".join(schema_problems[:3])
+        more = f" (+{len(schema_problems) - 3} more)" if len(schema_problems) > 3 else ""
+        raise ValueError(
+            f"refusing to re-score against {dataset}: its goldens predate the target_page/outcome_page "
+            f"split - {shown}{more}. The re-score reads outcome_page and would score every page as "
+            "unrecorded, changing gate 2. Build the sample from the current goldens instead "
+            "(see fixtures/heldout_runs/README.md)."
+        )
     report = _rescore.rescore(Path(evidence_dir), dataset)
     outcomes = {story_id: evidence.per_test(story_id) for story_id in evidence.code_map}
 
