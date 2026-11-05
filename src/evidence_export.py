@@ -34,6 +34,22 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _in_package(result: object, package: str | None) -> bool:
+    """True when *result* belongs to *package* (a directory name), else True.
+
+    j-0286: the CLI menu writes these exports into a run's package, so it must
+    not write every run's evidence into one file. The comparison is on the sidecar
+    path's OWN package folder - the same rule for all three writers - and a
+    result with no package recorded is kept, because dropping it silently would
+    shrink an export for a reason the reader cannot see. The filter changes which
+    rows are written, never what a row holds.
+    """
+    if not package:
+        return True
+    value = str(getattr(result, "sidecar_path", "") or "").replace(chr(92), "/").rstrip("/")
+    return f"/{package}/" in f"/{value}/"
+
+
 def export_csv(
     index: EvidenceIndex,
     *,
@@ -43,6 +59,7 @@ def export_csv(
     condition_prefix: str | None = None,
     story_ref: str | None = None,
     step_type: str | None = None,
+    test_package: str | None = None,
     output: str | Path | None = None,
 ) -> str:
     """Export evidence metadata as a flat CSV table.
@@ -77,6 +94,7 @@ def export_csv(
         step_type=step_type,
         limit=100_000,  # effectively unlimited for export
     )
+    results = [r for r in results if _in_package(r, test_package)]
 
     buf = io.StringIO()
     buf.write("\ufeff")  # BOM for Excel UTF‑8 detection
@@ -146,6 +164,7 @@ def export_ndjson(
     condition_prefix: str | None = None,
     story_ref: str | None = None,
     step_type: str | None = None,
+    test_package: str | None = None,
     output: str | Path | None = None,
 ) -> str:
     """Export evidence as newline-delimited JSON (NDJSON / JSON Lines).
@@ -177,6 +196,7 @@ def export_ndjson(
         step_type=step_type,
         limit=100_000,
     )
+    results = [r for r in results if _in_package(r, test_package)]
 
     lines: list[str] = []
     for r in results:
@@ -211,6 +231,7 @@ def export_junit_xml(
     condition_prefix: str | None = None,
     story_ref: str | None = None,
     step_type: str | None = None,
+    test_package: str | None = None,
     output: str | Path | None = None,
     suite_name: str = "evidence_export",
 ) -> str:
@@ -245,6 +266,7 @@ def export_junit_xml(
         step_type=step_type,
         limit=100_000,
     )
+    results = [r for r in results if _in_package(r, test_package)]
 
     total = len(results)
     # partial_pass is a test whose assertion was resolved by a fallback: it did
