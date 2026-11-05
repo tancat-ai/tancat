@@ -1,6 +1,9 @@
 """Tests for eval_runner.py — eval harness orchestration."""
 
 import json
+import shutil
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,33 @@ from eval_runner import (
     run_generated_tests,
     run_static_validation,
 )
+
+# ---------------------------------------------------------------------------
+# A case directory INSIDE the repo (d-0134)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def repo_case_dir() -> Iterator[Path]:
+    """A throwaway directory under the repo's ``scratch/``, not the system Temp.
+
+    d-0134: ``run_generated_tests`` starts a nested pytest with the test file as
+    its argument. Handed a path under ``%TEMP%\\pytest-*``, pytest resolved a
+    rootdir above it and walked the whole Temp tree, where other processes were
+    creating and deleting directories - collection hit a deleted sibling and the
+    run reported 0 tests. A file inside the repo keeps the collection root inside
+    the repo, where nothing else is churning.
+
+    ``scratch/`` is gitignored, so even a crashed case leaves git's view clean.
+    """
+    base = Path(__file__).resolve().parents[2] / "scratch"
+    base.mkdir(parents=True, exist_ok=True)
+    case = Path(tempfile.mkdtemp(prefix="eval_runner_case_", dir=base))
+    try:
+        yield case
+    finally:
+        shutil.rmtree(case, ignore_errors=True)
+
 
 # ---------------------------------------------------------------------------
 # run_static_validation
@@ -66,9 +96,9 @@ class TestStaticValidation:
 
 
 class TestRunGeneratedTests:
-    def test_parses_pytest_output(self, tmp_path: Path) -> None:
-        # Create a simple passing test
-        test_file = tmp_path / "test_passing.py"
+    def test_parses_pytest_output(self, repo_case_dir: Path) -> None:
+        # Create a simple passing test (in the repo: see repo_case_dir / d-0134)
+        test_file = repo_case_dir / "test_passing.py"
         test_file.write_text("def test_always_pass():\n    assert True\n")
         total, passed, failed, skipped, duration, output, per_test = run_generated_tests(test_file, pytest_timeout=15.0)
         assert total >= 1
@@ -93,7 +123,7 @@ class TestRunGeneratedTests:
 
 
 class TestFullValidation:
-    def test_includes_test_results(self, tmp_path: Path) -> None:
+    def test_includes_test_results(self, repo_case_dir: Path) -> None:
         golden = {
             "id": "eval-999",
             "site": "test",
@@ -108,13 +138,13 @@ class TestFullValidation:
                 },
             ],
         }
-        (tmp_path / "eval-999.json").write_text(json.dumps(golden))
+        (repo_case_dir / "eval-999.json").write_text(json.dumps(golden))
 
-        test_file = tmp_path / "test_eval.py"
+        test_file = repo_case_dir / "test_eval.py"
         test_file.write_text("def test_always_pass():\n    assert True\n")
 
         results = run_full_validation(
-            tmp_path,
+            repo_case_dir,
             {"eval-999": "evidence_tracker.fill('#input', 'val')"},
             test_files={"eval-999": test_file},
         )
