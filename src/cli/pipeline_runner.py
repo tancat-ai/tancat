@@ -627,6 +627,79 @@ def display_run_results(session: Any) -> None:
 # ── Reports ───────────────────────────────────────────────────────────────
 
 
+def _export_holds_rows(key: str, path: Path) -> bool:
+    """True when an export holds at least one ROW, not merely bytes (j-0286).
+
+    Byte size is not evidence of content: a header-only CSV is ~126 bytes and a
+    JUnit suite with no cases is ~160, so a size check let two of the three
+    formats print a good-looking path over nothing. Count what each format
+    counts instead: CSV needs a data line under its header, NDJSON needs a line,
+    JUnit needs a ``<testcase>``.
+    """
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return False
+    if key == "csv":
+        return len([line for line in text.splitlines() if line.strip()]) > 1
+    if key == "ndjson":
+        return any(line.strip() for line in text.splitlines())
+    if key == "junit":
+        return "<testcase" in text
+    return bool(text.strip())
+
+
+def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dict[str, str]:
+    """Write the CSV / NDJSON / JUnit exports the Streamlit page offers (j-0286).
+
+    Reuses ``src.evidence_export``'s writers - no second implementation - scoped
+    to this run's package so one leg's evidence does not land in another's file.
+    Nothing about the formats changes; only which rows go in the file.
+
+    The index is REFRESHED before writing (j-0286 blocker): ``EvidenceIndex()``
+    only opens the database, so on a run made from the terminal alone the table
+    held no rows and these three files came out empty - header-only CSV, an empty
+    NDJSON, a JUnit with 0 tests - and their paths were printed as if they were
+    good. ``build_or_refresh`` is what the Streamlit page and ``evidence_cli``
+    already call. An injected *index* is the caller's to build (tests use this).
+    """
+    from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+    from src.evidence_index import EvidenceIndex
+
+    evidence_dir = package_dir / "evidence"
+    if not evidence_dir.exists():
+        print(yellow("  CSV / NDJSON / JUnit: not produced - no evidence yet (run the generated tests first)"))
+        return {}
+
+    if index is None:
+        index = EvidenceIndex()
+        indexed = index.build_or_refresh()
+        if indexed:
+            print(green(f"  Indexed {indexed} new/updated evidence sidecar(s)"))
+
+    package = package_dir.name
+    written: dict[str, str] = {}
+    for key, filename, writer in (
+        ("csv", "report_evidence.csv", export_csv),
+        ("ndjson", "report_evidence.ndjson", export_ndjson),
+        ("junit", "report_evidence.xml", export_junit_xml),
+    ):
+        target = package_dir / filename
+        try:
+            writer(index, test_package=package, output=target)
+        except Exception as exc:
+            print(yellow(f"  {key.upper()} export: not produced - {exc}"))
+            continue
+        if not _export_holds_rows(key, target):
+            # An export with no rows is a lie with a path on it (j-0286). It is
+            # NOT recorded, so the viewer cannot list an empty file as a report.
+            print(yellow(f"  {key.upper()} export: written but holds no rows for this package, not listed - {target}"))
+            continue
+        written[key] = str(target.absolute())
+        print(green(f"  {key.upper()} export: {written[key]}"))
+    return written
+
+
 def generate_reports(session: Any) -> None:
     """Generate local, Jira, and HTML reports."""
     if not session.pipeline_results or not session.pipeline_saved_path:
@@ -647,6 +720,12 @@ def generate_reports(session: Any) -> None:
         session.pipeline_local_report_path = bundle.local_report_path
         session.pipeline_jira_report_path = bundle.jira_report_path
         session.pipeline_html_report_path = bundle.html_report_path
+        session.pipeline_local_json_path = bundle.local_json_path
+        # j-0286: the same three evidence formats Streamlit offers, written by
+        # the same writers. The menu used to stop at HTML/JSON/Jira.
+        session.pipeline_export_paths = _export_evidence_formats(
+            Path(str(session.pipeline_saved_path)).resolve().parent
+        )
 
         print(green(f"  Local report:  {bundle.local_report_path}"))
         if bundle.jira_blocked:
@@ -654,6 +733,8 @@ def generate_reports(session: Any) -> None:
         else:
             print(green(f"  Jira report:   {bundle.jira_report_path}"))
         print(green(f"  HTML report:   {bundle.html_report_path}"))
+        if bundle.local_json_path:
+            print(green(f"  JSON report:   {bundle.local_json_path}"))
     except Exception as exc:
         print(red(f"  Report generation failed: {exc}"))
 
@@ -668,18 +749,28 @@ def view_reports(session: Any) -> None:
         generate_reports(session)
 
     options: list[str] = []
+    paths: list[str] = []
     if session.pipeline_local_report_path:
         options.append(f"Local report ({session.pipeline_local_report_path})")
+        paths.append(session.pipeline_local_report_path)
     if session.pipeline_jira_report_path:
         options.append(f"Jira report ({session.pipeline_jira_report_path})")
+        paths.append(session.pipeline_jira_report_path)
     if session.pipeline_html_report_path:
         options.append(f"HTML report ({session.pipeline_html_report_path})")
+        paths.append(session.pipeline_html_report_path)
+    if session.pipeline_local_json_path:
+        options.append(f"JSON report ({session.pipeline_local_json_path})")
+        paths.append(session.pipeline_local_json_path)
+    for key in sorted(session.pipeline_export_paths):
+        path = session.pipeline_export_paths[key]
+        options.append(f"{key.upper()} export ({path})")
+        paths.append(path)
     if not options:
         print(yellow("  No reports available."))
         return
 
     idx = print_menu(options, "Select report to view")
-    paths = [session.pipeline_local_report_path, session.pipeline_jira_report_path, session.pipeline_html_report_path]
     report_path = paths[idx]
     try:
         print()

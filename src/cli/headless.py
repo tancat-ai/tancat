@@ -275,6 +275,40 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_reports(saved_path: str, criteria_text: str, code: str) -> dict[str, str]:
+    """Write the JSON and HTML reports the other surfaces write (j-0286).
+
+    Reuses ``PipelineReportService`` - the same service the menu and Streamlit
+    call - so a headless run leaves the same evidence, and the format contents
+    cannot drift from the other surfaces. Returns the paths it wrote.
+
+    A report failure is reported and does not fail the run: the tests are still
+    generated and saved, and the caller keeps its exit code.
+    """
+    from src.pipeline_report_service import PipelineReportService
+    from src.pytest_output_parser import RunResult
+
+    try:
+        bundle = PipelineReportService().build_reports(
+            criteria_text=criteria_text,
+            generated_code=code,
+            # 'tancat run' is generate-only, so no run result exists yet. The
+            # service renders that honestly (no pass/fail column invented).
+            run_result=RunResult(),
+            package_dir=str(Path(saved_path).resolve().parent),
+            jira_project_key="",
+        )
+    except Exception as exc:  # never turn a saved run into a failed one
+        print(f"WARNING: reports not written: {exc}", file=sys.stderr)
+        return {}
+    return {
+        "markdown": bundle.local_report_path,
+        "json": bundle.local_json_path,
+        "html": bundle.html_report_path,
+        "jira": bundle.jira_report_path,
+    }
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute a parsed ``tancat run`` invocation. Returns the exit code."""
     # --- config validation -------------------------------------------------
@@ -412,6 +446,12 @@ def run(args: argparse.Namespace) -> int:
         "duration_s": duration_s,
         **license_section,
     }
+    # j-0286: a run that leaves no report cannot be checked afterwards.
+    criteria_text = str(session.get("pipeline_criteria", "") or args.criteria or "")
+    if not criteria_text.strip():
+        criteria_text = "\n".join(str(item) for item in conditions)
+    reports = _write_reports(saved_path, criteria_text, code)
+    result["reports"] = {name: path for name, path in reports.items() if path}
 
     if args.json:
         print(json.dumps(result))
@@ -422,6 +462,10 @@ def run(args: argparse.Namespace) -> int:
         print(
             f"   ignores loaded: {result['ignores']}  ·  mode: {result['mode']}  ·  provider: {provider}/{model_name}"
         )
+        for name in ("html", "json"):
+            path = result["reports"].get(name)
+            if path:
+                print(f"   {name} report: {path}")
     return EXIT_OK
 
 
