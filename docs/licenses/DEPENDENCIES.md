@@ -113,6 +113,22 @@ libraries is fine and does not affect TanCat's Apache-2.0 licence. The flag is
 recorded so the position is a decision, not an oversight. For `text-unidecode`,
 the permissive Artistic option should be the one relied on.
 
+## Elections
+
+Every flagged item above needs a recorded position, not an oversight. This table
+is that record: which licence option TanCat relies on, whether the package ships
+in the default install ("runtime") or is dev-only, and why. A flagged package
+with no row here fails `tests/test_licence_elections.py`.
+
+| Package | Elected licence | Scope | Why |
+|---|---|---|---|
+| text-unidecode | Artistic-1.0 | runtime (ships) | Dual-licensed GPL-2.0-or-later / Artistic-1.0. Artistic-1.0 is permissive and compatible with Apache-2.0, so that is the option relied on; the GPL option is not used. It reaches the default install through `pytest-playwright` -> `python-slugify` (a runtime dependency in `pyproject.toml`), so this is a shipped component, not a dev tool. The package is used unmodified. Elected 2026-11-06. |
+| certifi | MPL-2.0 | runtime (ships) | Weak, file-level copyleft; used unmodified as a library, so no obligation reaches TanCat's own files. |
+| orjson | Apache-2.0 OR MIT (the metadata leads with MPL-2.0) | runtime (ships) | The Apache/MIT option applies; recorded so the MPL lead-in metadata is not mistaken for the operative licence. |
+| tqdm | MIT (the metadata leads with MPL-2.0) | runtime (ships) | The MIT option applies; recorded for the same reason as orjson. |
+| fqdn | MPL-2.0 | dev only (jupyter-events) | Not in the shipped runtime; used unmodified. |
+| pathspec | MPL-2.0 | dev only (mypy) | Not in the shipped runtime; used unmodified. |
+
 ## Fonts
 
 The landing page (`landing/index.html`, `landing/install.html`) loads three

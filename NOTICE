@@ -7,8 +7,12 @@ TanCat includes third-party software. The licence for every dependency, direct
 and transitive, is recorded in docs/licenses/DEPENDENCIES.md. Two transitive
 components are flagged there:
 
-  - text-unidecode 1.3 - dual-licensed GPL-2.0-or-later / Artistic-1.0
-    (the Artistic option is the permissive one relied on).
+  - text-unidecode 1.3 - dual-licensed GPL-2.0-or-later / Artistic-1.0.
+    TanCat elects, and relies on, the Artistic-1.0 option and not the GPL; it
+    is permissive and compatible with Apache-2.0. This package ships in the
+    default install (it arrives through pytest-playwright -> python-slugify),
+    and it is used unmodified. Elected 2026-11-06; see the Elections section of
+    docs/licenses/DEPENDENCIES.md.
   - a group of MPL-2.0 packages (certifi, pytest-base-url, orjson, tqdm, and
     the dev-only fqdn and pathspec).
 
