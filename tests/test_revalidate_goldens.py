@@ -69,20 +69,20 @@ def _ds(dataset_id: str) -> dict:
 def test_stateful_path_classification() -> None:
     assert (
         R._is_stateful_golden(
-            _ds("eval-006"), {"expected_page": "http://localhost:8781/cart.html", "description": "cart page title"}
+            _ds("eval-006"), {"target_page": "http://localhost:8781/cart.html", "description": "cart page title"}
         )
         is True
     )
     assert (
         R._is_stateful_golden(
-            _ds("eval-007"), {"expected_page": "http://localhost:8781/dashboard.html", "description": "sign in button"}
+            _ds("eval-007"), {"target_page": "http://localhost:8781/dashboard.html", "description": "sign in button"}
         )
         is True
     )
     # Stateless page on the same dataset → not stateful.
     assert (
         R._is_stateful_golden(
-            _ds("eval-006"), {"expected_page": "http://localhost:8781/index.html", "description": "home page loaded"}
+            _ds("eval-006"), {"target_page": "http://localhost:8781/index.html", "description": "home page loaded"}
         )
         is False
     )
@@ -92,7 +92,7 @@ def test_stateful_description_rule() -> None:
     # demoqa renders the confirmation only after submit.
     assert (
         R._is_stateful_golden(
-            _ds("eval-003"), {"expected_page": "https://demoqa.com/x", "description": "Submission success message"}
+            _ds("eval-003"), {"target_page": "https://demoqa.com/x", "description": "Submission success message"}
         )
         is True
     )
@@ -107,11 +107,11 @@ def test_rewrite_mock_expected_pages_with_path_base_url() -> None:
         "id": "eval-010",
         "base_url": "http://localhost:8781/index.html",
         "golden_resolutions": [
-            {"criterion_index": 0, "placeholders": [{"expected_page": "http://localhost:8781/success.html"}]}
+            {"criterion_index": 0, "placeholders": [{"target_page": "http://localhost:8781/success.html"}]}
         ],
     }
     out = R._rewrite_mock_expected_pages(ds, old_origin="http://localhost:8781", new_origin="http://localhost:8791")
-    assert out["golden_resolutions"][0]["placeholders"][0]["expected_page"] == "http://localhost:8791/success.html"
+    assert out["golden_resolutions"][0]["placeholders"][0]["target_page"] == "http://localhost:8791/success.html"
 
 
 def test_origin_of_strips_path() -> None:
@@ -145,7 +145,7 @@ def test_report_shape() -> None:
             "goldens_matched": 5,
             "goldens_checked": 6,
             "stateful_skipped": 0,
-            "missing": [{"description": "la", "expected_page": "u", "missing_selectors": ["#x"]}],
+            "missing": [{"description": "la", "target_page": "u", "missing_selectors": ["#x"]}],
         },
     ]
     text = R.render_report(records)

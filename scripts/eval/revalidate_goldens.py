@@ -6,7 +6,8 @@ Golden keys decay — AGENTS.md §12: re-validate locators against live sites ev
 3–6 months. This script does exactly that, deterministically:
 
 - **Live datasets** (saucedemo, automationexercise, demoqa, theinternet): a real
-  Chromium session loads each golden's ``expected_page`` and asserts every
+  Chromium session loads each golden's ``target_page`` (what the step selects on) or
+  ``outcome_page`` (what it must reach) and asserts every
   tolerance selector (and the exact golden locator) resolves ≥ 1 element; URL
   assertions assert the page actually loads at the expected URL.
 - **Mock datasets** (ecommerce, banking, ambiguous): same checks against the
@@ -133,7 +134,7 @@ def _check_selectors_on_page(page: Any, selectors: list[str]) -> tuple[bool, lis
 
 
 def _page_url_matches(page_url: str, expected: str) -> bool:
-    """Compare page URL against the golden's expected_page (path-insensitive
+    """Compare a page URL against the URL the golden names (path-insensitive
     to trailing slashes / landing redirects)."""
     a = page_url.rstrip("/").split("?")[0]
     b = expected.rstrip("/").split("?")[0]
@@ -145,7 +146,9 @@ def _is_stateful_golden(dataset: dict[str, Any], placeholder: dict[str, Any]) ->
     execution path (stateful page / post-submit element), not a static load."""
     ds_id = dataset.get("id", "")
     frags = STATEFUL_PATHS.get(ds_id, [])
-    target = placeholder.get("expected_page") or ""
+    # t-1303: the page this row is about is its target (element rows) or its
+    # outcome (URL rows). One field used to carry both.
+    target = placeholder.get("target_page") or placeholder.get("outcome_page") or ""
     if any(f in target for f in frags):
         return True
     desc = str(placeholder.get("description", "")).lower()
@@ -181,17 +184,18 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
                 {
                     "action": placeholder.get("action"),
                     "description": placeholder.get("description"),
-                    "expected_page": placeholder.get("expected_page"),
+                    "target_page": placeholder.get("target_page"),
+                    "outcome_page": placeholder.get("outcome_page"),
                     "reason": "stateful page / post-submit element — validated via the harness execution path",
                 }
             )
             continue
         checked += 1
-        target = placeholder.get("expected_page") or base_url
-        if not target:
-            continue
         if _is_url_assert(placeholder):
-            # URL assertion → the page must actually load at the expected URL.
+            # t-1303: a URL assertion is about the page it must REACH.
+            target = placeholder.get("outcome_page") or base_url
+            if not target:
+                continue
             _goto(target)
             if _page_url_matches(page.url, target):
                 matched += 1
@@ -200,12 +204,15 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
                     {
                         "action": placeholder.get("action"),
                         "description": placeholder.get("description"),
-                        "expected_page": target,
+                        "outcome_page": target,
                         "actual_url": page.url,
                     }
                 )
             continue
 
+        target = placeholder.get("target_page") or base_url
+        if not target:
+            continue
         _goto(target)
         selectors = _selectors_to_check(placeholder)
         ok, miss = _check_selectors_on_page(page, selectors)
@@ -216,7 +223,7 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
                 {
                     "action": placeholder.get("action"),
                     "description": placeholder.get("description"),
-                    "expected_page": target,
+                    "target_page": target,
                     "missing_selectors": miss,
                 }
             )
@@ -238,7 +245,7 @@ def _check_live_dataset(dataset: dict[str, Any], *, page: Any, timeout_s: int) -
 
 
 def _rewrite_mock_expected_pages(dataset: dict[str, Any], *, old_origin: str, new_origin: str) -> dict[str, Any]:
-    """Clone *dataset*, rewriting placeholder ``expected_page`` roots from the
+    """Clone *dataset*, rewriting placeholder page roots from the
     harness's canonical mock origin to the port this run actually served on.
 
     Also rewrites the canonical ``http://localhost:8781`` origin directly (some
@@ -250,13 +257,14 @@ def _rewrite_mock_expected_pages(dataset: dict[str, Any], *, old_origin: str, ne
     origins = {o for o in (old_origin, "http://localhost:8781") if o}
     for gr in d.get("golden_resolutions") or []:
         for ph in gr.get("placeholders") or []:
-            ep = ph.get("expected_page")
-            if not ep:
-                continue
-            for origin in origins:
-                if ep.startswith(origin):
-                    ph["expected_page"] = new_origin + ep[len(origin) :]
-                    break
+            for field in ("target_page", "outcome_page"):
+                value = ph.get(field)
+                if not value:
+                    continue
+                for origin in origins:
+                    if value.startswith(origin):
+                        ph[field] = new_origin + value[len(origin) :]
+                        break
     return d
 
 
@@ -285,7 +293,7 @@ def _check_mock_dataset(dataset: dict[str, Any], mock_dir: str, *, port: int) ->
             browser = p.chromium.launch()
             page = browser.new_page()
             try:
-                # The datasets' golden ``expected_page`` values hard-code the
+                # The datasets' golden page values hard-code the
                 # harness's canonical mock port (8781); rewrite that origin to
                 # the port we actually served on, or every goto would target a
                 # dead port → about:blank (observed 6i debug).
@@ -399,7 +407,7 @@ def render_report(records: list[dict[str, Any]]) -> str:
             lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:12} (static-only)")
         for m in r.get("missing", [])[:6]:
             lines.append(
-                f"      ✗ {m.get('description')} @ {m.get('expected_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
+                f"      ✗ {m.get('description')} @ {m.get('target_page') or m.get('outcome_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
             )
         if r.get("error"):
             lines.append(f"      unreachable: {r['error'][:120]}")
@@ -408,8 +416,8 @@ def render_report(records: list[dict[str, Any]]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     # Windows consoles default to cp1252 — force UTF-8 so ✓/⚠/✗ render.
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
     parser = argparse.ArgumentParser(description="Golden-key live re-validation (Phase 6i).")
     parser.add_argument("--dataset", default="", help="Re-validate only this dataset id (eval-00X).")

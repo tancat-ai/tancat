@@ -25,7 +25,8 @@
             "expect(page).to_have_url",
             "#order-form"
           ],
-          "expected_page": "http://localhost:8781/index.html"
+          "target_page": "",
+          "outcome_page": "http://localhost:8781/index.html"
         }
       ]
     },
@@ -39,7 +40,8 @@
           "tolerance_selectors": [
             "input[name=\"quantity\"]"
           ],
-          "expected_page": "http://localhost:8781/index.html"
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -53,7 +55,8 @@
           "tolerance_selectors": [
             "button[type=\"submit\"]"
           ],
-          "expected_page": "http://localhost:8781/index.html"
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -69,7 +72,8 @@
             "#order-success-message",
             "h1"
           ],
-          "expected_page": "http://localhost:8781/success.html"
+          "target_page": "http://localhost:8781/success.html",
+          "outcome_page": "http://localhost:8781/success.html"
         }
       ]
     }

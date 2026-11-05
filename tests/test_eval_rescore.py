@@ -335,7 +335,7 @@ class TestEvidenceGuard:
         # t-1183/t-1188/t-1190: the recorded cell still says gate 2 = 0, but under
         # the narrowed rule - a "verified by element" verdict counts only when the
         # element is the golden in the criterion's own test, and a page-arrival
-        # verdict only when it reached the criterion's own expected_page - the
+        # verdict only when it reached the criterion's own outcome_page - the
         # SAME committed evidence finds 4 hollow passes. The cell was left alone on
         # purpose: it is the record of what was measured then, not a number to be
         # adjusted to today's rule. Both sides are stated here so the disagreement

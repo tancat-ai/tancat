@@ -26,7 +26,8 @@
             "h3:has-text(\"All Elements\")",
             "h1.heading"
           ],
-          "expected_page": "https://the-internet.herokuapp.com"
+          "target_page": "",
+          "outcome_page": "https://the-internet.herokuapp.com"
         }
       ]
     },
@@ -39,7 +40,8 @@
           "description": "JavaScript Alerts",
           "expected_locator": "a[href=\"/javascript_alerts\"]",
           "tolerance_selectors": [],
-          "expected_page": "https://the-internet.herokuapp.com"
+          "target_page": "https://the-internet.herokuapp.com",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
@@ -48,7 +50,8 @@
           "tolerance_selectors": [
             "h3"
           ],
-          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+          "target_page": "https://the-internet.herokuapp.com/javascript_alerts",
+          "outcome_page": "https://the-internet.herokuapp.com/javascript_alerts"
         }
       ]
     },
@@ -60,7 +63,8 @@
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+          "target_page": "https://the-internet.herokuapp.com/javascript_alerts",
+          "outcome_page": ""
         }
       ]
     },
@@ -72,7 +76,8 @@
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+          "target_page": "https://the-internet.herokuapp.com/javascript_alerts",
+          "outcome_page": ""
         }
       ]
     },
@@ -85,7 +90,8 @@
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+          "target_page": "https://the-internet.herokuapp.com/javascript_alerts",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
@@ -94,7 +100,8 @@
           "tolerance_selectors": [
             "h4:has-text(\"Result\")"
           ],
-          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+          "target_page": "https://the-internet.herokuapp.com/javascript_alerts",
+          "outcome_page": "https://the-internet.herokuapp.com/javascript_alerts"
         }
       ]
     }

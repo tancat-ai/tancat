@@ -381,6 +381,13 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
             golden = load_golden_key(golden_file)
 
             if args.validate:
+                # t-1303: the two-page schema, checked per action. A GOTO has no
+                # element, so its outcome must be the URL its locator names; a
+                # CLICK/ASSERT selects something, so it needs a target page.
+                from golden_validator import check_page_schema
+
+                errors.extend(f"{golden_file.name}: {problem}" for problem in check_page_schema(golden))
+
                 # Check each golden resolution
                 for i, crit in enumerate(golden.get("golden_resolutions", [])):
                     for j, ph in enumerate(crit.get("placeholders", [])):

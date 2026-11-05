@@ -137,7 +137,7 @@ def _load_golden_placeholders(stories: Sequence[str] | None = None) -> list[dict
     """Load all golden placeholders from dataset files.
 
     Returns flat list with keys: action, description, expected_locator,
-    tolerance_selectors, expected_page, site, site_hash.
+    tolerance_selectors, target_page, outcome_page, site, site_hash.
 
     ``site_hash`` is the identity the RAG store scoped this dataset's golden
     patterns under, so the scorer's golden-pattern bonus can match them. Without
@@ -162,7 +162,11 @@ def _load_golden_placeholders(stories: Sequence[str] | None = None) -> list[dict
                         "description": ph["description"],
                         "expected_locator": ph["expected_locator"],
                         "tolerance_selectors": ph.get("tolerance_selectors", []),
-                        "expected_page": ph.get("expected_page", ""),
+                        # t-1303: one field held two facts; the resolver pool is
+                        # the page holding the element (target), and the arrival
+                        # check is the page to reach (outcome).
+                        "target_page": ph.get("target_page", ""),
+                        "outcome_page": ph.get("outcome_page", ""),
                         # B-093: keep the URL classification. Without it every
                         # golden url_assertion reaches _resolve_placeholder as
                         # None, so the no-fall-through guard never runs.
@@ -209,7 +213,11 @@ async def scrape_and_save_pages() -> dict[str, list[dict[str, str]]]:
     from src.scraper import PageScraper
 
     placeholders = _load_golden_placeholders()
-    unique_urls: set[str] = {ph["expected_page"] for ph in placeholders if ph["expected_page"]}
+    # t-1303: an element row is scraped at its target; a URL-class row has no
+    # target and is named by its outcome, which is what used to be scraped.
+    unique_urls: set[str] = {
+        ph["target_page"] or ph["outcome_page"] for ph in placeholders if ph["target_page"] or ph["outcome_page"]
+    }
     logger.info("Scraping %d unique page(s)...", len(unique_urls))
 
     scraper = PageScraper()
@@ -246,16 +254,26 @@ def _resolve_placeholder(
     action: str,
     description: str,
     pages_data: dict[str, list[dict[str, str]]],
-    expected_page: str,
+    target_page: str,
     element_matcher: Any,
     rag_retriever: Any | None = None,
     flow_store: Any | None = None,
     expected_type: str | None = None,
     site_hash: str | None = None,
+    outcome_page: str = "",
+    from_page: str = "",
 ) -> str | None:
     """Resolve a single placeholder using ElementMatcher's multi-pass pipeline.
 
     Args:
+        target_page: the page whose DOM holds the element (the resolver pool).
+            Empty for a GOTO or a URL assertion, which select nothing.
+        outcome_page: the page the step must reach. It is the URL a URL-class
+            placeholder is about, so the flow-memory path uses it as the page
+            of interest (t-1303).
+        from_page: the page the step runs from, carried from the trail. A GOTO
+            has no target, so this is what keeps its flow lookup keyed on the
+            page the browser was on rather than the page it is going to.
         expected_type: Golden-key classification ("url_assertion", "url", …).
             When set for URL-class placeholders, flow memory (AI-042) resolves
             navigation intent before element matching — a GOTO has no DOM
@@ -273,14 +291,16 @@ def _resolve_placeholder(
 
     # AI-042-F1: URL-class placeholders (GOTO / URL-assertion) — navigation
     # intent has no DOM element to match, so resolve via cross-site flow
-    # memory first, using the golden's ``expected_page`` as the from-context.
-    if flow_store is not None and expected_page and (action in ("GOTO", "URL") or expected_type == "url_assertion"):
+    # memory first, using the page the placeholder is about (t-1303: the target
+    # when it has one, else the page it must reach).
+    page_of_interest = from_page or target_page or outcome_page
+    if flow_store is not None and page_of_interest and (action in ("GOTO", "URL") or expected_type == "url_assertion"):
         from src.flow_memory import flow_resolved_url
 
         flow_url = flow_resolved_url(
             flow_store,
             description=description,
-            from_url=expected_page,
+            from_url=page_of_interest,
             scraped_urls=pages_data.keys() if isinstance(pages_data, dict) else [],
         )
         if flow_url:
@@ -294,9 +314,9 @@ def _resolve_placeholder(
     if expected_type == "url_assertion":
         return None
 
-    # Filter to the expected page if specified
-    if expected_page and expected_page in pages_data:
-        page_specific = {expected_page: pages_data[expected_page]}
+    # Filter to the target page if specified (the page holding the element)
+    if target_page and target_page in pages_data:
+        page_specific = {target_page: pages_data[target_page]}
     else:
         page_specific = pages_data
 
@@ -411,6 +431,11 @@ async def run_resolver_eval(
     total = 0
     per_site: dict[str, dict[str, int]] = {}
     per_story: dict[str, dict[str, int]] = {}
+    # t-1303: a URL-class row has no target_page (nothing is selected), but the
+    # flow lookup still needs the page the step runs FROM. Nothing in the schema
+    # records it for a GOTO, so it comes from the trail: the last page this story
+    # named. That is the product's own previous-landing idea, not a third field.
+    last_page: dict[str, str] = {}
 
     for ph in placeholders:
         total += 1
@@ -427,13 +452,18 @@ async def run_resolver_eval(
             action=ph["action"],
             description=ph["description"],
             pages_data=pages,
-            expected_page=ph["expected_page"],
+            target_page=ph["target_page"],
+            outcome_page=ph["outcome_page"],
+            from_page=last_page.get(str(ph.get("story_id") or ""), ""),
             element_matcher=element_matcher,
             rag_retriever=rag_retriever,
             flow_store=flow_store,
             expected_type=ph.get("expected_type"),
             site_hash=ph.get("site_hash"),
         )
+        landing = ph["target_page"] or ph["outcome_page"]
+        if landing:
+            last_page[str(ph.get("story_id") or "")] = landing
 
         expected = ph["expected_locator"]
         tolerances = ph.get("tolerance_selectors", [])
@@ -666,7 +696,7 @@ async def _cmd_pipeline() -> int:
     sites: dict[str, dict[str, Any]] = {}
     for ph in placeholders:
         site = ph["site"]
-        url = ph["expected_page"]
+        url = ph["target_page"] or ph["outcome_page"]
         if site not in sites:
             sites[site] = {"urls": set(), "base_url": ""}
         sites[site]["urls"].add(url)

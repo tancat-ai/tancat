@@ -145,7 +145,8 @@ class TestGateSeparation:
                             "description": "product list",
                             "expected_locator": '[data-test="inventory-item"]',
                             "tolerance_selectors": [],
-                            "expected_page": "https://x.com/inventory.html",
+                            "target_page": "https://x.com/inventory.html",
+                            "outcome_page": "https://x.com/inventory.html",
                         },
                     ],
                 },
@@ -482,7 +483,8 @@ _ELEMENT_ON_PAGE_GOLDEN = {
                     "description": "product list",
                     "expected_locator": '[data-test="inventory-item"]',
                     "tolerance_selectors": [],
-                    "expected_page": "https://example.com/inventory.html",
+                    "target_page": "https://example.com/inventory.html",
+                    "outcome_page": "https://example.com/inventory.html",
                 }
             ],
         }
@@ -491,9 +493,9 @@ _ELEMENT_ON_PAGE_GOLDEN = {
 
 
 class TestAPageCriterionIsVerifiedByItsPage:
-    """t-1190: an arrival at the criterion's own expected_page IS verification."""
+    """t-1190: an arrival at the criterion's own outcome_page IS verification."""
 
-    def test_an_arrival_at_the_expected_page_verifies_a_page_kind_criterion(self) -> None:
+    def test_an_arrival_at_the_outcome_page_verifies_a_page_kind_criterion(self) -> None:
         from eval_metrics import count_false_greens
 
         story = validate_story(
@@ -555,7 +557,8 @@ class TestAPageCriterionIsVerifiedByItsPage:
                             "description": "product list",
                             "expected_locator": '[data-test="inventory-item"]',
                             "tolerance_selectors": [],
-                            "expected_page": "https://example.com/inventory.html",
+                            "target_page": "https://example.com/inventory.html",
+                            "outcome_page": "https://example.com/inventory.html",
                         }
                     ],
                 }

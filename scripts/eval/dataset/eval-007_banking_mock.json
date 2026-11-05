@@ -25,8 +25,12 @@
           "description": "bank sign-in page loaded",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "#user-name"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#user-name"
+          ],
+          "target_page": "",
+          "outcome_page": "http://localhost:8781/index.html"
         }
       ]
     },
@@ -37,22 +41,31 @@
           "action": "FILL",
           "description": "username",
           "expected_locator": "#user-name",
-          "tolerance_selectors": ["input[name=\"username\"]"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            "input[name=\"username\"]"
+          ],
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "password",
           "expected_locator": "#password",
-          "tolerance_selectors": ["input[name=\"password\"]"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "sign in button",
           "expected_locator": "#login-button",
-          "tolerance_selectors": ["button[type=\"submit\"]"],
-          "expected_page": "http://localhost:8781/dashboard.html"
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "target_page": "http://localhost:8781/dashboard.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -64,8 +77,12 @@
           "action": "ASSERT",
           "description": "account balances visible",
           "expected_locator": ".account_balance",
-          "tolerance_selectors": [".account-card", "#accounts-list"],
-          "expected_page": "http://localhost:8781/dashboard.html"
+          "tolerance_selectors": [
+            ".account-card",
+            "#accounts-list"
+          ],
+          "target_page": "http://localhost:8781/dashboard.html",
+          "outcome_page": "http://localhost:8781/dashboard.html"
         }
       ]
     },
@@ -76,8 +93,12 @@
           "action": "CLICK",
           "description": "Transfer Money link",
           "expected_locator": "#transfer-link",
-          "tolerance_selectors": ["a[href=\"/transfer.html\"]", "a[href=\"transfer.html\"]"],
-          "expected_page": "http://localhost:8781/transfer.html"
+          "tolerance_selectors": [
+            "a[href=\"/transfer.html\"]",
+            "a[href=\"transfer.html\"]"
+          ],
+          "target_page": "http://localhost:8781/transfer.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -88,15 +109,21 @@
           "action": "FILL",
           "description": "amount",
           "expected_locator": "#amount",
-          "tolerance_selectors": ["input[name=\"amount\"]"],
-          "expected_page": "http://localhost:8781/transfer.html"
+          "tolerance_selectors": [
+            "input[name=\"amount\"]"
+          ],
+          "target_page": "http://localhost:8781/transfer.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Transfer Funds button",
           "expected_locator": "#transfer-submit",
-          "tolerance_selectors": ["button[type=\"submit\"]"],
-          "expected_page": "http://localhost:8781/transfer_success.html"
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "target_page": "http://localhost:8781/transfer_success.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -108,8 +135,12 @@
           "action": "ASSERT",
           "description": "transfer success message",
           "expected_locator": "#transfer-success-title",
-          "tolerance_selectors": ["#transfer-success-message", "h1"],
-          "expected_page": "http://localhost:8781/transfer_success.html"
+          "tolerance_selectors": [
+            "#transfer-success-message",
+            "h1"
+          ],
+          "target_page": "http://localhost:8781/transfer_success.html",
+          "outcome_page": "http://localhost:8781/transfer_success.html"
         }
       ]
     },
@@ -120,22 +151,32 @@
           "action": "CLICK",
           "description": "Pay a Bill link",
           "expected_locator": "#pay-bill-link",
-          "tolerance_selectors": ["a[href=\"/payments.html\"]", "a[href=\"payments.html\"]"],
-          "expected_page": "http://localhost:8781/payments.html"
+          "tolerance_selectors": [
+            "a[href=\"/payments.html\"]",
+            "a[href=\"payments.html\"]"
+          ],
+          "target_page": "http://localhost:8781/payments.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "payment amount",
           "expected_locator": "#payment-amount",
-          "tolerance_selectors": ["input[name=\"payment_amount\"]"],
-          "expected_page": "http://localhost:8781/payments.html"
+          "tolerance_selectors": [
+            "input[name=\"payment_amount\"]"
+          ],
+          "target_page": "http://localhost:8781/payments.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Pay Bill button",
           "expected_locator": "#pay-bill",
-          "tolerance_selectors": ["button[type=\"submit\"]"],
-          "expected_page": "http://localhost:8781/payment_success.html"
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "target_page": "http://localhost:8781/payment_success.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -147,8 +188,12 @@
           "action": "ASSERT",
           "description": "payment success message",
           "expected_locator": "#payment-success-title",
-          "tolerance_selectors": ["#payment-success-message", "h1"],
-          "expected_page": "http://localhost:8781/payment_success.html"
+          "tolerance_selectors": [
+            "#payment-success-message",
+            "h1"
+          ],
+          "target_page": "http://localhost:8781/payment_success.html",
+          "outcome_page": "http://localhost:8781/payment_success.html"
         }
       ]
     }
