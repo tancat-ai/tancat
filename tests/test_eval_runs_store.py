@@ -459,6 +459,60 @@ class TestRebuildDatasetResolution:
             _resolve_dataset_dir(None, tmp_path / "nope")
 
 
+class TestCiSummaryReadsTheStore:
+    """Review F1 (d-0138 follow-up): a summary must not re-run a leg to report it.
+
+    The CI workflow used to call ``ci_summary --mode full``, which dispatched a
+    second run with persist=False; once the persist rule moved into
+    EvalRunner.run that path exited 2 and the PR comment was never posted.
+    """
+
+    def _store_with_leg(self, tmp_path: Path) -> Path:
+        db = tmp_path / "store.sqlite"
+        _leg(db, "ci-abc123", "eval-001", correct=1, total=2)
+        _leg(db, "ci-abc123", "eval-002", correct=2, total=2)
+        return db
+
+    def test_a_full_mode_summary_path_does_not_exit_two(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import ci_summary
+        from eval_runner import EvalRunner
+
+        db = self._store_with_leg(tmp_path)
+        output = tmp_path / "summary.md"
+
+        def must_not_run(*args: object, **kwargs: object) -> None:
+            raise AssertionError("the summary dispatched a run instead of reading the store")
+
+        monkeypatch.setattr(EvalRunner, "run", must_not_run)
+
+        rc = ci_summary.main(["--run-group", "ci-abc123", "--db", str(db), "--output", str(output)])
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "--no-persist" not in captured.out + captured.err
+        text = output.read_text(encoding="utf-8")
+        assert "# Evaluation Harness Results" in text
+        assert "| Stories | 2 |" in text
+        assert "| Resolution accuracy | 75.0% |" in text
+
+    def test_a_missing_leg_says_so_and_names_the_ones_present(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import ci_summary
+
+        db = self._store_with_leg(tmp_path)
+        output = tmp_path / "summary.md"
+
+        rc = ci_summary.main(["--run-group", "ci-nope", "--db", str(db), "--output", str(output)])
+
+        assert rc == 3
+        assert "no stored leg named 'ci-nope'" in capsys.readouterr().err
+        text = output.read_text(encoding="utf-8")
+        assert "No summary" in text and "ci-abc123" in text
+
+
 class TestDescribeModel:
     def test_empty_is_rendered_as_unknown(self) -> None:
         assert describe_model("", "") == "unknown"

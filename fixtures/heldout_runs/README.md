@@ -60,19 +60,26 @@ python scripts/eval/eval_harness.py rebuild \
 ```
 
 A rebuild re-scores the kept code against the dataset it resolves, and today's dataset holds 114
-placeholders while the 2026-10-31 legs scored 113. Name the sample explicitly, or the rebuild
-scores old evidence against today's golden keys:
+placeholders while the 2026-10-31 legs scored 113. Name that sample, or the rebuild scores old
+evidence against today's golden keys - and refuses, because the declared size would not match:
 
 ```bash
+mkdir -p scratch/dataset-f538d4b
+git archive f538d4b scripts/eval/dataset | tar -x -C scratch/dataset-f538d4b
+
 python scripts/eval/eval_harness.py rebuild \
-  --evidence-dir fixtures/heldout_runs/2026-10-31/leg1 \
+  --evidence-dir fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled \
   --run-group 2026-10-31-leg1 \
-  --dataset <the 2026-10-31 dataset dir> --dataset-size 113
+  --dataset scratch/dataset-f538d4b/scripts/eval/dataset --dataset-size 113
 ```
 
-The dataset directory for that date comes from the `git archive` line in
-`2026-10-31/README.md`. `rebuild` refuses (exit 2, both numbers named) when the declared size and
-the dataset it actually scored disagree, so a leg can no longer say size 113 and score out of 114.
+(`scratch/` is gitignored, so the extracted dataset leaves the tree clean; delete the folder
+afterwards if you like. It is named relatively so Python resolves it on Windows too.)
+
+The other three legs are the same command with `leg2_rag_off_bundled`, `leg3_rag_on_empty` and
+`leg4_rag_off_empty` in `--evidence-dir` and their own `--run-group`. A rebuild refuses (exit 2,
+both numbers named) when the declared size and the dataset it actually scored disagree, so a leg
+can no longer say size 113 and score out of 114.
 
 One `--run-group` per leg: that is the name `runs` lists and `diff-runs` takes. A rebuild never
 invents a setting - anything not passed stays unknown in `run_settings`, and `runs` prints
