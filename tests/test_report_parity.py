@@ -283,3 +283,114 @@ def test_the_menu_exports_are_not_empty_for_a_package_with_evidence(tmp_path: Pa
     assert ndjson_lines, "NDJSON export is empty"
     xml_text = (package / "report_evidence.xml").read_text(encoding="utf-8")
     assert "<testcase" in xml_text
+
+
+# ---------------------------------------------------------------------------
+# Emptiness is rows, not bytes (j-0286 review finding)
+# ---------------------------------------------------------------------------
+
+
+def _index_with_one_sidecar(base: Path, package: str, tmp_path: Path) -> Any:
+    """A temp index holding exactly one sidecar, in *package* under *base*."""
+    import json
+
+    from src.evidence_index import EvidenceIndex
+    from src.sqlite_persistence import SQLitePersistence
+
+    evidence = base / package / "evidence"
+    evidence.mkdir(parents=True, exist_ok=True)
+    (evidence / "test_cart[chromium].evidence.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "test": {
+                    "name": "test_cart[chromium]",
+                    "condition_ref": "TC01.06",
+                    "story_ref": "S06",
+                    "status": "failed",
+                    "duration_s": 1.5,
+                },
+                "page": {"url": "https://automationexercise.com/view_cart"},
+                "steps": [{"step": 1, "type": "click", "label": "add to cart"}],
+                "page_expectations": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    index = EvidenceIndex(db=SQLitePersistence(db_path=tmp_path / "idx.sqlite"))
+    assert index.build_or_refresh(base_dir=base) == 1
+    return index
+
+
+def test_an_export_with_no_rows_for_the_package_warns_for_all_three_formats(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The finding: 126-byte CSV and 160-byte JUnit passed a byte check.
+
+    The index here holds a row for a DIFFERENT package, so every writer produces
+    its own empty shape - a header-only CSV, an empty NDJSON, a JUnit with no
+    testcase. Each one must warn and none may be listed as a report.
+    """
+    from src.cli.pipeline_runner import _export_evidence_formats
+
+    base = tmp_path / "generated_tests"
+    index = _index_with_one_sidecar(base, "some_other_package", tmp_path)
+
+    package = base / "test_pkg_no_rows"
+    (package / "evidence").mkdir(parents=True)
+
+    written = _export_evidence_formats(package, index=index)
+
+    out = capsys.readouterr().out
+    assert written == {}, f"an empty export was listed as a report: {written}"
+    for label in ("CSV", "NDJSON", "JUNIT"):
+        assert f"{label} export: written but holds no rows" in out, f"{label} did not warn"
+
+
+def test_no_warning_when_the_index_holds_rows_for_the_package(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The other side of the guard: real rows produce no warning and are listed."""
+    from src.cli.pipeline_runner import _export_evidence_formats
+
+    base = tmp_path / "generated_tests"
+    package = base / "test_pkg_with_rows"
+    index = _index_with_one_sidecar(base, package.name, tmp_path)
+
+    written = _export_evidence_formats(package, index=index)
+
+    out = capsys.readouterr().out
+    assert "holds no rows" not in out
+    assert set(written) == {"csv", "ndjson", "junit"}
+    for path in written.values():
+        assert Path(path).is_file()
+
+
+def test_the_emptiness_guard_counts_rows_not_bytes(tmp_path: Path) -> None:
+    """Directly: the three empty shapes are non-zero bytes and still empty."""
+    from src.cli.pipeline_runner import _export_holds_rows
+
+    header_only = tmp_path / "h.csv"
+    header_only.write_text("test_name,condition_ref\n", encoding="utf-8")
+    ndjson_empty = tmp_path / "e.ndjson"
+    ndjson_empty.write_text("", encoding="utf-8")
+    junit_empty = tmp_path / "e.xml"
+    junit_empty.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite tests="0" /></testsuites>',
+        encoding="utf-8",
+    )
+    junit_one = tmp_path / "o.xml"
+    junit_one.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite><testcase name="t" /></testsuite></testsuites>',
+        encoding="utf-8",
+    )
+    csv_one = tmp_path / "o.csv"
+    csv_one.write_text("test_name,condition_ref\ntest_a,TC01\n", encoding="utf-8")
+
+    assert header_only.stat().st_size > 0
+    assert junit_empty.stat().st_size > 0
+    assert _export_holds_rows("csv", header_only) is False
+    assert _export_holds_rows("ndjson", ndjson_empty) is False
+    assert _export_holds_rows("junit", junit_empty) is False
+    assert _export_holds_rows("csv", csv_one) is True
+    assert _export_holds_rows("junit", junit_one) is True

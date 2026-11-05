@@ -627,6 +627,28 @@ def display_run_results(session: Any) -> None:
 # ── Reports ───────────────────────────────────────────────────────────────
 
 
+def _export_holds_rows(key: str, path: Path) -> bool:
+    """True when an export holds at least one ROW, not merely bytes (j-0286).
+
+    Byte size is not evidence of content: a header-only CSV is ~126 bytes and a
+    JUnit suite with no cases is ~160, so a size check let two of the three
+    formats print a good-looking path over nothing. Count what each format
+    counts instead: CSV needs a data line under its header, NDJSON needs a line,
+    JUnit needs a ``<testcase>``.
+    """
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return False
+    if key == "csv":
+        return len([line for line in text.splitlines() if line.strip()]) > 1
+    if key == "ndjson":
+        return any(line.strip() for line in text.splitlines())
+    if key == "junit":
+        return "<testcase" in text
+    return bool(text.strip())
+
+
 def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dict[str, str]:
     """Write the CSV / NDJSON / JUnit exports the Streamlit page offers (j-0286).
 
@@ -668,9 +690,11 @@ def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dic
         except Exception as exc:
             print(yellow(f"  {key.upper()} export: not produced - {exc}"))
             continue
-        if not target.exists() or target.stat().st_size == 0:
-            # An empty export is a lie with a path on it (j-0286).
-            print(yellow(f"  {key.upper()} export: written but empty - {target}"))
+        if not _export_holds_rows(key, target):
+            # An export with no rows is a lie with a path on it (j-0286). It is
+            # NOT recorded, so the viewer cannot list an empty file as a report.
+            print(yellow(f"  {key.upper()} export: written but holds no rows for this package, not listed - {target}"))
+            continue
         written[key] = str(target.absolute())
         print(green(f"  {key.upper()} export: {written[key]}"))
     return written
