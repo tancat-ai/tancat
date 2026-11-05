@@ -65,8 +65,8 @@
           "tolerance_selectors": [
             "button[type=\"submit\"]"
           ],
-          "target_page": "http://localhost:8781/dashboard.html",
-          "outcome_page": ""
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": "http://localhost:8781/dashboard.html"
         }
       ]
     },
@@ -123,8 +123,8 @@
           "tolerance_selectors": [
             "button[type=\"submit\"]"
           ],
-          "target_page": "http://localhost:8781/transfer_success.html",
-          "outcome_page": ""
+          "target_page": "http://localhost:8781/transfer.html",
+          "outcome_page": "http://localhost:8781/transfer_success.html"
         }
       ]
     },
@@ -180,8 +180,8 @@
           "tolerance_selectors": [
             "button[type=\"submit\"]"
           ],
-          "target_page": "http://localhost:8781/payment_success.html",
-          "outcome_page": ""
+          "target_page": "http://localhost:8781/payments.html",
+          "outcome_page": "http://localhost:8781/payment_success.html"
         }
       ]
     },
