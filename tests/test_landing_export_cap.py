@@ -31,10 +31,13 @@ def test_the_free_export_cap_is_a_real_number_in_the_code() -> None:
     assert _free_cap("evidence_exports") == 10
 
 
-def test_the_landing_card_quotes_the_cap_from_the_code() -> None:
-    cap = _free_cap("evidence_exports")
+def test_the_landing_card_quotes_both_caps_from_the_code() -> None:
+    """Both numbers on the card are code-owned; both are held to tiers.py."""
+    exports_cap = _free_cap("evidence_exports")
+    runs_cap = _free_cap("runs")
     html = INDEX.read_text(encoding="utf-8")
-    assert f"{cap} evidence exports per 30 days" in html
+    assert f"{runs_cap} test runs per 30 days" in html
+    assert f"{exports_cap} evidence exports per 30 days" in html
 
 
 def test_the_terms_quote_the_cap_from_the_code() -> None:

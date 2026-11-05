@@ -33,6 +33,53 @@ ALLOWED_ELECTIONS = {
     "MPL-2.0",
 }
 
+#: How the licences in the record's prose map to an SPDX-style name.
+_LICENCE_ALIASES = {
+    "artistic license": "Artistic-1.0",
+    "artistic-1.0": "Artistic-1.0",
+    "gnu general public license (gpl)": "GPL-2.0",
+    "gnu general public license v2 or later (gplv2+)": "GPL-2.0-or-later",
+    "gpl-2.0-or-later": "GPL-2.0-or-later",
+    "gplv2+": "GPL-2.0-or-later",
+    "mozilla public license 2.0 (mpl 2.0)": "MPL-2.0",
+    "mpl-2.0": "MPL-2.0",
+    "apache-2.0": "Apache-2.0",
+    "mit": "MIT",
+    "mit-cmu": "MIT-CMU",
+}
+
+
+def _normalise_licence(text: str) -> str:
+    key = re.sub(r"\s+", " ", text.strip().lower())
+    return _LICENCE_ALIASES.get(key, text.strip())
+
+
+def _conjuncts(expression: str) -> list[list[str]]:
+    """Licence obligations in *expression*: a list of options-sets, ANDed together.
+
+    ``MPL-2.0 AND (Apache-2.0 OR MIT)`` is two obligations - MPL-2.0, and one of
+    Apache/MIT - so an election that answers only one of them is not an election.
+    A dual licence written with semicolons or a slash is ONE obligation with
+    alternatives. Plain text is one obligation with one option.
+    """
+    text = expression.strip()
+    if " AND " in text.upper():
+        parts = re.split(r"\s+AND\s+", text, flags=re.IGNORECASE)
+        return [
+            [
+                _normalise_licence(option)
+                for option in re.split(r"\s+OR\s+", part.strip().strip("()"), flags=re.IGNORECASE)
+            ]
+            for part in parts
+        ]
+    alternatives = re.split(r"\s*;\s*|\s+/\s*", text)
+    return [[_normalise_licence(option) for option in alternatives]]
+
+
+def _elected_options(election: str) -> list[str]:
+    """The licences an election row actually names, ' AND '-separated."""
+    return [_normalise_licence(part) for part in re.split(r"\s+AND\s+", election.split(" (")[0].strip())]
+
 
 def _record() -> str:
     return RECORD.read_text(encoding="utf-8")
@@ -105,8 +152,14 @@ def test_the_flagged_licences_are_still_the_copyleft_ones() -> None:
 def test_every_election_names_an_allowed_licence_and_a_scope() -> None:
     for package, election in _elections().items():
         assert election["elected"], f"{package}: no licence elected"
+        # An AND expression elects every term; each named term must be an
+        # allowed option. OR stays one choice between allowed options.
         elected = election["elected"].split(" (")[0].strip()
-        options = [option.strip() for option in re.split(r"\s+OR\s+", elected)]
+        options = [
+            option.strip()
+            for part in re.split(r"\s+AND\s+", elected, flags=re.IGNORECASE)
+            for option in re.split(r"\s+OR\s+", part)
+        ]
         unknown = [option for option in options if option not in ALLOWED_ELECTIONS]
         assert options and not unknown, (
             f"{package}: {unknown or elected!r} is not one of the recorded permissive options "
@@ -116,6 +169,35 @@ def test_every_election_names_an_allowed_licence_and_a_scope() -> None:
             f"{package}: scope '{election['scope']}' does not say whether it ships or is dev-only"
         )
         assert len(election["why"]) > 20, f"{package}: the election gives no reason"
+
+
+def test_every_election_answers_the_licence_the_package_declares() -> None:
+    """The election must satisfy the package's OWN expression, not an allow-list.
+
+    ``MPL-2.0 AND (Apache-2.0 OR MIT)`` cannot be answered with "Apache-2.0 OR
+    MIT": the MPL term is operative too. This is the check that would have caught
+    the two wrong rows (orjson, tqdm) the first draft shipped.
+    """
+    flagged = _flagged_rows()
+    elections = _elections()
+
+    wrong: list[str] = []
+    for package, expression in flagged.items():
+        election = elections.get(package)
+        if not election:
+            continue  # the first test reports the missing row
+        obligations = _conjuncts(expression)
+        chosen = _elected_options(election["elected"])
+        for options in obligations:
+            satisfied = [option for option in chosen if option in options]
+            if not satisfied:
+                wrong.append(f"{package}: '{expression}' needs one of {options}, the row elects {chosen}")
+                break
+        extra = [option for option in chosen if not any(option in options for options in obligations)]
+        if extra:
+            wrong.append(f"{package}: the row elects {extra}, which the package's expression does not declare")
+
+    assert wrong == [], "election(s) that do not answer the package's own licence: " + "; ".join(wrong)
 
 
 def test_the_notice_carries_the_text_unidecode_election() -> None:

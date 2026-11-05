@@ -11,7 +11,7 @@ components are flagged there:
     TanCat elects, and relies on, the Artistic-1.0 option and not the GPL; it
     is permissive and compatible with Apache-2.0. This package ships in the
     default install (it arrives through pytest-playwright -> python-slugify),
-    and it is used unmodified. Elected 2026-11-06; see the Elections section of
+    and it is used unmodified. Elected 2026-11-05; see the Elections section of
     docs/licenses/DEPENDENCIES.md.
   - a group of MPL-2.0 packages (certifi, pytest-base-url, orjson, tqdm, and
     the dev-only fqdn and pathspec).
