@@ -627,12 +627,19 @@ def display_run_results(session: Any) -> None:
 # ── Reports ───────────────────────────────────────────────────────────────
 
 
-def _export_evidence_formats(package_dir: Path) -> dict[str, str]:
+def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dict[str, str]:
     """Write the CSV / NDJSON / JUnit exports the Streamlit page offers (j-0286).
 
     Reuses ``src.evidence_export``'s writers - no second implementation - scoped
     to this run's package so one leg's evidence does not land in another's file.
     Nothing about the formats changes; only which rows go in the file.
+
+    The index is REFRESHED before writing (j-0286 blocker): ``EvidenceIndex()``
+    only opens the database, so on a run made from the terminal alone the table
+    held no rows and these three files came out empty - header-only CSV, an empty
+    NDJSON, a JUnit with 0 tests - and their paths were printed as if they were
+    good. ``build_or_refresh`` is what the Streamlit page and ``evidence_cli``
+    already call. An injected *index* is the caller's to build (tests use this).
     """
     from src.evidence_export import export_csv, export_junit_xml, export_ndjson
     from src.evidence_index import EvidenceIndex
@@ -641,6 +648,12 @@ def _export_evidence_formats(package_dir: Path) -> dict[str, str]:
     if not evidence_dir.exists():
         print(yellow("  CSV / NDJSON / JUnit: not produced - no evidence yet (run the generated tests first)"))
         return {}
+
+    if index is None:
+        index = EvidenceIndex()
+        indexed = index.build_or_refresh()
+        if indexed:
+            print(green(f"  Indexed {indexed} new/updated evidence sidecar(s)"))
 
     package = package_dir.name
     written: dict[str, str] = {}
@@ -651,10 +664,13 @@ def _export_evidence_formats(package_dir: Path) -> dict[str, str]:
     ):
         target = package_dir / filename
         try:
-            writer(EvidenceIndex(), test_package=package, output=target)
+            writer(index, test_package=package, output=target)
         except Exception as exc:
             print(yellow(f"  {key.upper()} export: not produced - {exc}"))
             continue
+        if not target.exists() or target.stat().st_size == 0:
+            # An empty export is a lie with a path on it (j-0286).
+            print(yellow(f"  {key.upper()} export: written but empty - {target}"))
         written[key] = str(target.absolute())
         print(green(f"  {key.upper()} export: {written[key]}"))
     return written
