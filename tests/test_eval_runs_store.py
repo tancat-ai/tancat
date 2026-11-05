@@ -252,6 +252,8 @@ _GOLDEN = {
                     "description": "backpack in cart",
                     "expected_locator": "#backpack",
                     "tolerance_selectors": [],
+                    "target_page": "https://example.com/cart.html",
+                    "outcome_page": "https://example.com/cart.html",
                 },
             ],
         },
@@ -377,6 +379,36 @@ class TestComparabilityGuards:
 
         assert dataset_key(before) != dataset_key(after)
         assert dataset_key(before) == dataset_key(before)  # and it is stable
+
+    def test_a_different_target_page_changes_the_key(self, tmp_path: Path) -> None:
+        """d-0149: the same locator on another page is a different sample."""
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        moved = json.loads(json.dumps(_GOLDEN))
+        moved["golden_resolutions"][0]["placeholders"][0]["target_page"] = "https://example.com/store.html"
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(moved), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
+        # ... and the new fields bring no nondeterminism of their own.
+        assert dataset_key(before) == dataset_key(before) == dataset_key(Path(before))
+
+    def test_a_different_outcome_page_changes_the_key(self, tmp_path: Path) -> None:
+        """d-0149: where a step must land is part of what it asserts."""
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        moved = json.loads(json.dumps(_GOLDEN))
+        moved["golden_resolutions"][0]["placeholders"][0]["outcome_page"] = "https://example.com/checkout.html"
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(moved), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
 
     def test_the_key_covers_the_tolerance_selectors(self, tmp_path: Path) -> None:
         before = tmp_path / "before"

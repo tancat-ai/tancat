@@ -130,12 +130,20 @@ def persist_policy_error(mode: str, no_persist: bool, run_group: str | None) -> 
 
 
 def _golden_fingerprint(data: dict[str, Any]) -> str:
-    """The golden content a dataset key must cover (d-0137).
+    """The golden content a dataset key must cover (d-0137, d-0149).
 
     Story ids alone cannot see an edit to an expected locator, so a pair that
     should be refused compared as the same sample. This is one line per
     criterion plus one line per placeholder: what the run was asked to hit.
     Order is the file's own, so a reordered file is a different key too.
+
+    d-0149: the page fields are part of "what it was asked to hit". Two datasets
+    that differ only in which page a target sits on are different samples - the
+    same locator on another page is a different claim - so ``target_page`` and
+    ``outcome_page`` are hashed per placeholder alongside the action, the
+    description, the locator and the tolerances. Consequence: every key computed
+    before this line existed is stale, including the eight legs already in the
+    store; they are refused until they are re-keyed from their kept evidence.
     """
     parts: list[str] = []
     resolutions = data.get("golden_resolutions")
@@ -155,6 +163,8 @@ def _golden_fingerprint(data: dict[str, Any]) -> str:
                         str(placeholder.get("description", "")),
                         str(placeholder.get("expected_locator", "")),
                         ",".join(str(item) for item in tolerance) if isinstance(tolerance, list) else "",
+                        str(placeholder.get("target_page", "")),
+                        str(placeholder.get("outcome_page", "")),
                     )
                 )
             )
