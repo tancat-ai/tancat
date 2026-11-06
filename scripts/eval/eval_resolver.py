@@ -189,35 +189,101 @@ def _load_golden_placeholders(stories: Sequence[str] | None = None) -> list[dict
 # ---------------------------------------------------------------------------
 
 
-def load_scraped_pages() -> dict[str, list[dict[str, str]]]:
-    """Load pre-saved scraped page data: the committed captures, then the working dir.
+def load_scraped_pages(
+    *,
+    committed_dir: Path | None = None,
+    local_dir: Path | None = None,
+    allow_local_override: bool | None = None,
+) -> dict[str, list[dict[str, str]]]:
+    """Load the captured pages: the committed set is authoritative (t-1346).
 
-    Each file contains ``{"url": "...", "elements": [...]}``. The committed
-    captures (``fixtures/scraped_pages/``, the banking mock this repository
-    serves) are read first and are what a clean checkout has; the gitignored
-    ``scripts/eval/scraped_pages/`` is layered on top when it exists locally, so
-    a developer's third-party captures (saucedemo, demoqa, ...) still work.
-    Nothing here requires a third-party page: the held-out split scores the same
-    with the committed set alone (t-1343).
+    The committed captures (``fixtures/scraped_pages/``, the banking mock this
+    repository serves) are what a clean checkout and CI both have, so they are
+    what a number is measured against. A gitignored local capture
+    (``scripts/eval/scraped_pages/``) is added only for a URL the repository does
+    not hold - a developer's third-party pages still work - and it can never
+    silently replace a committed page:
+
+    * if a local capture for a committed URL **differs**, the committed one wins
+      and a warning names both files and the element counts, so a stale local
+      copy cannot make a developer's run disagree with CI in silence;
+    * an override is possible only on request: pass ``allow_local_override=True``
+      or set ``AITEST_ALLOW_LOCAL_CAPTURES=1``, and the same warning says the
+      override is what was used.
+
+    Each file contains ``{"url": "...", "elements": [...]}``.
     """
+    if allow_local_override is None:
+        allow_local_override = os.getenv("AITEST_ALLOW_LOCAL_CAPTURES", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+    committed = committed_dir or _COMMITTED_CAPTURES_DIR
+    local = local_dir or _SCRAPED_DIR
+
     pages: dict[str, list[dict[str, str]]] = {}
-    for directory in (_COMMITTED_CAPTURES_DIR, _SCRAPED_DIR):
-        if not directory.exists():
+    committed_urls: dict[str, str] = {}
+    for fpath in sorted(committed.glob("*.json")) if committed.exists() else []:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+        url = data.get("url", "") if isinstance(data, dict) else ""
+        elements = data.get("elements", []) if isinstance(data, dict) else []
+        if url and elements:
+            pages[url] = elements
+            committed_urls[url] = fpath.name
+
+    for fpath in sorted(local.glob("*.json")) if local.exists() else []:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+        url = data.get("url", "") if isinstance(data, dict) else ""
+        elements = data.get("elements", []) if isinstance(data, dict) else []
+        if not (url and elements):
             continue
-        for fpath in sorted(directory.glob("*.json")):
-            data = json.loads(fpath.read_text(encoding="utf-8"))
-            url = data.get("url", "")
-            elements = data.get("elements", []) if isinstance(data, dict) else []
-            if url and elements:
-                pages[url] = elements
+        if url not in pages:
+            pages[url] = elements
+            continue
+        if elements == pages[url]:
+            continue
+        if url not in committed_urls:
+            # Two local files claim the same page (the scraper's two naming
+            # schemes do this). Nothing committed is at stake; keep the first and
+            # name both, so the duplicate is visible rather than silently won.
+            logger.warning(
+                "two local captures claim %s - keeping the first, ignoring %s (no committed capture "
+                "for this page, so nothing in the repository is affected)",
+                url,
+                fpath.name,
+            )
+            continue
+        if allow_local_override:
+            logger.warning(
+                "local capture %s DIFFERS from the committed capture for %s and is being USED because "
+                "local overrides are enabled (AITEST_ALLOW_LOCAL_CAPTURES): %d elements locally vs %d committed",
+                fpath.name,
+                url,
+                len(elements),
+                len(pages[url]),
+            )
+            pages[url] = elements
+        else:
+            logger.warning(
+                "local capture %s differs from the committed capture for %s - the COMMITTED one wins "
+                "(%d elements locally vs %d committed). This run must agree with CI; set "
+                "AITEST_ALLOW_LOCAL_CAPTURES=1 only to inspect the local copy.",
+                fpath.name,
+                url,
+                len(elements),
+                len(pages[url]),
+            )
+
     if not pages:
         logger.warning(
             "No scraped pages found: neither %s (committed) nor %s (working) has any",
-            _COMMITTED_CAPTURES_DIR,
-            _SCRAPED_DIR,
+            committed,
+            local,
         )
     else:
-        logger.info("Loaded %d scraped page(s) from %s and %s", len(pages), _COMMITTED_CAPTURES_DIR, _SCRAPED_DIR)
+        logger.info("Loaded %d scraped page(s): committed %s, local %s", len(pages), committed, local)
     return pages
 
 

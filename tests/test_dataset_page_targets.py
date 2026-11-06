@@ -135,9 +135,9 @@ def _in_scope(row: tuple[str, int, dict, str, str, str]) -> bool:
     """Whether the committed captures can speak for this row.
 
     They are the banking mock's pages (`site: banking_mock`, served on :8781).
-    Other localhost mocks (eval-005/006/010) and the third-party sites have no
-    committed capture, so their rows are outside this evidence - counted, not
-    passed and not failed.
+    Rows on any other site - the third-party pages and the other localhost mocks
+    (eval-005/006/010) whose captures are simply not committed - are outside the
+    committed evidence: counted, not passed and not failed.
     """
     base_url, site = row[4] or "", row[5] or ""
     return site == "banking_mock" and base_url.startswith("http://localhost:8781")
@@ -185,9 +185,11 @@ class TestClickTargets:
         assert result["unsettled"] == [], f"neither a unique capture nor the trail settles: {result['unsettled']}"
         assert result["violations"] == [], f"a CLICK target is not the page that holds it: {result['violations']}"
         # Of the 36 CLICK rows: the 8 on the banking mock are decided here - 7 by a
-        # unique capture and 1 (#transfer-link) by the trail - and the 28 on
-        # third-party sites are outside the committed evidence (their captures are
-        # not ours to publish, so CI must never depend on them).
+        # unique capture and 1 (#transfer-link) by the trail - and the other 28 are
+        # outside the committed evidence. That is not one thing: 16 sit on
+        # third-party pages (captures not ours to publish) and 12 on local mocks
+        # (eval-005/006/010) whose captures were never taken. Both are counted the
+        # same way, and the README says so.
         assert (result["unique"], result["trail"], result["outside"]) == (7, 1, 28), result
 
     def test_the_nav_link_is_settled_by_the_trail_not_by_uniqueness(self) -> None:
