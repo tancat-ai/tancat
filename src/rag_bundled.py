@@ -171,7 +171,11 @@ def load_golden_patterns(dataset_dir: Path, *, exclude: Sequence[str] | None = N
                         description=placeholder.get("description", ""),
                         expected_locator=placeholder.get("expected_locator", ""),
                         tolerance_selectors=placeholder.get("tolerance_selectors", []),
-                        expected_page=placeholder.get("expected_page", ""),
+                        # t-1303: the pattern belongs to the page holding its
+                        # element (target). A URL-class row has no target, so it
+                        # keeps the page it must reach - the value this field has
+                        # always carried for those rows.
+                        expected_page=placeholder.get("target_page") or placeholder.get("outcome_page", ""),
                         site_hash=site_identity_hash,
                     )
                 )

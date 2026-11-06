@@ -263,7 +263,11 @@ def _build_golden_lookup(golden: dict[str, Any]) -> list[dict[str, Any]]:
                     "description": ph["description"],
                     "expected_locator": ph["expected_locator"],
                     "tolerance_selectors": ph.get("tolerance_selectors", []),
-                    "expected_page": ph.get("expected_page", ""),
+                    # t-1303: one field held two facts. target_page is the page
+                    # whose DOM holds the element (d-0149); outcome_page is the
+                    # page the step must REACH, and it is what an arrival proves.
+                    "target_page": ph.get("target_page", ""),
+                    "outcome_page": ph.get("outcome_page", ""),
                     # B-093 gate 2: "page" = reaching the expected page is the
                     # verification; "element" = content must be proven.
                     "criterion_kind": crit.get("criterion_kind", "element"),
@@ -457,7 +461,7 @@ def _arrival_checked_url(checked: str, expected_url: str) -> bool:
 
 
 def _arrival_checked_the_golden_url(checked: str, expected_locator: str) -> bool:
-    """Fallback when the key names no ``expected_page``: the URL its golden is."""
+    """Fallback when the key names no ``outcome_page``: the URL its golden is."""
     match = _URL_IN_ASSERT_RE.search(expected_locator)
     if not match:
         return False
@@ -481,7 +485,7 @@ def _gate2_verified(
         (``own_golden``). A checked golden sitting in another test is not proof
         (t-1188 hole 1).
       * page-arrival verdict - the key marks the criterion ``criterion_kind: page``
-        AND the arrival was at the criterion's own ``expected_page``. For a page
+        AND the arrival was at the criterion's own ``outcome_page``. For a page
         criterion the element is the extra; the PAGE is the thing being checked
         (t-1190). An arrival never verifies an element-kind criterion.
     """
@@ -500,9 +504,9 @@ def _gate2_verified(
             # t-1190: an arrival proves a page, not the element an element-kind
             # criterion names - so it is not verification for that criterion.
             return False
-        expected_page = str(golden_placeholder.get("expected_page") or "").strip()
-        if expected_page:
-            return _arrival_checked_url(checked, expected_page)
+        outcome_page = str(golden_placeholder.get("outcome_page") or "").strip()
+        if outcome_page:
+            return _arrival_checked_url(checked, outcome_page)
         # No page recorded in the key: fall back to the URL its golden names.
         return _arrival_checked_the_golden_url(checked, expected)
     if status == "verified_by_element":
@@ -785,3 +789,92 @@ def validate_dataset(
         )
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# The two-page schema (t-1303, d-0149)
+# ---------------------------------------------------------------------------
+
+#: Actions whose placeholder has no element to select, so they carry no target.
+_NO_TARGET_ACTIONS = ("GOTO", "URL")
+
+
+def _locator_url(placeholder: dict[str, Any]) -> str:
+    """The URL a URL-shaped placeholder names, from its locator ("" when none).
+
+    A GOTO's locator IS the URL; a URL assertion wraps it in
+    ``expect(page).to_have_url("...")``. Both are read here so the gate can
+    compare the locator with ``outcome_page`` without a second field.
+    """
+    locator = str(placeholder.get("expected_locator") or "")
+    match = _URL_IN_ASSERT_RE.search(locator)
+    return match.group(1) if match else locator.strip()
+
+
+def check_page_schema(golden: dict[str, Any]) -> list[str]:
+    """Every way one golden file can break the target/outcome split.
+
+    ``target_page`` is the page whose DOM holds the element (the resolver pool).
+    ``outcome_page`` is the page the step must reach (the arrival check). One
+    field used to carry both, and each consumer read it the other way (t-1303),
+    so the rules below are the schema that keeps the two facts apart:
+
+    * every placeholder carries both keys, and never the old single one;
+    * a GOTO or a URL assertion has no element: ``target_page`` is empty, and
+      ``outcome_page`` must be the same URL its locator names;
+    * a FILL, CLICK or ASSERT has an element: ``target_page`` is required;
+    * a page-kind ASSERT is proved by arriving, so its ``outcome_page`` is
+      required; an element-kind ASSERT may leave it equal to the target.
+
+    Messages are named by story, criterion and description so a failure reads as
+    "eval-008 c3 go to the transfer page: ..." rather than "invalid file".
+    """
+    problems: list[str] = []
+    story = str(golden.get("id") or "?")
+    for crit in golden.get("golden_resolutions") or []:
+        index = crit.get("criterion_index")
+        kind = str(crit.get("criterion_kind") or "element")
+        for ph in crit.get("placeholders") or []:
+            action = str(ph.get("action") or "")
+            label = f"{story} c{index} {ph.get('description') or '(no description)'}"
+            if "expected_page" in ph:
+                problems.append(
+                    f"{label}: carries the retired field 'expected_page' instead of target_page/outcome_page"
+                )
+            has_target = "target_page" in ph
+            has_outcome = "outcome_page" in ph
+            if not (has_target and has_outcome):
+                problems.append(f"{label}: missing {'target_page' if not has_target else 'outcome_page'}")
+                continue
+            target = str(ph.get("target_page") or "").strip()
+            outcome = str(ph.get("outcome_page") or "").strip()
+            # A URL assertion is recognised by its classification OR by its
+            # locator: a golden that names `to_have_url(...)` but forgets the
+            # expected_type is still asserting a URL, and must not be told it
+            # needs an element target.
+            url_kind = (
+                str(ph.get("expected_type") or "") == "url_assertion"
+                or action in _NO_TARGET_ACTIONS
+                or str(ph.get("expected_locator") or "").strip().startswith("expect(page).to_have_url")
+            )
+
+            if action in _NO_TARGET_ACTIONS or url_kind:
+                if target:
+                    problems.append(
+                        f"{label}: {action or 'URL assertion'} has no element to select, so target_page must be empty (got {target})"
+                    )
+                if not outcome:
+                    problems.append(
+                        f"{label}: {action or 'URL assertion'} must name outcome_page - the URL it must reach"
+                    )
+                    continue
+                named = _locator_url(ph)
+                if named and _normalise_url(named) != _normalise_url(outcome):
+                    problems.append(f"{label}: outcome_page {outcome} is not the URL its locator names ({named})")
+                continue
+
+            if not target:
+                problems.append(f"{label}: {action or 'placeholder'} has an element, so target_page is required")
+            if action == "ASSERT" and kind == "page" and not outcome:
+                problems.append(f"{label}: a page-kind ASSERT is proved by arriving, so outcome_page is required")
+    return problems

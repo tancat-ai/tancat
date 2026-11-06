@@ -25,7 +25,8 @@
           "tolerance_selectors": [
             "expect(page).to_have_url"
           ],
-          "expected_page": "https://automationexercise.com"
+          "target_page": "",
+          "outcome_page": "https://automationexercise.com"
         }
       ]
     },
@@ -41,7 +42,8 @@
             "a.products_link",
             "a[href=\"/products\"]"
           ],
-          "expected_page": "https://automationexercise.com"
+          "target_page": "https://automationexercise.com",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
@@ -52,7 +54,8 @@
             "expect(page).to_have_url",
             "h2"
           ],
-          "expected_page": "https://automationexercise.com/products"
+          "target_page": "",
+          "outcome_page": "https://automationexercise.com/products"
         }
       ]
     },
@@ -66,7 +69,8 @@
           "tolerance_selectors": [
             ".add-to-cart.btn[data-product-id=\"1\"]"
           ],
-          "expected_page": "https://automationexercise.com/products"
+          "target_page": "https://automationexercise.com/products",
+          "outcome_page": ""
         }
       ]
     },
@@ -81,7 +85,8 @@
           "tolerance_selectors": [
             ".modal-body"
           ],
-          "expected_page": "https://automationexercise.com/products"
+          "target_page": "https://automationexercise.com/products",
+          "outcome_page": "https://automationexercise.com/products"
         }
       ]
     },
@@ -97,7 +102,8 @@
             ".cart",
             "a[href=\"/view_cart\"]"
           ],
-          "expected_page": "https://automationexercise.com/products"
+          "target_page": "https://automationexercise.com/products",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
@@ -108,7 +114,8 @@
             "expect(page).to_have_url",
             "#cart_item"
           ],
-          "expected_page": "https://automationexercise.com/view_cart"
+          "target_page": "",
+          "outcome_page": "https://automationexercise.com/view_cart"
         }
       ]
     },
@@ -124,7 +131,8 @@
             "#cart_item",
             ".cart_table"
           ],
-          "expected_page": "https://automationexercise.com/view_cart"
+          "target_page": "https://automationexercise.com/view_cart",
+          "outcome_page": "https://automationexercise.com/view_cart"
         }
       ]
     }

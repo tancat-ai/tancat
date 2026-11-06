@@ -145,7 +145,7 @@ class TestGotoPairOnCommittedEvidence:
         # t-1183/t-1188/t-1190: gate 2 is NOT unaffected any more. Under the
         # narrowed rule - a "verified by element" verdict counts only when the
         # element is the golden in the criterion's own test, and a page-arrival
-        # verdict only when it reached the criterion's own expected_page - this
+        # verdict only when it reached the criterion's own outcome_page - this
         # same evidence finds 4 hollow passes, where the recorded cell says 0. The
         # cell is left alone as the record of what was measured then; the re-score
         # states today's rule.

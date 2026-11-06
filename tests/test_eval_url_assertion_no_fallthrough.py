@@ -13,9 +13,17 @@ The control test proves an ordinary element criterion is unchanged.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any
 
-from scripts.eval.eval_resolver import _resolve_placeholder
+# Bare module name, like the other eval tests: a second import path makes mypy
+# see one source file under two names and refuse to check either (t-1303).
+_EVAL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "eval"
+if str(_EVAL_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVAL_DIR))
+
+from eval_resolver import _load_golden_placeholders, _resolve_placeholder  # noqa: E402
 
 CART = "http://localhost:8781/cart.html"
 
@@ -50,7 +58,7 @@ def test_url_assertion_without_url_does_not_fall_through_to_elements() -> None:
         action="ASSERT",
         description="cart page title",
         pages_data=PAGES,
-        expected_page=CART,
+        target_page=CART,
         element_matcher=matcher,
         flow_store=None,
         expected_type="url_assertion",
@@ -68,8 +76,6 @@ def test_url_assertion_goldens_reach_the_guard() -> None:
     golden URL assertion reaches the resolver as a plain element criterion and
     the guard above never runs - the defect the guard exists to stop.
     """
-    from scripts.eval.eval_resolver import _load_golden_placeholders
-
     placeholders = _load_golden_placeholders()
     url_asserts = [p for p in placeholders if p.get("expected_type") == "url_assertion"]
     assert url_asserts, "goldens must expose url_assertion placeholders"
@@ -80,7 +86,8 @@ def test_url_assertion_goldens_reach_the_guard() -> None:
         action=target["action"],
         description=target["description"],
         pages_data=PAGES,
-        expected_page=target["expected_page"],
+        target_page=target["target_page"] or target["outcome_page"],
+        outcome_page=target["outcome_page"],
         element_matcher=matcher,
         flow_store=None,
         expected_type=target["expected_type"],
@@ -98,7 +105,7 @@ def test_element_criterion_still_resolves_by_element() -> None:
         action="ASSERT",
         description="cart page title",
         pages_data=PAGES,
-        expected_page=CART,
+        target_page=CART,
         element_matcher=matcher,
         flow_store=None,
         expected_type=None,
