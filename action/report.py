@@ -156,8 +156,10 @@ def _render_markdown(report: dict[str, object]) -> str:
             "**Repair candidates** (offered, never auto-applied): "
             f"{len(candidates)} failure(s) are locator-class — mechanical, often environment "
             "churn in shared environments. Interactive repair is available in the tool. "
-            "One line to act: reply `/adapt` (verified re-run) or `/ignore` (record in "
-            ".ai-test-ignore.yml as known-benign)."
+            "One line to act: reply `/adapt` (verified re-run) or `/ignore` (render the exact "
+            ".ai-test-ignore.yml entry, reason required, for you to commit). An ignore is a "
+            "record for review, not a mute: matching against failures is not implemented, so "
+            "the failure still fails this run."
         )
         for ft in candidates[:10]:
             lines.append(f"- `{ft['test']}` — {ft['message'][:200]}")
