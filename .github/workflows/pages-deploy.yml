@@ -42,6 +42,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Refuse to publish an owner placeholder
+        # j-0289: landing/ IS the site root, so a placeholder here is a
+        # customer-facing placeholder. Fail closed - no deploy, not a warning.
+        # The same rule runs at commit time in tests/test_landing_no_placeholders.py.
+        #
+        # python3, not python: this step runs BEFORE setup-python, and the stock
+        # ubuntu-latest image has python3 only - 'python' would fail on a clean
+        # page and refuse every deploy. The script is stdlib-only, and it finds
+        # the repo root from its own path, so the working directory does not
+        # matter. A non-zero exit fails the job, which is the refusal.
+        run: python3 scripts/maintenance/check_landing_placeholders.py
+
       - name: Set up Python 3.14
         uses: actions/setup-python@v7
         with:
