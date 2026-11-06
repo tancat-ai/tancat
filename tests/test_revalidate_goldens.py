@@ -308,3 +308,70 @@ def test_the_committed_captures_are_the_banking_mock_pages() -> None:
     for name in ("index", "dashboard", "transfer", "payments", "transfer_success"):
         assert f"http://localhost:8781/{name}.html" in captures, name
     assert str(R.CAPTURES_DIR).replace("\\", "/").endswith("fixtures/scraped_pages")
+
+
+# -- j-0293: the printed summary must not fuse a capture pass into a live one --
+
+
+def test_the_summary_prints_live_and_capture_counts_separately() -> None:
+    """One live-style row and one capture row: the reader sees two numbers."""
+    records = [
+        {
+            "dataset_id": "eval-008",
+            "site": "banking_mock",
+            "status": "ok",
+            "goldens_matched": 5,
+            "goldens_checked": 5,
+            "stateful_checked_from_capture": [
+                {"description": "a", "status": "ok"},
+                {"description": "b", "status": "ok"},
+            ],
+            "missing": [],
+        },
+        {
+            "dataset_id": "eval-001",
+            "site": "saucedemo",
+            "status": "ok",
+            "goldens_matched": 3,
+            "goldens_checked": 4,
+            "stateful_checked_from_capture": [],
+            "missing": [],
+        },
+    ]
+
+    text = R.render_report(records)
+
+    capture_line = next(line for line in text.splitlines() if "eval-008" in line)
+    assert "3/3 live" in capture_line, capture_line
+    assert "2/2 by capture" in capture_line, capture_line
+    assert "3/3 goldens" not in capture_line, "the row still prints one fused total"
+    live_line = next(line for line in text.splitlines() if "eval-001" in line)
+    assert "3/4 live" in live_line and "capture" not in live_line
+    assert "frozen capture" in text  # the note that says what "by capture" means
+
+
+def test_a_capture_only_row_prints_no_live_count_that_includes_them() -> None:
+    """Every match came from the frozen capture: the live count must read 0."""
+    records = [
+        {
+            "dataset_id": "eval-008",
+            "site": "banking_mock",
+            "status": "ok",
+            "goldens_matched": 3,
+            "goldens_checked": 3,
+            "stateful_checked_from_capture": [
+                {"description": "a", "status": "ok"},
+                {"description": "b", "status": "ok"},
+                {"description": "c", "status": "ok"},
+            ],
+            "missing": [],
+        }
+    ]
+
+    text = R.render_report(records)
+    line = next(line for line in text.splitlines() if "eval-008" in line)
+
+    assert "0/0 live" in line, line
+    assert "3/3 by capture" in line, line
+    assert "3/3 live" not in line, "a capture pass was printed as a live pass"
+    assert "capture-only" in line, "the status still reads as a live ok"

@@ -581,24 +581,61 @@ def run_revalidation(
     return records
 
 
+def _basis_split(record: dict[str, Any]) -> tuple[int, int, int, int]:
+    """(live_matched, live_checked, capture_matched, capture_checked) for one record.
+
+    The stored totals count capture-settled rows together with live ones. That is
+    honest in the JSON, which lists the capture rows by name, but it is NOT what
+    the printed total may say: a capture pass is historical evidence, and a reader
+    who sees it inside "goldens matched" takes it for a live run.
+    """
+    capture_rows = record.get("stateful_checked_from_capture") or []
+    capture_checked = len(capture_rows)
+    capture_matched = sum(1 for row in capture_rows if row.get("status") == "ok")
+    matched = int(record.get("goldens_matched") or 0)
+    checked = int(record.get("goldens_checked") or 0)
+    return matched - capture_matched, checked - capture_checked, capture_matched, capture_checked
+
+
 def render_report(records: list[dict[str, Any]]) -> str:
     lines = ["Golden-key re-validation (Phase 6i)", f"  ran at   : {datetime.now(UTC).isoformat()}"]
+    any_capture = False
     for r in records:
         mark = "✓" if r["status"] == "ok" else ("⚠" if r["status"] in ("unreachable", "static-only") else "✗")
         stat = r["status"]
         if r["goldens_matched"] is not None:
+            live_matched, live_checked, cap_matched, cap_checked = _basis_split(r)
+            if live_checked == 0 and cap_checked:
+                # "ok" here rests on historical evidence alone. Say so in the
+                # status column too, or the marker itself reads as a live pass.
+                stat = f"{stat} (capture-only)"
             extra = f" (+{r.get('stateful_skipped', 0)} stateful-skipped)" if r.get("stateful_skipped") else ""
-            lines.append(
-                f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:12} {r['goldens_matched']}/{r['goldens_checked']} goldens{extra}"
-            )
+            if cap_checked:
+                any_capture = True
+                counts = (
+                    f"{live_matched}/{live_checked} live + {cap_matched}/{cap_checked} by capture "
+                    f"= {live_matched + cap_matched}/{live_checked + cap_checked} goldens"
+                )
+            else:
+                counts = f"{live_matched}/{live_checked} live goldens"
+            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:20} {counts}{extra}")
         else:
-            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:12} (static-only)")
+            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:20} (static-only)")
         for m in r.get("missing", [])[:6]:
+            # A capture-based miss is marked too: the JSON says basis: capture,
+            # and a printed failure must not read as a live one either.
+            basis = "[capture] " if m.get("basis") == "capture" else ""
             lines.append(
-                f"      ✗ {m.get('description')} @ {m.get('target_page') or m.get('outcome_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
+                f"      ✗ {basis}{m.get('description')} @ {m.get('target_page') or m.get('outcome_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
             )
         if r.get("error"):
             lines.append(f"      unreachable: {r['error'][:120]}")
+    if any_capture:
+        lines.append("")
+        lines.append(
+            "  'by capture' rows were settled against the frozen capture in scraped_pages/, "
+            "not against a live page - historical evidence, not a live pass."
+        )
     return "\n".join(lines)
 
 
