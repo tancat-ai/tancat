@@ -170,7 +170,7 @@ def test_the_key_is_an_arrival_key_with_the_element_as_a_tolerance(
 
     assert ph.get("expected_type") == "url_assertion"
     assert ph["expected_locator"] == _arrival(good_url)
-    assert ph.get("expected_page") == good_url
+    assert ph.get("outcome_page") == good_url
     assert element in ph.get("tolerance_selectors", [])
 
 

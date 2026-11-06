@@ -59,7 +59,7 @@ def test_resolver_threads_the_site_hash_into_the_scorer(monkeypatch: pytest.Monk
         action="CLICK",
         description="Add to cart",
         pages_data={"https://www.saucedemo.com/inventory.html": [element]},
-        expected_page="",
+        target_page="",
         element_matcher=_Matcher(),
         site_hash="site-a",
     )

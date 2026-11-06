@@ -252,6 +252,8 @@ _GOLDEN = {
                     "description": "backpack in cart",
                     "expected_locator": "#backpack",
                     "tolerance_selectors": [],
+                    "target_page": "https://example.com/cart.html",
+                    "outcome_page": "https://example.com/cart.html",
                 },
             ],
         },
@@ -377,6 +379,36 @@ class TestComparabilityGuards:
 
         assert dataset_key(before) != dataset_key(after)
         assert dataset_key(before) == dataset_key(before)  # and it is stable
+
+    def test_a_different_target_page_changes_the_key(self, tmp_path: Path) -> None:
+        """d-0149: the same locator on another page is a different sample."""
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        moved = json.loads(json.dumps(_GOLDEN))
+        moved["golden_resolutions"][0]["placeholders"][0]["target_page"] = "https://example.com/store.html"
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(moved), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
+        # ... and the new fields bring no nondeterminism of their own.
+        assert dataset_key(before) == dataset_key(before) == dataset_key(Path(before))
+
+    def test_a_different_outcome_page_changes_the_key(self, tmp_path: Path) -> None:
+        """d-0149: where a step must land is part of what it asserts."""
+        before = tmp_path / "before"
+        before.mkdir()
+        (before / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+
+        moved = json.loads(json.dumps(_GOLDEN))
+        moved["golden_resolutions"][0]["placeholders"][0]["outcome_page"] = "https://example.com/checkout.html"
+        after = tmp_path / "after"
+        after.mkdir()
+        (after / "eval-999.json").write_text(json.dumps(moved), encoding="utf-8")
+
+        assert dataset_key(before) != dataset_key(after)
 
     def test_the_key_covers_the_tolerance_selectors(self, tmp_path: Path) -> None:
         before = tmp_path / "before"
@@ -705,3 +737,64 @@ class TestDiffRuns:
         assert "25 rows over 1 story ids" in rendered
         assert "per story:" not in rendered
         assert len(rendered.splitlines()[4]) < 300
+
+
+class TestTheStaleDatasetGuard:
+    """d-0156: a rebuild must refuse goldens that predate the page split.
+
+    The re-score reads ``outcome_page``. Handed goldens that only carry
+    ``expected_page``, it sees no page at all and scores two element-keyed page
+    ASSERTs as unverified - gate 2 moved 6 -> 8 on the 2026-10-31 legs in t-1320.
+    """
+
+    def _evidence_and_dataset(self, tmp_path: Path, *, pre_split: bool) -> tuple[Path, Path]:
+        dataset_dir = tmp_path / "dataset"
+        dataset_dir.mkdir()
+        golden = json.loads(json.dumps(_GOLDEN))
+        placeholder = golden["golden_resolutions"][0]["placeholders"][0]
+        if pre_split:
+            # The shape the f538d4b archive has: one page field, no outcome.
+            placeholder.pop("target_page", None)
+            placeholder.pop("outcome_page", None)
+            placeholder["expected_page"] = "https://example.com/cart.html"
+        (dataset_dir / "eval-999.json").write_text(json.dumps(golden), encoding="utf-8")
+
+        run_dir = tmp_path / "run"
+        story = validate_story(_CODE, _GOLDEN)
+        write_run_evidence(
+            run_dir,
+            code_map={"eval-999": _CODE},
+            results=[story],
+            verdict_map={},
+            summary="synthetic",
+            metadata={"mode": "full", "dataset": str(dataset_dir)},
+        )
+        junit_dir = run_dir / "junit"
+        junit_dir.mkdir(parents=True, exist_ok=True)
+        (junit_dir / "test_eval_999.xml").write_text(
+            '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite>'
+            '<testcase name="test_01_a[chromium]" /></testsuite></testsuites>',
+            encoding="utf-8",
+        )
+        return run_dir, dataset_dir
+
+    def test_a_pre_split_golden_set_is_refused_by_name(self, tmp_path: Path) -> None:
+        run_dir, dataset_dir = self._evidence_and_dataset(tmp_path, pre_split=True)
+        db = tmp_path / "run_results.sqlite"
+
+        with pytest.raises(ValueError) as excinfo:
+            rebuild_run_from_evidence(run_dir, db, dataset_dir)
+
+        message = str(excinfo.value)
+        assert "eval-999.json" in message, message
+        assert "expected_page" in message and "target_page" in message
+        assert "predate" in message
+
+    def test_the_same_rebuild_on_today_s_goldens_proceeds(self, tmp_path: Path) -> None:
+        run_dir, dataset_dir = self._evidence_and_dataset(tmp_path, pre_split=False)
+        db = tmp_path / "run_results.sqlite"
+
+        run_ids = rebuild_run_from_evidence(run_dir, db, dataset_dir)
+
+        assert len(run_ids) == 1
+        assert load_eval_history(db)[0]["story_id"] == "eval-999"

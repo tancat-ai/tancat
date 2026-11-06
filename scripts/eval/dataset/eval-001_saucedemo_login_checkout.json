@@ -21,29 +21,41 @@
           "action": "FILL",
           "description": "username",
           "expected_locator": "#user-name",
-          "tolerance_selectors": ["input[name=\"user-name\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "input[name=\"user-name\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "password",
           "expected_locator": "#password",
-          "tolerance_selectors": ["input[name=\"password\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "login button",
           "expected_locator": "#login-button",
-          "tolerance_selectors": ["[data-test=\"submit\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "[data-test=\"submit\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "product list",
           "expected_locator": "[data-test=\"inventory-item\"]",
-          "tolerance_selectors": ["[data-test=\"inventory-item-description\"]"],
-          "expected_page": "https://www.saucedemo.com/inventory.html"
+          "tolerance_selectors": [
+            "[data-test=\"inventory-item-description\"]"
+          ],
+          "target_page": "https://www.saucedemo.com/inventory.html",
+          "outcome_page": "https://www.saucedemo.com/inventory.html"
         }
       ]
     },
@@ -55,36 +67,49 @@
           "action": "FILL",
           "description": "username",
           "expected_locator": "#user-name",
-          "tolerance_selectors": ["input[name=\"user-name\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "input[name=\"user-name\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "password",
           "expected_locator": "#password",
-          "tolerance_selectors": ["input[name=\"password\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "login button",
           "expected_locator": "#login-button",
-          "tolerance_selectors": ["[data-test=\"submit\"]"],
-          "expected_page": "https://www.saucedemo.com"
+          "tolerance_selectors": [
+            "[data-test=\"submit\"]"
+          ],
+          "target_page": "https://www.saucedemo.com",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Add to cart (Backpack)",
           "expected_locator": "#add-to-cart-sauce-labs-backpack",
           "tolerance_selectors": [],
-          "expected_page": "https://www.saucedemo.com/inventory.html"
+          "target_page": "https://www.saucedemo.com/inventory.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "cart badge updated",
           "expected_locator": "[data-test=\"shopping-cart-badge\"]",
-          "tolerance_selectors": [".shopping_cart_link[data-test=\"shopping-cart-link\"]"],
-          "expected_page": "https://www.saucedemo.com/inventory.html"
+          "tolerance_selectors": [
+            ".shopping_cart_link[data-test=\"shopping-cart-link\"]"
+          ],
+          "target_page": "https://www.saucedemo.com/inventory.html",
+          "outcome_page": "https://www.saucedemo.com/inventory.html"
         }
       ]
     },
@@ -96,16 +121,22 @@
           "action": "CLICK",
           "description": "Cart icon",
           "expected_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
-          "tolerance_selectors": ["a.shopping_cart_link"],
-          "expected_page": "https://www.saucedemo.com/inventory.html"
+          "tolerance_selectors": [
+            "a.shopping_cart_link"
+          ],
+          "target_page": "https://www.saucedemo.com/inventory.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "Cart Summary",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/cart.html\")",
-          "tolerance_selectors": ["#cart_contents_container"],
-          "expected_page": "https://www.saucedemo.com/cart.html"
+          "tolerance_selectors": [
+            "#cart_contents_container"
+          ],
+          "target_page": "",
+          "outcome_page": "https://www.saucedemo.com/cart.html"
         }
       ]
     },
@@ -121,7 +152,8 @@
             "[data-test=\"inventory-item-name\"]:has-text(\"Sauce Labs Backpack\")",
             "#remove-sauce-labs-backpack"
           ],
-          "expected_page": "https://www.saucedemo.com/cart.html"
+          "target_page": "https://www.saucedemo.com/cart.html",
+          "outcome_page": "https://www.saucedemo.com/cart.html"
         }
       ]
     },
@@ -134,15 +166,19 @@
           "description": "Checkout",
           "expected_locator": "#checkout",
           "tolerance_selectors": [],
-          "expected_page": "https://www.saucedemo.com/cart.html"
+          "target_page": "https://www.saucedemo.com/cart.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "Checkout Info form",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-step-one.html\")",
-          "tolerance_selectors": ["#checkout_info_container"],
-          "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
+          "tolerance_selectors": [
+            "#checkout_info_container"
+          ],
+          "target_page": "",
+          "outcome_page": "https://www.saucedemo.com/checkout-step-one.html"
         }
       ]
     },
@@ -154,36 +190,47 @@
           "action": "FILL",
           "description": "First Name",
           "expected_locator": "#first-name",
-          "tolerance_selectors": ["input[name=\"firstName\"]"],
-          "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
+          "tolerance_selectors": [
+            "input[name=\"firstName\"]"
+          ],
+          "target_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "Last Name",
           "expected_locator": "#last-name",
-          "tolerance_selectors": ["input[name=\"lastName\"]"],
-          "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
+          "tolerance_selectors": [
+            "input[name=\"lastName\"]"
+          ],
+          "target_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "Zip/Postal Code",
           "expected_locator": "#postal-code",
-          "tolerance_selectors": ["input[name=\"postalCode\"]"],
-          "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
+          "tolerance_selectors": [
+            "input[name=\"postalCode\"]"
+          ],
+          "target_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Continue",
           "expected_locator": "#continue",
           "tolerance_selectors": [],
-          "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
+          "target_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Finish",
           "expected_locator": "#finish",
           "tolerance_selectors": [],
-          "expected_page": "https://www.saucedemo.com/checkout-step-two.html"
+          "target_page": "https://www.saucedemo.com/checkout-step-two.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
@@ -192,7 +239,8 @@
           "tolerance_selectors": [
             "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-complete.html\")"
           ],
-          "expected_page": "https://www.saucedemo.com/checkout-complete.html"
+          "target_page": "https://www.saucedemo.com/checkout-complete.html",
+          "outcome_page": "https://www.saucedemo.com/checkout-complete.html"
         }
       ]
     }

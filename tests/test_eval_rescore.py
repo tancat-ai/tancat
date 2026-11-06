@@ -221,7 +221,11 @@ class TestEvidenceGuard:
         """
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         # The headline is the held-out static leg, and it states its mode and seed.
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (12, 30)
+        # 2026-11-05 (t-1303): the number moved 12/30 -> 20/30 because the golden field
+        # the resolver filtered on was split into target_page/outcome_page. The 12/30
+        # reading is kept under static_leg_2026_10_30, labelled pre-schema-split.
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (20, 30)
+        assert payload["static_leg_2026_10_30"]["label_kind"] == "pre-schema-split"
         assert payload["mode"].strip() and payload["seed"].strip()
         assert payload["gate2_false_greens"] is None  # a static leg cannot measure gate 2
         assert payload["heldout_split"]["stories"] == ["eval-007", "eval-008", "eval-010"]
@@ -335,7 +339,7 @@ class TestEvidenceGuard:
         # t-1183/t-1188/t-1190: the recorded cell still says gate 2 = 0, but under
         # the narrowed rule - a "verified by element" verdict counts only when the
         # element is the golden in the criterion's own test, and a page-arrival
-        # verdict only when it reached the criterion's own expected_page - the
+        # verdict only when it reached the criterion's own outcome_page - the
         # SAME committed evidence finds 4 hollow passes. The cell was left alone on
         # purpose: it is the record of what was measured then, not a number to be
         # adjusted to today's rule. Both sides are stated here so the disagreement

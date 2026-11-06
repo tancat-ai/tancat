@@ -107,7 +107,8 @@ class TestLoadGoldenPatterns:
                                     "description": "login button",
                                     "expected_locator": "#login-btn",
                                     "tolerance_selectors": ["[data-test='login']"],
-                                    "expected_page": "/login",
+                                    "target_page": "/login",
+                                    "outcome_page": "",
                                 }
                             ],
                         }

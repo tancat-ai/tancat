@@ -25,8 +25,11 @@
           "description": "home page loaded",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
-          "tolerance_selectors": ["expect(page).to_have_url"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            "expect(page).to_have_url"
+          ],
+          "target_page": "",
+          "outcome_page": "http://localhost:8781/index.html"
         }
       ]
     },
@@ -37,8 +40,12 @@
           "action": "CLICK",
           "description": "Add to cart for Blue Top",
           "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
-          "tolerance_selectors": [".add-to-cart.btn", "[data-product-id]"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            ".add-to-cart.btn",
+            "[data-product-id]"
+          ],
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -50,8 +57,13 @@
           "action": "ASSERT",
           "description": "add to cart confirmation",
           "expected_locator": ".text-center",
-          "tolerance_selectors": [".modal-body", ".modal-title", "#cartModal"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            ".modal-body",
+            ".modal-title",
+            "#cartModal"
+          ],
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": "http://localhost:8781/index.html"
         }
       ]
     },
@@ -63,16 +75,23 @@
           "action": "CLICK",
           "description": "Cart link",
           "expected_locator": "a[href=\"/cart.html\"]",
-          "tolerance_selectors": [".cart"],
-          "expected_page": "http://localhost:8781/index.html"
+          "tolerance_selectors": [
+            ".cart"
+          ],
+          "target_page": "http://localhost:8781/index.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "cart page title",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "#cart_items"],
-          "expected_page": "http://localhost:8781/cart.html"
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#cart_items"
+          ],
+          "target_page": "",
+          "outcome_page": "http://localhost:8781/cart.html"
         }
       ]
     },
@@ -84,8 +103,13 @@
           "action": "ASSERT",
           "description": "product name and price",
           "expected_locator": ".cart_total_price",
-          "tolerance_selectors": [".cart_price", ".cart_description", "#cart_items"],
-          "expected_page": "http://localhost:8781/cart.html"
+          "tolerance_selectors": [
+            ".cart_price",
+            ".cart_description",
+            "#cart_items"
+          ],
+          "target_page": "http://localhost:8781/cart.html",
+          "outcome_page": "http://localhost:8781/cart.html"
         }
       ]
     },
@@ -97,16 +121,24 @@
           "action": "CLICK",
           "description": "Proceed To Checkout",
           "expected_locator": "a[href=\"/checkout.html\"]",
-          "tolerance_selectors": ["a.check_out", ".check_out"],
-          "expected_page": "http://localhost:8781/cart.html"
+          "tolerance_selectors": [
+            "a.check_out",
+            ".check_out"
+          ],
+          "target_page": "http://localhost:8781/cart.html",
+          "outcome_page": ""
         },
         {
           "action": "ASSERT",
           "description": "checkout page title",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "#checkout-form"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#checkout-form"
+          ],
+          "target_page": "",
+          "outcome_page": "http://localhost:8781/checkout.html"
         }
       ]
     },
@@ -117,50 +149,71 @@
           "action": "FILL",
           "description": "name",
           "expected_locator": "#name",
-          "tolerance_selectors": ["input[name=\"name\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[name=\"name\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "email address",
           "expected_locator": "#email",
-          "tolerance_selectors": ["input[type=\"email\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[type=\"email\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "address",
           "expected_locator": "#address",
-          "tolerance_selectors": ["input[name=\"address\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[name=\"address\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "city",
           "expected_locator": "#city",
-          "tolerance_selectors": ["input[name=\"city\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[name=\"city\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "zip code",
           "expected_locator": "#zip",
-          "tolerance_selectors": ["input[name=\"zip\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[name=\"zip\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "FILL",
           "description": "card number",
           "expected_locator": "#card-number",
-          "tolerance_selectors": ["input[name=\"card_number\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "input[name=\"card_number\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         },
         {
           "action": "CLICK",
           "description": "Place Order",
           "expected_locator": "#place-order",
-          "tolerance_selectors": ["button[type=\"submit\"]"],
-          "expected_page": "http://localhost:8781/checkout.html"
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "target_page": "http://localhost:8781/checkout.html",
+          "outcome_page": ""
         }
       ]
     },
@@ -172,8 +225,12 @@
           "action": "ASSERT",
           "description": "order success message",
           "expected_locator": "#success-title",
-          "tolerance_selectors": [".text-center", "h1"],
-          "expected_page": "http://localhost:8781/checkout_success.html"
+          "tolerance_selectors": [
+            ".text-center",
+            "h1"
+          ],
+          "target_page": "http://localhost:8781/checkout_success.html",
+          "outcome_page": "http://localhost:8781/checkout_success.html"
         }
       ]
     }
