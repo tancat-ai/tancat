@@ -55,6 +55,11 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 _DATASET_DIR = _PROJECT_ROOT / "scripts" / "eval" / "dataset"
 _SCRAPED_DIR = _PROJECT_ROOT / "scripts" / "eval" / "scraped_pages"
+#: The captures committed to the repository: the banking mock this repo serves
+#: itself. Read FIRST, so the held-out leg runs in a clean checkout (t-1343);
+#: the working directory above is then layered on top for third-party pages,
+#: which are not ours to publish and are never required.
+_COMMITTED_CAPTURES_DIR = _PROJECT_ROOT / "fixtures" / "scraped_pages"
 
 #: Root the eval's own store lives under. ``scratch/`` is gitignored, so an
 #: eval run never leaves tracked artefacts behind.
@@ -185,23 +190,34 @@ def _load_golden_placeholders(stories: Sequence[str] | None = None) -> list[dict
 
 
 def load_scraped_pages() -> dict[str, list[dict[str, str]]]:
-    """Load pre-saved scraped page data from ``scraped_pages/`` directory.
+    """Load pre-saved scraped page data: the committed captures, then the working dir.
 
-    Each ``<url_hash>.json`` file contains ``{"url": "...", "elements": [...]}``.
+    Each file contains ``{"url": "...", "elements": [...]}``. The committed
+    captures (``fixtures/scraped_pages/``, the banking mock this repository
+    serves) are read first and are what a clean checkout has; the gitignored
+    ``scripts/eval/scraped_pages/`` is layered on top when it exists locally, so
+    a developer's third-party captures (saucedemo, demoqa, ...) still work.
+    Nothing here requires a third-party page: the held-out split scores the same
+    with the committed set alone (t-1343).
     """
     pages: dict[str, list[dict[str, str]]] = {}
-    if not _SCRAPED_DIR.exists():
-        logger.warning("Scraped pages directory not found: %s — run 'save-scraped-data' first", _SCRAPED_DIR)
-        return pages
-
-    for fpath in _SCRAPED_DIR.glob("*.json"):
-        data = json.loads(fpath.read_text(encoding="utf-8"))
-        url = data.get("url", "")
-        elements: list[dict[str, str]] = data.get("elements", [])
-        if url and elements:
-            pages[url] = elements
-
-    logger.info("Loaded %d scraped page(s) from %s", len(pages), _SCRAPED_DIR)
+    for directory in (_COMMITTED_CAPTURES_DIR, _SCRAPED_DIR):
+        if not directory.exists():
+            continue
+        for fpath in sorted(directory.glob("*.json")):
+            data = json.loads(fpath.read_text(encoding="utf-8"))
+            url = data.get("url", "")
+            elements = data.get("elements", []) if isinstance(data, dict) else []
+            if url and elements:
+                pages[url] = elements
+    if not pages:
+        logger.warning(
+            "No scraped pages found: neither %s (committed) nor %s (working) has any",
+            _COMMITTED_CAPTURES_DIR,
+            _SCRAPED_DIR,
+        )
+    else:
+        logger.info("Loaded %d scraped page(s) from %s and %s", len(pages), _COMMITTED_CAPTURES_DIR, _SCRAPED_DIR)
     return pages
 
 
