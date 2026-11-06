@@ -1,28 +1,33 @@
-"""Scrape-backed check of the CLICK rows' pages (t-1303 steps 2-3).
+"""Scrape-backed check of the CLICK rows' pages (t-1303 steps 2-3, t-1343).
 
 The static schema gate (`golden_validator.check_page_schema`) can see that a
 CLICK *has* a target page. It cannot see whether that page is the one holding
 the control - the defect step 2 corrected (eval-007 c1/c3/c4/c6x2, eval-008
 c1/c4/c7 pointed at the page the click LANDS on).
 
-This reads the captures under `scripts/eval/scraped_pages/` and asks the question
-the gate cannot: for a CLICK whose target page was captured, is the locator on
-that page? And is its outcome page a captured page?
+This reads the **committed** captures under `fixtures/scraped_pages/` - the
+banking mock this repository serves itself - and asks the question the gate
+cannot: for a mock CLICK, is the locator on the page its target names, and is its
+outcome page one we have a capture of?
 
-Deciding a target, in the order the owner set (2026-11-05):
+Two boundaries, both deliberate (t-1343):
+
+* Only the mock's captures are committed. Captures of third-party pages
+  (saucedemo, automationexercise, demoqa, the-internet) are not ours to
+  republish, stay in the gitignored `scripts/eval/scraped_pages/`, and are not
+  evidence a test may rest on - CI cannot see them. Rows on those sites are
+  counted as **outside the committed evidence**, never silently "checked".
+* A capture that is missing is a **failure that names the file**. A check that
+  finds nothing must say so; that is the fault this job exists to remove.
+
+Deciding a mock target, in the order the owner set (2026-11-05):
 
 1. **A unique capture** settles it: exactly one captured page holds the locator.
-2. **The trail** settles a locator that sits on several pages. A nav link is on
-   most pages of a real site, so uniqueness alone was too strict (it blocked
-   eval-007 c3 `#transfer-link`, which is on account.html and dashboard.html).
-   The product's own rule is used instead: a CLICK's target is the page the walk
-   is on when it gets there - the page of the step immediately before it in the
-   story.
-3. Otherwise it is **unsettled** and this suite fails: neither rule decided it.
-
-A locator that appears in no capture at all is not a wrong target, it is an
-uncheckable row (a stale or missing capture); it is counted, not silently
-dropped.
+2. **The trail** settles a locator that sits on several pages (a nav link is on
+   most pages of a real site, which is why uniqueness alone blocked eval-007 c3
+   `#transfer-link`): a CLICK's target is the page the walk is on when it gets
+   there - the page of the step immediately before it in the story.
+3. Otherwise it is **unsettled** and this suite fails.
 """
 
 from __future__ import annotations
@@ -38,41 +43,64 @@ sys.path.insert(0, str(_EVAL_DIR))
 import pytest  # noqa: E402
 
 DATASET = _EVAL_DIR / "dataset"
-SCRAPED = _EVAL_DIR / "scraped_pages"
+#: The committed captures: the mock this repository serves itself.
+SCRAPED = _EVAL_DIR.parent.parent / "fixtures" / "scraped_pages"
+MOCK_SITE = "http://localhost:8781"
+
+#: The five mock pages the eight corrected rows rest on. A missing one is a
+#: failure that names it.
+REQUIRED_MOCK_PAGES = (
+    "index.html",
+    "dashboard.html",
+    "transfer.html",
+    "payments.html",
+    "transfer_success.html",
+)
 
 
-def _pages() -> dict[str, dict]:
-    """Every captured page, keyed by its URL."""
+def _pages(directory: Path = SCRAPED) -> dict[str, dict]:
+    """Every page captured in *directory*, keyed by its URL.
+
+    Fails, naming the file, when the directory or one of the required mock pages
+    is absent - an empty mapping would read as "nothing to check" and let the
+    suite pass while proving nothing.
+    """
+    if not directory.is_dir():
+        raise AssertionError(f"no capture directory at {directory} - the mock captures are committed there")
+    expected = [f"http_localhost_8781_{name}.json" for name in REQUIRED_MOCK_PAGES]
+    missing_files = [name for name in expected if not (directory / name).is_file()]
+    assert missing_files == [], f"capture files missing from {directory}: {missing_files}"
     pages: dict[str, dict] = {}
-    for path in sorted(SCRAPED.glob("*.json")):
+    for path in sorted(directory.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "elements" in data and data.get("url"):
             pages[str(data["url"]).rstrip("/")] = data
-    assert pages, "no scraped pages to check against"
+    missing_pages = [name for name in REQUIRED_MOCK_PAGES if f"{MOCK_SITE}/{name}" not in pages]
+    assert missing_pages == [], f"captures present but their URLs are missing: {missing_pages}"
     return pages
 
 
-def _walk(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str]]:
-    """Every placeholder in story order, with the page the walk is on at it.
+def _walk(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str, str, str]]:
+    """Every placeholder in story order: (story, criterion, row, trail page, base_url).
 
-    The trail is the story's own order: the last page a step named (its target
-    for an element row, its outcome for a navigation). That is the product's
-    previous-landing idea and it is what the owner's rule says decides a CLICK
-    whose locator sits on more than one page. It is carried alongside the row so
-    no caller has to re-identify a dict.
+    The trail is the story's own order: the last page a step named. That is the
+    product's previous-landing idea, and it is what decides a CLICK whose locator
+    sits on more than one page.
     """
-    walked: list[tuple[str, int, dict, str]] = []
+    walked: list[tuple[str, int, dict, str, str, str]] = []
     for path in sorted(dataset_dir.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         current = ""
+        base_url = str(data.get("base_url") or "")
+        site = str(data.get("site") or "")
         for crit in data["golden_resolutions"]:
             for ph in crit["placeholders"]:
-                walked.append((str(data["id"]), int(crit["criterion_index"]), ph, current))
+                walked.append((str(data["id"]), int(crit["criterion_index"]), ph, current, base_url, site))
                 current = str(ph.get("target_page") or ph.get("outcome_page") or "") or current
     return walked
 
 
-def _clicks(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str]]:
+def _clicks(dataset_dir: Path = DATASET) -> list[tuple[str, int, dict, str, str, str]]:
     return [row for row in _walk(dataset_dir) if row[2].get("action") == "CLICK"]
 
 
@@ -80,9 +108,7 @@ def _holds(page: dict, locator: str) -> bool:
     """Whether the captured page holds this locator.
 
     Only the shapes a capture can express are matched: an id selector, an exact
-    CSS selector, or a ``text=`` / ``button:has-text`` phrase. A Playwright-only
-    construction that a capture never records is simply not found - which is why
-    a locator absent from every capture is counted as uncheckable.
+    CSS selector, or a ``text=`` / ``button:has-text`` phrase.
     """
     locator = locator.strip()
     elements = page.get("elements", [])
@@ -105,95 +131,98 @@ def _row_name(story: str, crit: int, ph: dict) -> str:
     return f"{story} c{crit} {ph.get('expected_locator')}"
 
 
-def decide(dataset_dir: Path = DATASET) -> dict[str, Any]:
+def _in_scope(row: tuple[str, int, dict, str, str, str]) -> bool:
+    """Whether the committed captures can speak for this row.
+
+    They are the banking mock's pages (`site: banking_mock`, served on :8781).
+    Other localhost mocks (eval-005/006/010) and the third-party sites have no
+    committed capture, so their rows are outside this evidence - counted, not
+    passed and not failed.
+    """
+    base_url, site = row[4] or "", row[5] or ""
+    return site == "banking_mock" and base_url.startswith("http://localhost:8781")
+
+
+def decide(dataset_dir: Path = DATASET, directory: Path = SCRAPED) -> dict[str, Any]:
     """Run the target decision over a dataset directory.
 
-    Returns the rows settled each way and the rows that fail either rule, so a
-    caller (or the negative test) can see what a swapped page does.
+    Returns the rows settled each way, the rows outside the committed evidence,
+    and the rows that fail either rule.
     """
-    pages = _pages()
+    pages = _pages(directory)
     violations: list[str] = []
     unsettled: list[str] = []
-    counts = {"unique": 0, "trail": 0, "uncheckable": 0}
-    for story, crit, ph, trail_page in _clicks(dataset_dir):
+    counts = {"unique": 0, "trail": 0, "outside": 0}
+    for row in _clicks(dataset_dir):
+        story, crit, ph, trail_page, _base_url, _site = row
         locator = str(ph.get("expected_locator") or "")
         target = str(ph.get("target_page") or "").rstrip("/")
-        holders = _holders(locator, pages)
-        if not holders:
-            counts["uncheckable"] += 1
+        if not _in_scope(row):
+            counts["outside"] += 1
             continue
+        holders = _holders(locator, pages)
         if len(holders) == 1:
             want = holders[0]
             counts["unique"] += 1
-        else:
+        elif len(holders) > 1:
             want = str(trail_page or "").rstrip("/")
             if not want or want not in holders:
                 unsettled.append(_row_name(story, crit, ph))
                 continue
             counts["trail"] += 1
+        else:
+            # On the mock site, so a capture *should* hold it: this is a finding.
+            unsettled.append(f"{_row_name(story, crit, ph)}: no mock capture holds it")
+            continue
         if target != want:
             violations.append(f"{_row_name(story, crit, ph)}: target {target} != {want}")
-    decided: dict[str, Any] = dict(counts)
-    decided["violations"] = violations
-    decided["unsettled"] = unsettled
-    return decided
+    return {**counts, "violations": violations, "unsettled": unsettled}
 
 
 class TestClickTargets:
-    def test_every_click_target_is_decided_and_correct(self) -> None:
-        pages = _pages()
-        by_unique = by_trail = uncheckable = 0
-        violations: list[str] = []
-        unsettled: list[str] = []
-        for story, crit, ph, trail_page in _clicks():
-            locator = str(ph.get("expected_locator") or "")
-            target = str(ph.get("target_page") or "").rstrip("/")
-            holders = _holders(locator, pages)
-            if not holders:
-                uncheckable += 1
-                continue
-            if len(holders) == 1:
-                want = holders[0]
-                by_unique += 1
-            else:
-                # A locator on several pages: the trail decides, never a guess.
-                want = str(trail_page or "").rstrip("/")
-                if not want or want not in holders:
-                    unsettled.append(_row_name(story, crit, ph))
-                    continue
-                by_trail += 1
-            if target != want:
-                violations.append(f"{_row_name(story, crit, ph)}: target {target} != {want}")
-        assert by_unique + by_trail >= 8, (
-            f"only {by_unique + by_trail} CLICK rows were decided - the check has gone blind"
-        )
-        assert unsettled == [], f"neither a unique capture nor the trail settles: {unsettled}"
-        assert violations == [], f"a CLICK target is not the page that holds it: {violations}"
-        # Counts are pinned so a shrinking check is visible. Of the 36 CLICK
-        # rows: 14 are settled by a unique capture, 7 by the trail (their
-        # locator sits on more than one captured page), and 15 are uncheckable
-        # because no capture holds their locator (stale or missing captures).
-        assert (by_unique, by_trail, uncheckable) == (14, 7, 15), (by_unique, by_trail, uncheckable)
+    def test_every_mock_click_target_is_decided_and_correct(self) -> None:
+        result = decide()
+        assert result["unsettled"] == [], f"neither a unique capture nor the trail settles: {result['unsettled']}"
+        assert result["violations"] == [], f"a CLICK target is not the page that holds it: {result['violations']}"
+        # Of the 36 CLICK rows: the 8 on the banking mock are decided here - 7 by a
+        # unique capture and 1 (#transfer-link) by the trail - and the 28 on
+        # third-party sites are outside the committed evidence (their captures are
+        # not ours to publish, so CI must never depend on them).
+        assert (result["unique"], result["trail"], result["outside"]) == (7, 1, 28), result
 
     def test_the_nav_link_is_settled_by_the_trail_not_by_uniqueness(self) -> None:
-        """eval-007 c3 `#transfer-link` is on two captured pages."""
+        """eval-007 c3 `#transfer-link` is on two captured mock pages."""
         pages = _pages()
         holders = sorted(h.rsplit("/", 1)[-1] for h in _holders("#transfer-link", pages))
         assert holders == ["account.html", "dashboard.html"]
-        story, crit, row, trail_page = next(
+        row = next(
             r for r in _clicks() if r[0] == "eval-007" and r[1] == 3 and r[2]["expected_locator"] == "#transfer-link"
         )
-        assert trail_page == "http://localhost:8781/dashboard.html"
-        assert row["target_page"] == "http://localhost:8781/dashboard.html"
+        assert row[3] == "http://localhost:8781/dashboard.html"
+        assert row[2]["target_page"] == "http://localhost:8781/dashboard.html"
 
-    def test_every_recorded_click_outcome_is_a_captured_page(self) -> None:
+    def test_every_mock_click_outcome_is_a_captured_page(self) -> None:
         pages = _pages()
         missing = [
             _row_name(story, crit, ph)
-            for story, crit, ph, _trail in _clicks()
+            for row in _clicks()
+            if _in_scope(row)
+            for story, crit, ph, _trail, _base, _site in (row,)
             if str(ph.get("outcome_page") or "").rstrip("/") and str(ph["outcome_page"]).rstrip("/") not in pages
         ]
-        assert missing == [], f"a CLICK names an outcome page nobody captured: {missing}"
+        assert missing == [], f"a mock CLICK names an outcome page nobody captured: {missing}"
+
+    def test_a_missing_capture_directory_fails_and_names_it(self, tmp_path: Path) -> None:
+        empty = tmp_path / "no-captures"
+        empty.mkdir()
+        with pytest.raises(AssertionError) as excinfo:
+            _pages(empty)
+        assert "capture files missing" in str(excinfo.value)
+        assert "dashboard.html" in str(excinfo.value) or "index.html" in str(excinfo.value)
+
+        with pytest.raises(AssertionError) as excinfo:
+            _pages(tmp_path / "absent")
+        assert "no capture directory" in str(excinfo.value)
 
 
 class TestTheCorrectedRows:
@@ -213,7 +242,7 @@ class TestTheCorrectedRows:
         ],
     )
     def test_target_is_the_page_holding_the_locator(self, story: str, crit: int, description: str, page: str) -> None:
-        data = json.loads((next(DATASET.glob(f"{story}_*.json"))).read_text(encoding="utf-8"))
+        data = json.loads(next(DATASET.glob(f"{story}_*.json")).read_text(encoding="utf-8"))
         row = next(
             ph
             for c in data["golden_resolutions"]
@@ -221,7 +250,7 @@ class TestTheCorrectedRows:
             for ph in c["placeholders"]
             if ph.get("description") == description
         )
-        expected = f"http://localhost:8781/{page}"
+        expected = f"{MOCK_SITE}/{page}"
         assert row["target_page"] == expected
         assert _holds(_pages()[expected], row["expected_locator"])
         # the arrival the click really has lives in outcome_page, and is captured
@@ -243,8 +272,6 @@ class TestTheNegativeCase:
 
         copy = tmp_path / "dataset"
         shutil.copytree(DATASET, copy)
-        # Two CLICK rows with different captured targets: eval-007 c1 'sign in
-        # button' (index.html) and eval-007 c4 'Transfer Funds button' (transfer.html).
         path = next(copy.glob("eval-007_*.json"))
         data = _json.loads(path.read_text(encoding="utf-8"))
 
@@ -269,9 +296,6 @@ class TestTheNegativeCase:
         assert len(result["violations"]) == 2, result["violations"]
 
         # ... and the static gate cannot see it: every swapped row is still valid.
-        import sys as _sys
-
-        _sys.path.insert(0, str(_EVAL_DIR))
-        from golden_validator import check_page_schema
+        from golden_validator import check_page_schema  # noqa: PLC0415
 
         assert check_page_schema(data) == []

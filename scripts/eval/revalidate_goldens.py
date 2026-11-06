@@ -153,13 +153,25 @@ def _page_url_matches(page_url: str, expected: str) -> bool:
 #: (t-1303 step 3): the capture is the DOM the tool itself recorded when the page
 #: was really served, so a locator in it was on the page, and a miss reads as
 #: "the capture does not hold it" rather than "the live page decayed".
-CAPTURES_DIR = Path(__file__).resolve().parent / "scraped_pages"
+CAPTURES_DIR = Path(__file__).resolve().parent.parent.parent / "fixtures" / "scraped_pages"
 
 
 def load_captures(directory: Path | None = None) -> dict[str, dict[str, Any]]:
-    """Every frozen page capture, keyed by its URL (trailing slash normalised)."""
+    """Every frozen page capture, keyed by its URL (trailing slash normalised).
+
+    The captures of the mock this repository serves itself live in
+    ``fixtures/scraped_pages/`` and are committed (t-1343). A missing directory
+    raises and names it: an empty mapping would make every state-dependent row
+    look "uncheckable" when the truth is that the evidence is not there.
+    """
+    root = directory or CAPTURES_DIR
+    if not root.is_dir():
+        raise FileNotFoundError(
+            f"no capture directory at {root} - the mock-page captures are committed under "
+            "fixtures/scraped_pages/; a stateful row cannot be checked without them"
+        )
     captures: dict[str, dict[str, Any]] = {}
-    for path in sorted((directory or CAPTURES_DIR).glob("*.json")):
+    for path in sorted(root.glob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except OSError, ValueError:

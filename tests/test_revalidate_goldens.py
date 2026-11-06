@@ -11,6 +11,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "eval" / "revalidate_goldens.py"
 _spec = importlib.util.spec_from_file_location("revalidate_goldens", _SCRIPT)
 assert _spec and _spec.loader
@@ -290,3 +292,19 @@ def test_a_capture_that_lacks_the_locator_is_a_missing_finding() -> None:
     assert record["status"] == "fail"
     assert record["missing"][0]["basis"] == "capture"
     assert "#transfer-link" in record["missing"][0]["missing_selectors"]
+
+
+def test_a_missing_capture_directory_fails_and_names_it(tmp_path: Path) -> None:
+    """t-1343: the captures are committed; their absence is a failure, not a skip."""
+    with pytest.raises(FileNotFoundError) as excinfo:
+        R.load_captures(tmp_path / "no-such-captures")
+    assert "no capture directory" in str(excinfo.value)
+    assert "fixtures/scraped_pages" in str(excinfo.value)
+
+
+def test_the_committed_captures_are_the_banking_mock_pages() -> None:
+    """The five pages the eight corrected rows rest on are in the repository."""
+    captures = R.load_captures()
+    for name in ("index", "dashboard", "transfer", "payments", "transfer_success"):
+        assert f"http://localhost:8781/{name}.html" in captures, name
+    assert str(R.CAPTURES_DIR).replace("\\", "/").endswith("fixtures/scraped_pages")
