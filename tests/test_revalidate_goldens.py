@@ -375,3 +375,49 @@ def test_a_capture_only_row_prints_no_live_count_that_includes_them() -> None:
     assert "3/3 by capture" in line, line
     assert "3/3 live" not in line, "a capture pass was printed as a live pass"
     assert "capture-only" in line, "the status still reads as a live ok"
+
+
+# -- j-0293 follow-up: the stored record must say what its numbers rest on ----
+
+
+def test_a_capture_settled_record_stores_its_basis_not_a_live_pass() -> None:
+    """Stored status "ok" alone read as a live pass; the record now says capture."""
+    record = R._check_live_dataset(
+        _dataset(
+            _row("CLICK", "Transfer Money link", "#transfer-link", f"{BANK}/dashboard.html", f"{BANK}/transfer.html")
+        ),
+        page=_GotoPage({}),
+        timeout_s=1,
+        captures=R.load_captures(),
+    )
+
+    assert record["basis"] == "capture", f"the record does not say what settled it: {record.get('basis')!r}"
+    assert record["kind"] == "capture", f"kind still names the path that ran, not the evidence: {record['kind']!r}"
+    assert record["status"] == "ok"  # the stored status stays a stable machine value
+
+
+def test_a_mixed_record_says_live_and_capture() -> None:
+    """One stateful row from a capture, one ordinary row from the served page."""
+    captures = R.load_captures()
+    ds = _dataset(
+        _row("CLICK", "Transfer Money link", "#transfer-link", f"{BANK}/dashboard.html", f"{BANK}/transfer.html"),
+        _row("CLICK", "Login button", "#login-button", f"{BANK}/index.html"),
+    )
+    page = _GotoPage({f"{BANK}/index.html": {"#login-button"}})
+
+    record = R._check_live_dataset(ds, page=page, timeout_s=1, captures=captures)
+
+    assert record["goldens_checked"] == 2
+    assert record["basis"] == "live+capture", record["basis"]
+    assert record["kind"] == "live+capture", record["kind"]
+
+
+def test_a_live_only_record_still_says_live() -> None:
+    record = R._check_live_dataset(
+        _dataset(_row("CLICK", "Login button", "#login-button", f"{BANK}/index.html")),
+        page=_GotoPage({f"{BANK}/index.html": {"#login-button"}}),
+        timeout_s=1,
+        captures=R.load_captures(),
+    )
+    assert record["basis"] == "live", record["basis"]
+    assert record["kind"] == "live", record["kind"]

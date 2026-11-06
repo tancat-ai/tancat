@@ -257,6 +257,27 @@ def _is_stateful_golden(dataset: dict[str, Any], placeholder: dict[str, Any]) ->
     return any(f in desc for f in STATEFUL_DESCRIPTION_FRAGMENTS)
 
 
+def _basis_label(capture_checked: int, live_checked: int) -> str:
+    """What the checked rows were actually settled against (j-0293).
+
+    ``live``         every checked row was checked against a served page;
+    ``capture``      every checked row was settled from a frozen capture;
+    ``live+capture`` both happened, and the reader must not read the second as
+                     the first;
+    ``none``         nothing was checked. Never a pass.
+
+    The stored ``kind`` used to be the name of the function that ran ("live"
+    even when every row came from a capture); this label is what happened.
+    """
+    if capture_checked and live_checked:
+        return "live+capture"
+    if capture_checked:
+        return "capture"
+    if live_checked:
+        return "live"
+    return "none"
+
+
 def _check_live_dataset(
     dataset: dict[str, Any],
     *,
@@ -410,11 +431,16 @@ def _check_live_dataset(
                 continue
         matched += 1
 
+    # j-0293: the record must say what the numbers rest on. `status` stays a
+    # stable machine value ("ok"/"fail") because callers compare it; the basis
+    # carries the distinction, so a capture-settled pass cannot be read as live.
+    basis = _basis_label(len(from_capture), checked - len(from_capture))
     return {
         "dataset_id": dataset.get("id"),
         "site": dataset.get("site"),
         "base_url": base_url,
-        "kind": "live",
+        "kind": basis,
+        "basis": basis,
         "status": "ok" if not missing else "fail",
         "checked_at": datetime.now(UTC).isoformat(),
         "goldens_checked": checked,
@@ -499,6 +525,8 @@ def _check_static_only(dataset: dict[str, Any]) -> dict[str, Any]:
         "site": dataset.get("site"),
         "base_url": dataset.get("base_url", ""),
         "kind": "static-only",
+        # j-0293: every record carries its basis, so a consumer need not guess.
+        "basis": "none",
         "status": "static-only",
         "checked_at": datetime.now(UTC).isoformat(),
         "goldens_checked": len(placeholders),
@@ -533,6 +561,7 @@ def run_revalidation(
                         "site": ds.get("site"),
                         "base_url": ds.get("base_url", ""),
                         "kind": "mock",
+                        "basis": "none",
                         "status": "unreachable",
                         "checked_at": datetime.now(UTC).isoformat(),
                         "goldens_checked": 0,
@@ -568,6 +597,7 @@ def run_revalidation(
                     "site": ds.get("site"),
                     "base_url": ds.get("base_url", ""),
                     "kind": "live",
+                    "basis": "none",
                     "status": "unreachable",
                     "checked_at": datetime.now(UTC).isoformat(),
                     "goldens_checked": 0,
