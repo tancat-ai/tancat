@@ -1,6 +1,9 @@
 # CI/CD Integration — configuration reference
 
-> **Status:** shipped — Phase 7 (GitHub Action **7a/7b** + GitLab parity **7c**).
+> **Status:** shipped — Phase 7 (GitHub Action **7a/7b** + GitLab parity **7c**),
+> with one piece of the spec not built: the ignore list is **parsed, validated and
+> counted only** — matching an ignore against a failure is not implemented, so an
+> ignore does not change a run's outcome (§6).
 > Spec: `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`. This page is the
 > configuration reference (modes, when to adapt, ignore-list format) — the
 > one-line education lives in the generated report itself.
@@ -143,8 +146,8 @@ verification — that's the point of the locator-only rule.
 
 ## 6. The ignore list (`.ai-test-ignore.yml`)
 
-The "button moved but still works" mechanism — versioned, human-recorded,
-zero test mutation:
+The intended mechanism for "button moved but still works" churn — versioned,
+human-recorded, zero test mutation:
 
 ```yaml
 ignores:
@@ -154,13 +157,27 @@ ignores:
 ```
 
 - `test` — fnmatch glob on the test name.
-- `reason` — **required** (the anti-rug rule). An ignore without a recorded
-  why fails at parse time; the report surfaces every ignore, never silently.
+- `reason` — **required** (the anti-rug rule). An ignore without a recorded why
+  is rejected at parse time. The rule exists because a silent skip is how a
+  suite rots: "we'll fix it later", with no name and no date. Recording the why
+  and the date is what keeps the entry reviewable in git and visibly ageing.
 - `match` — optional regex scoping the ignore to a failure message; empty =
   any failure of a matching test.
 
-CI reports "N known-benign ignored". `/ignore <test>` in the PR/MR thread
-renders the exact entry (with a suggested `match`) for you to commit.
+**What the product does with this list today: it validates it and counts it.**
+`tancat run` loads `.ai-test-ignore.yml`, checks the schema (an entry without a
+`reason` is rejected), compiles each `match` regex, and prints `ignores loaded: N`
+in its run summary. **Matching an ignore against a failing test is not
+implemented**, so an ignore does not yet change a run's outcome: a failure in an
+ignored test still fails the run and still appears in the CI report. The matcher
+(`IgnoreSpec.matches()`) exists and is unit-tested on its own; no run calls it on
+its results. Making it gate a run is separate work (q-0397).
+
+So the file is a committed record of intent you can review, not a switch that
+silences a failure — do not add an entry expecting a red run to go green.
+
+`/ignore <test>` in the PR/MR thread renders the exact entry (with a suggested
+`match`) for you to commit; the bot never writes the file itself.
 
 ## 7. Slash commands
 

@@ -162,7 +162,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 
 | Module | Role |
 |--------|------|
-| `src/ci_ignore.py` | CI ignore-list parsing (`.ai-test-ignore.yml`): versioned, human-recorded known-benign test failures. `load_ignore_spec()` validates structure + compiles regexes (fails fast on malformed input); `IgnoreSpec.matches()`/`describe()` gate failures in the CI report so they surface as "known-benign ignored" instead of real failures. **`reason` is required per rule** (the anti-rug rule — an ignore without a recorded why is rejected). Consumed by `tancat run` (`src/cli/headless.py`); run-phase gating lands in Phase 7b. |
+| `src/ci_ignore.py` | CI ignore-list parsing (`.ai-test-ignore.yml`): versioned, human-recorded known-benign test failures. `load_ignore_spec()` validates structure + compiles regexes (fails fast on malformed input); `IgnoreSpec.matches()` exists and is unit-tested in isolation but **nothing calls it on a run's results**, so an ignore does not yet change an outcome - a failure in an ignored test still fails the run. **`reason` is required per rule** (the anti-rug rule — an ignore without a recorded why is rejected). Consumed by `tancat run` (`src/cli/headless.py`), which loads and counts the entries (`ignores loaded: N`). Matching is separate work (q-0397). |
 
 ### 💾 Persistence & Reporting Layer
 

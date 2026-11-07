@@ -1,14 +1,16 @@
 """CI ignore-list parsing (``.ai-test-ignore.yml``) — Phase 7 CI/CD integration.
 
-A versioned, human-recorded list of *known-benign* test failures. The CI
-integration reports them as "N known-benign ignored" instead of real
-failures — the safe mechanism for "button moved but still works" churn
-(resolved in grilling 2026-08-13: no silent mutation, explicit human record,
-reviewable in git).
+A versioned, human-recorded list of *known-benign* test failures — the
+mechanism designed for "button moved but still works" churn (grilling
+2026-08-13: no silent mutation, an explicit human record, reviewable in git).
 
-Phase 7a scope: parse + validate only. Matching against actual failures
-lands with the run phase (7b) — but the matcher is implemented here so it is
-unit-testable in isolation.
+**What runs today is parse + validate + count.** `tancat run` loads the file,
+rejects an entry without a `reason` (the anti-rug rule) and prints
+``ignores loaded: N``. The matcher below is implemented and unit-tested in
+isolation, but **no run calls it on its results**, so an ignore does not change
+an outcome: a failure in an ignored test still fails the run. Wiring the matcher
+into a run is separate work (q-0397) — until then this file must not be
+described anywhere as "reporting N known-benign ignored".
 
 File format::
 
