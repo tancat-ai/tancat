@@ -537,6 +537,31 @@ def _check_static_only(dataset: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _unreachable_record(dataset: dict[str, Any], *, kind: str, error: str) -> dict[str, Any]:
+    """A record for a check that reached no page (j-0293).
+
+    ``kind`` says what was attempted and failed (``live-unreachable`` /
+    ``mock-unreachable``) - never plain ``live``, which would claim evidence this
+    run does not have. ``basis`` is ``none`` because nothing was settled, and the
+    reader should take the pair as "no measurement", with ``status`` and
+    ``error`` saying why.
+    """
+    return {
+        "dataset_id": dataset.get("id"),
+        "site": dataset.get("site"),
+        "base_url": dataset.get("base_url", ""),
+        "kind": kind,
+        "basis": "none",
+        "status": "unreachable",
+        "checked_at": datetime.now(UTC).isoformat(),
+        "goldens_checked": 0,
+        "goldens_matched": 0,
+        "pages_checked": [],
+        "missing": [],
+        "error": error,
+    }
+
+
 def run_revalidation(
     dataset_id: str | None = None, *, mock_port: int = 8781, live_timeout_s: int = 30
 ) -> list[dict[str, Any]]:
@@ -555,22 +580,7 @@ def run_revalidation(
             try:
                 records.append(_check_mock_dataset(ds, MOCK_DATASET_IDS[ds_id], port=mock_port))
             except Exception as exc:
-                records.append(
-                    {
-                        "dataset_id": ds_id,
-                        "site": ds.get("site"),
-                        "base_url": ds.get("base_url", ""),
-                        "kind": "mock",
-                        "basis": "none",
-                        "status": "unreachable",
-                        "checked_at": datetime.now(UTC).isoformat(),
-                        "goldens_checked": 0,
-                        "goldens_matched": 0,
-                        "pages_checked": [],
-                        "missing": [],
-                        "error": str(exc),
-                    }
-                )
+                records.append(_unreachable_record(ds, kind="mock-unreachable", error=str(exc)))
             continue
 
         if ds_id in STATIC_ONLY_DATASET_IDS:
@@ -591,22 +601,9 @@ def run_revalidation(
                 finally:
                     browser.close()
         except Exception as exc:
-            records.append(
-                {
-                    "dataset_id": ds_id,
-                    "site": ds.get("site"),
-                    "base_url": ds.get("base_url", ""),
-                    "kind": "live",
-                    "basis": "none",
-                    "status": "unreachable",
-                    "checked_at": datetime.now(UTC).isoformat(),
-                    "goldens_checked": 0,
-                    "goldens_matched": 0,
-                    "pages_checked": [],
-                    "missing": [],
-                    "error": str(exc),
-                }
-            )
+            # j-0293: kind 'live' with basis 'none' was a contradiction - a run
+            # that reached no page has no live evidence.
+            records.append(_unreachable_record(ds, kind="live-unreachable", error=str(exc)))
 
     return records
 

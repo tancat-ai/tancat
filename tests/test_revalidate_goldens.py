@@ -421,3 +421,43 @@ def test_a_live_only_record_still_says_live() -> None:
     )
     assert record["basis"] == "live", record["basis"]
     assert record["kind"] == "live", record["kind"]
+
+
+# -- j-0293 follow-up: "checked nothing" can never claim live evidence --------
+
+
+def test_an_unreachable_record_carries_no_live_kind_and_basis_none() -> None:
+    """The old record said kind 'live' with basis 'none' - a contradiction."""
+    record = R._unreachable_record(
+        {"id": "eval-004", "site": "theinternet", "base_url": "https://the-internet.herokuapp.com"},
+        kind="live-unreachable",
+        error="connection refused",
+    )
+
+    assert record["kind"] == "live-unreachable", record["kind"]
+    assert record["basis"] == "none", record["basis"]
+    assert record["status"] == "unreachable", record["status"]
+    assert record["error"] == "connection refused"
+    # A consumer must never read this as evidence of any kind.
+    assert record["kind"] not in ("live", "live+capture", "capture")
+    assert record["basis"] not in ("live", "live+capture", "capture")
+
+
+def test_a_static_only_record_carries_basis_none_and_no_live_kind() -> None:
+    record = R._check_static_only({"id": "eval-005", "site": "lv_insurance", "base_url": "", "conditions": []})
+
+    assert record["kind"] == "static-only"
+    assert record["basis"] == "none"
+    assert record["status"] == "static-only"
+    assert record["kind"] != "live" and record["basis"] != "live"
+
+
+def test_every_basis_value_is_one_of_the_four_named_states() -> None:
+    """A new state cannot be invented without this failing."""
+    allowed = {"live", "live+capture", "capture", "none"}
+    sample = [
+        R._unreachable_record({"id": "x"}, kind="live-unreachable", error="e"),
+        R._check_static_only({"id": "y", "site": "s", "base_url": "", "conditions": []}),
+    ]
+    for record in sample:
+        assert record["basis"] in allowed, record["basis"]
