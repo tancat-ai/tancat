@@ -257,6 +257,27 @@ def _is_stateful_golden(dataset: dict[str, Any], placeholder: dict[str, Any]) ->
     return any(f in desc for f in STATEFUL_DESCRIPTION_FRAGMENTS)
 
 
+def _basis_label(capture_checked: int, live_checked: int) -> str:
+    """What the checked rows were actually settled against (j-0293).
+
+    ``live``         every checked row was checked against a served page;
+    ``capture``      every checked row was settled from a frozen capture;
+    ``live+capture`` both happened, and the reader must not read the second as
+                     the first;
+    ``none``         nothing was checked. Never a pass.
+
+    The stored ``kind`` used to be the name of the function that ran ("live"
+    even when every row came from a capture); this label is what happened.
+    """
+    if capture_checked and live_checked:
+        return "live+capture"
+    if capture_checked:
+        return "capture"
+    if live_checked:
+        return "live"
+    return "none"
+
+
 def _check_live_dataset(
     dataset: dict[str, Any],
     *,
@@ -410,11 +431,16 @@ def _check_live_dataset(
                 continue
         matched += 1
 
+    # j-0293: the record must say what the numbers rest on. `status` stays a
+    # stable machine value ("ok"/"fail") because callers compare it; the basis
+    # carries the distinction, so a capture-settled pass cannot be read as live.
+    basis = _basis_label(len(from_capture), checked - len(from_capture))
     return {
         "dataset_id": dataset.get("id"),
         "site": dataset.get("site"),
         "base_url": base_url,
-        "kind": "live",
+        "kind": basis,
+        "basis": basis,
         "status": "ok" if not missing else "fail",
         "checked_at": datetime.now(UTC).isoformat(),
         "goldens_checked": checked,
@@ -499,6 +525,8 @@ def _check_static_only(dataset: dict[str, Any]) -> dict[str, Any]:
         "site": dataset.get("site"),
         "base_url": dataset.get("base_url", ""),
         "kind": "static-only",
+        # j-0293: every record carries its basis, so a consumer need not guess.
+        "basis": "none",
         "status": "static-only",
         "checked_at": datetime.now(UTC).isoformat(),
         "goldens_checked": len(placeholders),
@@ -506,6 +534,31 @@ def _check_static_only(dataset: dict[str, Any]) -> dict[str, Any]:
         "pages_checked": [],
         "missing": [],
         "note": "No local mock or public site — validated via frozen captures (see eval harness).",
+    }
+
+
+def _unreachable_record(dataset: dict[str, Any], *, kind: str, error: str) -> dict[str, Any]:
+    """A record for a check that reached no page (j-0293).
+
+    ``kind`` says what was attempted and failed (``live-unreachable`` /
+    ``mock-unreachable``) - never plain ``live``, which would claim evidence this
+    run does not have. ``basis`` is ``none`` because nothing was settled, and the
+    reader should take the pair as "no measurement", with ``status`` and
+    ``error`` saying why.
+    """
+    return {
+        "dataset_id": dataset.get("id"),
+        "site": dataset.get("site"),
+        "base_url": dataset.get("base_url", ""),
+        "kind": kind,
+        "basis": "none",
+        "status": "unreachable",
+        "checked_at": datetime.now(UTC).isoformat(),
+        "goldens_checked": 0,
+        "goldens_matched": 0,
+        "pages_checked": [],
+        "missing": [],
+        "error": error,
     }
 
 
@@ -527,21 +580,7 @@ def run_revalidation(
             try:
                 records.append(_check_mock_dataset(ds, MOCK_DATASET_IDS[ds_id], port=mock_port))
             except Exception as exc:
-                records.append(
-                    {
-                        "dataset_id": ds_id,
-                        "site": ds.get("site"),
-                        "base_url": ds.get("base_url", ""),
-                        "kind": "mock",
-                        "status": "unreachable",
-                        "checked_at": datetime.now(UTC).isoformat(),
-                        "goldens_checked": 0,
-                        "goldens_matched": 0,
-                        "pages_checked": [],
-                        "missing": [],
-                        "error": str(exc),
-                    }
-                )
+                records.append(_unreachable_record(ds, kind="mock-unreachable", error=str(exc)))
             continue
 
         if ds_id in STATIC_ONLY_DATASET_IDS:
@@ -562,43 +601,68 @@ def run_revalidation(
                 finally:
                     browser.close()
         except Exception as exc:
-            records.append(
-                {
-                    "dataset_id": ds_id,
-                    "site": ds.get("site"),
-                    "base_url": ds.get("base_url", ""),
-                    "kind": "live",
-                    "status": "unreachable",
-                    "checked_at": datetime.now(UTC).isoformat(),
-                    "goldens_checked": 0,
-                    "goldens_matched": 0,
-                    "pages_checked": [],
-                    "missing": [],
-                    "error": str(exc),
-                }
-            )
+            # j-0293: kind 'live' with basis 'none' was a contradiction - a run
+            # that reached no page has no live evidence.
+            records.append(_unreachable_record(ds, kind="live-unreachable", error=str(exc)))
 
     return records
 
 
+def _basis_split(record: dict[str, Any]) -> tuple[int, int, int, int]:
+    """(live_matched, live_checked, capture_matched, capture_checked) for one record.
+
+    The stored totals count capture-settled rows together with live ones. That is
+    honest in the JSON, which lists the capture rows by name, but it is NOT what
+    the printed total may say: a capture pass is historical evidence, and a reader
+    who sees it inside "goldens matched" takes it for a live run.
+    """
+    capture_rows = record.get("stateful_checked_from_capture") or []
+    capture_checked = len(capture_rows)
+    capture_matched = sum(1 for row in capture_rows if row.get("status") == "ok")
+    matched = int(record.get("goldens_matched") or 0)
+    checked = int(record.get("goldens_checked") or 0)
+    return matched - capture_matched, checked - capture_checked, capture_matched, capture_checked
+
+
 def render_report(records: list[dict[str, Any]]) -> str:
     lines = ["Golden-key re-validation (Phase 6i)", f"  ran at   : {datetime.now(UTC).isoformat()}"]
+    any_capture = False
     for r in records:
         mark = "✓" if r["status"] == "ok" else ("⚠" if r["status"] in ("unreachable", "static-only") else "✗")
         stat = r["status"]
         if r["goldens_matched"] is not None:
+            live_matched, live_checked, cap_matched, cap_checked = _basis_split(r)
+            if live_checked == 0 and cap_checked:
+                # "ok" here rests on historical evidence alone. Say so in the
+                # status column too, or the marker itself reads as a live pass.
+                stat = f"{stat} (capture-only)"
             extra = f" (+{r.get('stateful_skipped', 0)} stateful-skipped)" if r.get("stateful_skipped") else ""
-            lines.append(
-                f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:12} {r['goldens_matched']}/{r['goldens_checked']} goldens{extra}"
-            )
+            if cap_checked:
+                any_capture = True
+                counts = (
+                    f"{live_matched}/{live_checked} live + {cap_matched}/{cap_checked} by capture "
+                    f"= {live_matched + cap_matched}/{live_checked + cap_checked} goldens"
+                )
+            else:
+                counts = f"{live_matched}/{live_checked} live goldens"
+            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:20} {counts}{extra}")
         else:
-            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:12} (static-only)")
+            lines.append(f"  {mark} {r['dataset_id']:10} {r['site']:22} {stat:20} (static-only)")
         for m in r.get("missing", [])[:6]:
+            # A capture-based miss is marked too: the JSON says basis: capture,
+            # and a printed failure must not read as a live one either.
+            basis = "[capture] " if m.get("basis") == "capture" else ""
             lines.append(
-                f"      ✗ {m.get('description')} @ {m.get('target_page') or m.get('outcome_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
+                f"      ✗ {basis}{m.get('description')} @ {m.get('target_page') or m.get('outcome_page')} — {m.get('missing_selectors') or m.get('actual_url')}"
             )
         if r.get("error"):
             lines.append(f"      unreachable: {r['error'][:120]}")
+    if any_capture:
+        lines.append("")
+        lines.append(
+            "  'by capture' rows were settled against the frozen capture in scraped_pages/, "
+            "not against a live page - historical evidence, not a live pass."
+        )
     return "\n".join(lines)
 
 

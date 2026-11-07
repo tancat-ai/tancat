@@ -308,3 +308,156 @@ def test_the_committed_captures_are_the_banking_mock_pages() -> None:
     for name in ("index", "dashboard", "transfer", "payments", "transfer_success"):
         assert f"http://localhost:8781/{name}.html" in captures, name
     assert str(R.CAPTURES_DIR).replace("\\", "/").endswith("fixtures/scraped_pages")
+
+
+# -- j-0293: the printed summary must not fuse a capture pass into a live one --
+
+
+def test_the_summary_prints_live_and_capture_counts_separately() -> None:
+    """One live-style row and one capture row: the reader sees two numbers."""
+    records = [
+        {
+            "dataset_id": "eval-008",
+            "site": "banking_mock",
+            "status": "ok",
+            "goldens_matched": 5,
+            "goldens_checked": 5,
+            "stateful_checked_from_capture": [
+                {"description": "a", "status": "ok"},
+                {"description": "b", "status": "ok"},
+            ],
+            "missing": [],
+        },
+        {
+            "dataset_id": "eval-001",
+            "site": "saucedemo",
+            "status": "ok",
+            "goldens_matched": 3,
+            "goldens_checked": 4,
+            "stateful_checked_from_capture": [],
+            "missing": [],
+        },
+    ]
+
+    text = R.render_report(records)
+
+    capture_line = next(line for line in text.splitlines() if "eval-008" in line)
+    assert "3/3 live" in capture_line, capture_line
+    assert "2/2 by capture" in capture_line, capture_line
+    assert "3/3 goldens" not in capture_line, "the row still prints one fused total"
+    live_line = next(line for line in text.splitlines() if "eval-001" in line)
+    assert "3/4 live" in live_line and "capture" not in live_line
+    assert "frozen capture" in text  # the note that says what "by capture" means
+
+
+def test_a_capture_only_row_prints_no_live_count_that_includes_them() -> None:
+    """Every match came from the frozen capture: the live count must read 0."""
+    records = [
+        {
+            "dataset_id": "eval-008",
+            "site": "banking_mock",
+            "status": "ok",
+            "goldens_matched": 3,
+            "goldens_checked": 3,
+            "stateful_checked_from_capture": [
+                {"description": "a", "status": "ok"},
+                {"description": "b", "status": "ok"},
+                {"description": "c", "status": "ok"},
+            ],
+            "missing": [],
+        }
+    ]
+
+    text = R.render_report(records)
+    line = next(line for line in text.splitlines() if "eval-008" in line)
+
+    assert "0/0 live" in line, line
+    assert "3/3 by capture" in line, line
+    assert "3/3 live" not in line, "a capture pass was printed as a live pass"
+    assert "capture-only" in line, "the status still reads as a live ok"
+
+
+# -- j-0293 follow-up: the stored record must say what its numbers rest on ----
+
+
+def test_a_capture_settled_record_stores_its_basis_not_a_live_pass() -> None:
+    """Stored status "ok" alone read as a live pass; the record now says capture."""
+    record = R._check_live_dataset(
+        _dataset(
+            _row("CLICK", "Transfer Money link", "#transfer-link", f"{BANK}/dashboard.html", f"{BANK}/transfer.html")
+        ),
+        page=_GotoPage({}),
+        timeout_s=1,
+        captures=R.load_captures(),
+    )
+
+    assert record["basis"] == "capture", f"the record does not say what settled it: {record.get('basis')!r}"
+    assert record["kind"] == "capture", f"kind still names the path that ran, not the evidence: {record['kind']!r}"
+    assert record["status"] == "ok"  # the stored status stays a stable machine value
+
+
+def test_a_mixed_record_says_live_and_capture() -> None:
+    """One stateful row from a capture, one ordinary row from the served page."""
+    captures = R.load_captures()
+    ds = _dataset(
+        _row("CLICK", "Transfer Money link", "#transfer-link", f"{BANK}/dashboard.html", f"{BANK}/transfer.html"),
+        _row("CLICK", "Login button", "#login-button", f"{BANK}/index.html"),
+    )
+    page = _GotoPage({f"{BANK}/index.html": {"#login-button"}})
+
+    record = R._check_live_dataset(ds, page=page, timeout_s=1, captures=captures)
+
+    assert record["goldens_checked"] == 2
+    assert record["basis"] == "live+capture", record["basis"]
+    assert record["kind"] == "live+capture", record["kind"]
+
+
+def test_a_live_only_record_still_says_live() -> None:
+    record = R._check_live_dataset(
+        _dataset(_row("CLICK", "Login button", "#login-button", f"{BANK}/index.html")),
+        page=_GotoPage({f"{BANK}/index.html": {"#login-button"}}),
+        timeout_s=1,
+        captures=R.load_captures(),
+    )
+    assert record["basis"] == "live", record["basis"]
+    assert record["kind"] == "live", record["kind"]
+
+
+# -- j-0293 follow-up: "checked nothing" can never claim live evidence --------
+
+
+def test_an_unreachable_record_carries_no_live_kind_and_basis_none() -> None:
+    """The old record said kind 'live' with basis 'none' - a contradiction."""
+    record = R._unreachable_record(
+        {"id": "eval-004", "site": "theinternet", "base_url": "https://the-internet.herokuapp.com"},
+        kind="live-unreachable",
+        error="connection refused",
+    )
+
+    assert record["kind"] == "live-unreachable", record["kind"]
+    assert record["basis"] == "none", record["basis"]
+    assert record["status"] == "unreachable", record["status"]
+    assert record["error"] == "connection refused"
+    # A consumer must never read this as evidence of any kind.
+    assert record["kind"] not in ("live", "live+capture", "capture")
+    assert record["basis"] not in ("live", "live+capture", "capture")
+
+
+def test_a_static_only_record_carries_basis_none_and_no_live_kind() -> None:
+    record = R._check_static_only({"id": "eval-005", "site": "lv_insurance", "base_url": "", "conditions": []})
+
+    assert record["kind"] == "static-only"
+    assert record["basis"] == "none"
+    assert record["status"] == "static-only"
+    assert record["kind"] != "live" and record["basis"] != "live"
+
+
+def test_every_basis_value_is_one_of_the_four_named_states() -> None:
+    """A new state cannot be invented without this failing."""
+    allowed = {"live", "live+capture", "capture", "none"}
+    sample = [
+        R._unreachable_record({"id": "x"}, kind="live-unreachable", error="e"),
+        R._check_static_only({"id": "y", "site": "s", "base_url": "", "conditions": []}),
+    ]
+    for record in sample:
+        assert record["basis"] in allowed, record["basis"]
