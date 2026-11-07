@@ -170,6 +170,63 @@ def _render_markdown(report: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _coverage_rows_for_html(report: dict[str, object]) -> list[dict[str, object]]:
+    """The CI report as coverage rows for the product's HTML writer (j-0296).
+
+    Reuses ``src.report_formatters.generate_html_report`` - the same writer the
+    menu and Streamlit use - instead of a second HTML implementation. The junit
+    names every failed test but not the passed ones, so a passing count is shown
+    as one labelled row rather than inventing per-test names.
+    """
+    rows: list[dict[str, object]] = []
+    raw_failures = report.get("failed_tests")
+    failures: list[dict[str, object]] = (
+        [row for row in raw_failures if isinstance(row, dict)] if isinstance(raw_failures, list) else []
+    )
+    for failure in failures:
+        rows.append(
+            {
+                "test_name": str(failure.get("test") or "unknown"),
+                "status": "failed",
+                "duration": 0.0,
+                "screenshots": [],
+            }
+        )
+    raw_tests = report.get("tests") or {}
+    tests: dict[str, object] = raw_tests if isinstance(raw_tests, dict) else {}
+    duration = float(tests.get("duration_s") or 0.0)  # type: ignore[arg-type]
+    for label, status, key in (
+        ("passed", "passed", "passed"),
+        ("skipped", "pending", "skipped"),
+        ("errored", "failed", "errors"),
+    ):
+        count = int(tests.get(key) or 0)  # type: ignore[call-overload]
+        if count:
+            rows.append(
+                {
+                    "test_name": f"{count} {label} (names are in the junit)",
+                    "status": status,
+                    "duration": duration if label == "passed" else 0.0,
+                    "screenshots": [],
+                }
+            )
+    return rows
+
+
+def render_report_html(report: dict[str, object]) -> str:
+    """Render the report as self-contained HTML with the product's own writer."""
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from src.report_formatters import generate_html_report
+
+    title = str(report.get("story") or report.get("package") or report.get("mode") or "CI run")
+    return generate_html_report(_coverage_rows_for_html(report), title=title)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="report",
@@ -234,6 +291,9 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (out_dir / "report.md").write_text(_render_markdown(report), encoding="utf-8")
+    # j-0296: the CI artefacts are the same two the other surfaces ship - JSON
+    # and HTML - so a CI run leaves evidence a person can open, not only prose.
+    (out_dir / "report.html").write_text(render_report_html(report), encoding="utf-8")
     print(
         f"report: {stats['total']} tests, {stats['failed']} failed, "
         f"{len(stats['repair_candidates'])} repair candidate(s) -> {out_dir}"

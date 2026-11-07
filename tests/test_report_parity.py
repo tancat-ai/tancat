@@ -59,9 +59,11 @@ def test_the_cli_menu_offers_every_format_the_package_can_write() -> None:
     assert set(SURFACE_FORMATS["cli_menu"]) == set(REPORT_FORMATS)
 
 
-def test_the_ci_gap_is_recorded_not_silently_dropped() -> None:
-    assert "ci_action" in OUT_OF_SCOPE_SURFACES
-    assert "report.json" in OUT_OF_SCOPE_SURFACES["ci_action"]
+def test_the_ci_gap_is_closed_not_merely_recorded() -> None:
+    """j-0296 closed it: the action ships JSON and HTML beside the comment markdown."""
+    assert "ci_action" in SURFACE_FORMATS
+    assert set(PARITY_REQUIRED) <= set(SURFACE_FORMATS["ci_action"])
+    assert "ci_action" not in OUT_OF_SCOPE_SURFACES
 
 
 def test_a_headless_run_writes_the_json_and_html_reports(tmp_path: Path) -> None:
