@@ -1,0 +1,24 @@
+# Dead code found by vulture at its highest confidence, as of 2026-11-06.
+#
+# WHAT THIS IS: the baseline `tests/test_shipped_claims.py::test_no_new_dead_code_in_src`
+# compares against. The scan runs `uv run --with vulture vulture src --min-confidence 100`
+# - vulture 2.16 - and fails when it finds something NOT on this list. Entries here are
+# known and intentionally not fixed in that job (the audit lists them; a separate item
+# owns them).
+#
+# WHAT IT IS NOT: a proof that nothing is dead. Vulture's 100% tier reports unused locals
+# and unreachable code; its wider tiers (60-80%) produced ~327 findings on src/ with
+# false positives, so they are not used. A name can be referenced and still be dead in
+# practice - the ignore list was. This scan would NOT have caught it.
+#
+# To update: delete a line when the dead code is fixed, add one only with a reason.
+
+src/cli/retro_ui.py: unused variable 'group_labels'
+src/code_postprocessor.py: unreachable code after 'return'
+src/prompt_utils.py: unused variable 'target_condition_intent'
+src/rag_store_lock.py: unused variable 'exc_type'
+src/rag_store_lock.py: unused variable 'tb'
+src/skip_manager.py: unused variable 'original_lines'
+src/sqlite_persistence.py: unused variable 'exc_tb'
+src/sqlite_persistence.py: unused variable 'exc_type'
+src/sqlite_persistence.py: unused variable 'exc_val'

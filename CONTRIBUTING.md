@@ -197,6 +197,36 @@ If you are adding a new `src/` module:
 
 ---
 
+### Saying "shipped" (the rule a page must follow)
+
+**A feature is shipped when a named test proves it, not when the code exists.**
+
+A page may put `shipped` or `available` in its status line only if the same
+section carries a marker naming the test that proves it:
+
+```markdown
+> **Status:** shipped — Phase 7 (... your feature ...)
+
+<!-- shipped-check: tests/test_ci_report.py::test_report_main_writes_comment_payload -->
+```
+
+The checker (`scripts/check_shipped_claims.py`, also run as
+`tests/test_shipped_claims.py`) collects each marker's test and runs it. It fails
+when a status line claims shipped and has no marker, when a marker names a test
+that does not exist, and when that test fails. It never passes quietly: a claim
+it cannot verify is reported with the file, the line and the section.
+
+Two things follow, and both are deliberate:
+
+- **Writing the docs first is fine - the page goes red until the test exists.** A
+  red docs check is a task list, not a broken build; the alternative is the lie
+  this rule exists to stop (a shipped line for a feature nothing exercises).
+- **The compiler will not save you.** The dead-code scan beside this check
+  (`tests/test_shipped_claims.py::test_no_new_dead_code_in_src`) finds names
+  nothing references. It would **not** have caught the ignore list: that matcher
+  was referenced, imported and unit-tested - what was missing was any path that
+  called it on a run. Referenced is not shipped.
+
 ## Commit Message Format
 
 Use plain, descriptive imperative sentences. No backticks in commit messages.
