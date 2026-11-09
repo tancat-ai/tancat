@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """A page may say "shipped" only when a named test proves it.
 
-The rule comes from the half-finished-features audit (t-1350) and is the one
-check that would have caught the ignore list the day the lie was written: the
-code existed, the docs said shipped, and nothing ever exercised the promise.
+The rule comes from the half-finished-features audit (t-1350): the ignore list
+was documented as shipped, the code existed, and nothing ever exercised the
+promise. A named test is the difference between "the code is there" and "this
+works".
 
 How a section earns the word:
 
@@ -11,19 +12,41 @@ How a section earns the word:
 
     <!-- shipped-check: tests/test_ci_report.py::test_report_main_writes_comment_payload -->
 
-A section whose status line claims **shipped** or **available** must carry one
-marker naming a test id (``file::function``, optionally ``file::Class::method``).
-The checker collects that id and runs it. Anything it cannot verify is reported
-- no marker, a marker pointing at a test that does not exist, a marker whose
-test fails - and the exit code is 1. It never passes quietly.
+A status banner claiming **shipped** or **available** must carry one or more
+markers in its section (a negation - "NOT SHIPPED" - claims nothing). Every
+marker in the section is run; a broad claim with three proofs must be proved
+three times. Five outcomes count as proof, and only the first is proof at all:
 
-Scope, stated so nobody over-reads it: this checks the **status banner** of a
-feature page (``docs/*.md``, the ``> **Status:** ...`` line), which is the one
-place a page states its own shipping state. It deliberately does not scan
-``docs/sessions/`` or ``docs/specs/`` - those are records of what a session did
-and what a feature was meant to do, not a page asserting the product works. A
-prose sentence elsewhere can still be wrong; the audit's other findings are
-handled by their own items.
+* **passed with an assertion** - the test exists, it is not skipped or xfailed,
+  and its own source contains an assertion (a test that runs and asserts nothing
+  proves nothing, however green it is);
+* **skipped / xfail** - refused: a skip is the absence of proof, not a pass;
+* **failed** - refused;
+* **missing** - refused: a marker naming no test proves nothing;
+* **collection error** - refused and attributed to the marker that broke the
+  collection, so one bad id cannot blame every other page (the checker falls back
+  to running markers one at a time when the batch leaves no junit).
+
+Section boundary: a banner's section runs to the next `## ` (or `#`) heading, so
+a marker inside a `###` subsection counts for the `##` claim - and the report
+names the subsection that proved it.
+
+Scope, stated exactly: the checker scans `docs/*.md` - the feature pages whose
+banner states the product's own shipping state. The other directories are
+records, not claims, and are deliberately not scanned (the counts are the ones
+measured on 2026-11-06):
+
+* `docs/plans/` (13 files, 20 banners) - a plan's status describes the session
+  that wrote it; "Complete" there means the plan was executed, not that the
+  product works today;
+* `docs/specs/` (42 files, 42 banners) - intent, not state;
+* `docs/sessions/` (5 files, 5 banners) - handovers, a log of what a session did;
+* `docs/archived/` (1 file) - superseded pages kept for history;
+* `docs/private/` - untracked notes.
+
+A new directory under `docs/` that starts carrying status banners is not
+silently out of scope: `tests/test_shipped_claims.py` requires every such
+directory to be either scanned or listed above, so the limit cannot drift.
 
 Usage::
 
@@ -34,6 +57,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -45,10 +69,31 @@ from pathlib import Path
 
 STATUS_RE = re.compile(r"^\s*>?\s*\*\*Status:\*\*\s*(?P<status>.+?)\s*$")
 MARKER_RE = re.compile(r"<!--\s*shipped-check:\s*(?P<test>[^\s>]+\.py::[^\s>]+)\s*-->")
-HEADING_RE = re.compile(r"^#{1,2}\s")
+H2_RE = re.compile(r"^#{1,2}\s")
+H3_RE = re.compile(r"^###\s")
 CLAIM_WORDS = ("shipped", "available")
-#: A status line that says "not shipped" / "not available" claims nothing.
 NEGATED_RE = re.compile(r"\b(?:not|never|un)\s*-?\s*(?:shipped|available)", re.IGNORECASE)
+
+#: Directories under docs/ that are records, not claims. Kept honest by the suite.
+OUT_OF_SCOPE: dict[str, str] = {
+    "plans": "design records: a plan's status describes the session that wrote it",
+    "specs": "design records: intent, not state",
+    "sessions": "session logs: what a session did, not what the product does",
+    "archived": "superseded pages kept for history",
+    "private": "untracked private notes",
+}
+
+#: Calls that assert, for a test that proves its claim through a framework call.
+_ASSERT_CALL_HINTS = ("raises", "fail", "warns", "to_have_", "to_be_", "to_contain", "to_equal")
+
+
+@dataclass(frozen=True)
+class Marker:
+    """One ``shipped-check`` comment: the test that must prove the claim."""
+
+    test: str
+    line: int
+    subsection: str
 
 
 @dataclass(frozen=True)
@@ -59,8 +104,12 @@ class Claim:
     line: int
     section: str
     status: str
-    marker_test: str | None
-    marker_line: int | None
+    markers: tuple[Marker, ...]
+
+
+def _claims_shipping(status: str) -> bool:
+    """Whether a status line asserts the thing works (negations do not count)."""
+    return any(word in NEGATED_RE.sub("", status).lower() for word in CLAIM_WORDS)
 
 
 def _section_name(lines: list[str], index: int) -> str:
@@ -71,17 +120,20 @@ def _section_name(lines: list[str], index: int) -> str:
     return "(top of file)"
 
 
-def _claims_shipping(status: str) -> bool:
-    """Whether a status line asserts the thing works (negations do not count)."""
-    unnegated = NEGATED_RE.sub("", status).lower()
-    return any(word in unnegated for word in CLAIM_WORDS)
+def _subsection_at(lines: list[str], start: int, index: int) -> str:
+    """The `###` heading covering *index* inside the section starting at *start*."""
+    for back in range(index, start - 1, -1):
+        if H3_RE.match(lines[back]):
+            return lines[back].lstrip("#").strip()
+    return ""
 
 
 def find_claims(root: Path, docs_dir: str = "docs") -> list[Claim]:
-    """Every feature page's status line whose text claims shipped/available.
+    """Every feature page's status line that claims shipped/available.
 
-    Feature pages are ``<docs_dir>/*.md`` - the banners a reader consults. The
-    session and spec directories are records, not claims, and are not scanned.
+    Feature pages are ``<docs_dir>/*.md``; see the module docstring for what is
+    out of scope and why. Every marker in the section is collected, not just the
+    first: a broad claim may need several proofs.
     """
     claims: list[Claim] = []
     for doc in sorted((root / docs_dir).glob("*.md")):
@@ -94,26 +146,67 @@ def find_claims(root: Path, docs_dir: str = "docs") -> list[Claim]:
             if not _claims_shipping(status):
                 continue
             end = next(
-                (later for later in range(index + 1, len(lines)) if HEADING_RE.match(lines[later])),
+                (later for later in range(index + 1, len(lines)) if H2_RE.match(lines[later])),
                 len(lines),
             )
-            marker_test, marker_line = None, None
+            markers: list[Marker] = []
             for later in range(index, end):
                 marker = MARKER_RE.search(lines[later])
                 if marker is not None:
-                    marker_test, marker_line = marker.group("test"), later + 1
-                    break
+                    markers.append(
+                        Marker(
+                            test=marker.group("test"),
+                            line=later + 1,
+                            subsection=_subsection_at(lines, index, later),
+                        )
+                    )
             claims.append(
                 Claim(
                     doc=doc.relative_to(root),
                     line=index + 1,
                     section=_section_name(lines, index),
                     status=status,
-                    marker_test=marker_test,
-                    marker_line=marker_line,
+                    markers=tuple(markers),
                 )
             )
     return claims
+
+
+def _has_assertion(root: Path, node_id: str) -> bool | None:
+    """Whether the named test's own body asserts something.
+
+    True = an ``assert``, a ``pytest.raises``/``fail``/``warns`` call, or a
+    Playwright ``expect(...).to_have_*`` style call. False = the body runs and
+    asserts nothing, so its green means nothing. None = the source cannot be read
+    (reported as a problem, never as a pass).
+
+    A test that delegates its proof entirely to an opaque helper is refused: the
+    rule is that the proof is visible where the claim is made.
+    """
+    path_part, _, rest = node_id.partition("::")
+    parts = [part for part in rest.split("::") if part]
+    if not parts:
+        return None
+    name = parts[-1]
+    source = root / path_part
+    if not source.is_file():
+        return None
+    try:
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+    except OSError, SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Assert):
+                    return True
+                if isinstance(inner, ast.Call):
+                    target = inner.func
+                    attr = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", "")
+                    if any(hint in str(attr) for hint in _ASSERT_CALL_HINTS):
+                        return True
+            return False
+    return None
 
 
 def _node_key(node_id: str) -> str:
@@ -121,10 +214,26 @@ def _node_key(node_id: str) -> str:
     return node_id.replace(".py::", ".").replace("/", ".").replace("::", ".").replace(".py", "")
 
 
-def run_tests(root: Path, node_ids: list[str]) -> dict[str, str]:
-    """Run *node_ids* together; map each id to 'passed' | 'failed' | 'missing'."""
-    if not node_ids:
-        return {}
+def _parse_junit(xml_path: Path) -> dict[str, str]:
+    outcomes: dict[str, str] = {}
+    if not xml_path.is_file():
+        return outcomes
+    for case in ET.parse(xml_path).iter("testcase"):
+        key = f"{case.get('classname', '')}.{case.get('name', '')}"
+        kinds = {child.tag: child for child in case}
+        if "failure" in kinds or "error" in kinds:
+            outcomes[key] = "failed"
+        elif "skipped" in kinds:
+            skipped = kinds["skipped"]
+            kind = str(skipped.get("type") or "")
+            outcomes[key] = "xfail" if "xfail" in kind.lower() else "skipped"
+        else:
+            outcomes[key] = "passed"
+    return outcomes
+
+
+def _pytest_once(root: Path, node_ids: list[str]) -> dict[str, str] | None:
+    """Run *node_ids* together; ``None`` when pytest wrote no junit (collection died)."""
     with tempfile.TemporaryDirectory() as tmp:
         xml_path = Path(tmp) / "shipped.xml"
         command = [
@@ -140,22 +249,45 @@ def run_tests(root: Path, node_ids: list[str]) -> dict[str, str]:
             f"--junitxml={xml_path}",
         ]
         subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=300)
-        if not xml_path.is_file():
-            return dict.fromkeys(node_ids, "missing")
-        cases: dict[str, str] = {}
-        for case in ET.parse(xml_path).iter("testcase"):
-            key = f"{case.get('classname', '')}.{case.get('name', '')}"
-            bad = any(child.tag in ("failure", "error") for child in case)
-            cases[key] = "failed" if bad else "passed"
+        parsed = _parse_junit(xml_path)
+    if not parsed:
+        return None
+    return parsed
+
+
+def run_tests(root: Path, node_ids: list[str]) -> dict[str, str]:
+    """Run *node_ids*; map each to passed|failed|skipped|xfail|missing|collect_error.
+
+    The batch run is one process. When it leaves no junit - pytest exits 4 on a
+    bad id - the markers are re-run one at a time so the failure is attributed to
+    the marker that broke it instead of being reported against every page.
+    """
+    if not node_ids:
+        return {}
+    batched = _pytest_once(root, node_ids)
+    if batched is not None:
+        return {node: batched.get(_node_key(node), "missing") for node in node_ids}
+
     results: dict[str, str] = {}
     for node in node_ids:
-        key = _node_key(node)
-        results[node] = cases.get(key, "missing")
+        single = _pytest_once(root, [node])
+        if single is None:
+            results[node] = "collect_error"
+        else:
+            results[node] = single.get(_node_key(node), "missing")
     return results
 
 
-#: ``runner(root, node_ids) -> {node_id: "passed" | "failed" | "missing"}``.
+#: ``runner(root, node_ids) -> {node_id: outcome}``.
 Runner = Callable[[Path, list[str]], dict[str, str]]
+
+_OUTCOME_PROBLEMS = {
+    "skipped": "is SKIPPED - a skip is the absence of proof, not a pass",
+    "xfail": "is XFAIL (expected to fail) - an expected failure proves nothing",
+    "failed": "FAILS - the page may not say shipped while its own proof is red",
+    "missing": "does not exist - a marker naming no test proves nothing",
+    "collect_error": "broke pytest's collection (exit 4) - the marker itself is wrong",
+}
 
 
 def verify(
@@ -166,13 +298,14 @@ def verify(
 ) -> list[str]:
     """Every claim this repository cannot verify, as sentences naming the place.
 
-    ``runner`` lets a caller inject a fake outcome map (the suite uses one so the
-    failure paths are tested without nesting pytest inside pytest).
+    Exercises every marker in every claiming section, and refuses a test that
+    passes without asserting anything. ``runner`` lets a caller inject outcomes
+    (the suite uses it so the failure paths do not nest pytest in pytest).
     """
     claims = find_claims(root, docs_dir)
     if not claims:
         return []
-    to_run = sorted({claim.marker_test for claim in claims if claim.marker_test})
+    to_run = sorted({marker.test for claim in claims for marker in claim.markers})
     outcomes: dict[str, str] = {}
     if to_run:
         outcomes = dict(runner(root, to_run) if runner is not None else run_tests(root, to_run))
@@ -180,24 +313,39 @@ def verify(
     problems: list[str] = []
     for claim in claims:
         where = f"{claim.doc}:{claim.line} ('{claim.section}')"
-        if claim.marker_test is None:
+        if not claim.markers:
             problems.append(
                 f"{where} says '{claim.status}' but carries no shipped-check marker - "
                 "a section may claim shipped only when a named test proves it"
             )
             continue
-        outcome = outcomes.get(claim.marker_test, "missing")
-        if outcome == "missing":
-            problems.append(
-                f"{where} points at {claim.marker_test} (line {claim.marker_line}), which does not exist - "
-                "a marker naming no test proves nothing"
-            )
-        elif outcome != "passed":
-            problems.append(
-                f"{where} points at {claim.marker_test} (line {claim.marker_line}), which FAILS - "
-                "the page may not say shipped while its own proof is red"
-            )
+        for marker in claim.markers:
+            outcome = outcomes.get(marker.test, "missing")
+            if outcome == "passed":
+                asserted = _has_assertion(root, marker.test)
+                if asserted is not True:
+                    problems.append(
+                        f"{where} points at {marker.test} (line {marker.line}), which passes but "
+                        + (
+                            "asserts nothing - a green test that asserts nothing proves nothing"
+                            if asserted is False
+                            else "could not be read, so it is not proof"
+                        )
+                    )
+                continue
+            problem = _OUTCOME_PROBLEMS.get(outcome, "could not be verified")
+            problems.append(f"{where} points at {marker.test} (line {marker.line}), which {problem}")
     return problems
+
+
+def describe(root: Path, docs_dir: str = "docs") -> list[str]:
+    """One line per claim: where it is, and which test (and subsection) proves it."""
+    lines: list[str] = []
+    for claim in find_claims(root, docs_dir):
+        for marker in claim.markers:
+            where = f" under '{marker.subsection}'" if marker.subsection else ""
+            lines.append(f"  {claim.doc}:{claim.line}{where} -> {marker.test}")
+    return lines
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,16 +355,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
-    problems = verify(root, args.docs, runner=run_tests)
+    problems = verify(root, args.docs)
     if problems:
         print("SHIPPED CLAIMS THAT CANNOT BE VERIFIED:", file=sys.stderr)
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)
         return 1
     claims = find_claims(root, args.docs)
-    print(f"shipped claims: {len(claims)} checked, every one proved by a passing test")
-    for claim in claims:
-        print(f"  {claim.doc}:{claim.line} -> {claim.marker_test}")
+    marker_count = sum(len(claim.markers) for claim in claims)
+    print(f"shipped claims: {len(claims)} section(s), {marker_count} marker(s), every one proved by a passing test")
+    for line in describe(root, args.docs):
+        print(line)
+    print("  out of scope (records, not claims): " + ", ".join(sorted(OUT_OF_SCOPE)))
     return 0
 
 

@@ -211,10 +211,21 @@ section carries a marker naming the test that proves it:
 ```
 
 The checker (`scripts/check_shipped_claims.py`, also run as
-`tests/test_shipped_claims.py`) collects each marker's test and runs it. It fails
-when a status line claims shipped and has no marker, when a marker names a test
-that does not exist, and when that test fails. It never passes quietly: a claim
-it cannot verify is reported with the file, the line and the section.
+`tests/test_shipped_claims.py`) collects **every** marker in the section - a
+broad claim with three proofs must be proved three times - and runs them. A
+marker counts only when its test **passes with an assertion**. These are
+refusals, each reported with the file, the line and the section:
+
+- no marker, or a marker naming a test that does not exist;
+- a test that fails, or that **breaks pytest's collection** (the report names
+  that marker, not every other page);
+- a test that is **skipped** or **xfail** - a skip is the absence of proof, not a
+  pass;
+- a test that **asserts nothing** - green means nothing if the test proves
+  nothing.
+
+A marker inside a `###` subsection counts for the `##` claim, and the report
+names the subsection. It never passes quietly.
 
 Two things follow, and both are deliberate:
 
@@ -222,10 +233,11 @@ Two things follow, and both are deliberate:
   red docs check is a task list, not a broken build; the alternative is the lie
   this rule exists to stop (a shipped line for a feature nothing exercises).
 - **The compiler will not save you.** The dead-code scan beside this check
-  (`tests/test_shipped_claims.py::test_no_new_dead_code_in_src`) finds names
-  nothing references. It would **not** have caught the ignore list: that matcher
-  was referenced, imported and unit-tested - what was missing was any path that
-  called it on a run. Referenced is not shipped.
+  (`test_no_new_dead_code_outside_the_baseline`) finds unused locals, unused
+  parameters and unreachable statements - **not** unused functions, which need a
+  much noisier setting. And it would **not** have caught the ignore list: that
+  matcher was referenced, imported and unit-tested - what was missing was any path
+  that called it on a run. Referenced is not shipped.
 
 ## Commit Message Format
 
