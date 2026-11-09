@@ -33,20 +33,33 @@ names the subsection that proved it.
 
 Scope, stated exactly: the checker scans `docs/*.md` - the feature pages whose
 banner states the product's own shipping state. The other directories are
-records, not claims, and are deliberately not scanned (the counts are the ones
-measured on 2026-11-06):
+records, not claims: a plan's status describes the session that wrote it ("Complete"
+there means the plan was executed, not that the product works today); a spec's
+status is intent; a session log records what a session did; `docs/archived/` keeps
+superseded pages; `docs/private/` is gitignored local notes. **The counts are not
+written here** - the checker measures them every run and prints them
+(``--root`` aware), because a hardcoded count goes stale the day a page is added.
+A new directory under `docs/` that starts carrying status banners is not silently
+out of scope: `tests/test_shipped_claims.py` requires every such directory to be
+scanned or listed in `OUT_OF_SCOPE`, so the limit cannot drift.
 
-* `docs/plans/` (13 files, 20 banners) - a plan's status describes the session
-  that wrote it; "Complete" there means the plan was executed, not that the
-  product works today;
-* `docs/specs/` (42 files, 42 banners) - intent, not state;
-* `docs/sessions/` (5 files, 5 banners) - handovers, a log of what a session did;
-* `docs/archived/` (1 file) - superseded pages kept for history;
-* `docs/private/` - untracked notes.
+What this fence proves, and what it does not - it is a heuristic, and these are
+its known ways to be dodged (written down rather than papered over with more AST
+rules):
 
-A new directory under `docs/` that starts carrying status banners is not
-silently out of scope: `tests/test_shipped_claims.py` requires every such
-directory to be either scanned or listed above, so the limit cannot drift.
+* it proves a **named test exists, is not skipped or xfail, runs green, and the
+  function's body contains something assertion-shaped**. It does not prove the
+  assertion is meaningful;
+* `assert True`, or an `assert` inside a nested helper of the test, counts - a
+  tautology and a delegated proof both pass;
+* a call whose name merely *contains* `fail`, `raises`, `to_be_`, `to_have_` or
+  `to_contain` counts, even if it asserts nothing;
+* when a node id names a class (``file.py::Class::test``), the class part is not
+  matched: the first function with that name in the file is read, so one class's
+  assertion can vouch for another's test;
+* a green test can still pass for the wrong reason (a mock, a fixture, a scenario
+  it never reaches). The proof is "someone wrote an assertion and it ran", not
+  "the assertion would catch the regression".
 
 Usage::
 
@@ -187,7 +200,8 @@ def _has_assertion(root: Path, node_id: str) -> bool | None:
     parts = [part for part in rest.split("::") if part]
     if not parts:
         return None
-    name = parts[-1]
+    # A parametrized id is ``test_name[case]``: the function is ``test_name``.
+    name = parts[-1].split("[", 1)[0]
     source = root / path_part
     if not source.is_file():
         return None
@@ -219,8 +233,15 @@ def _parse_junit(xml_path: Path) -> dict[str, str]:
     if not xml_path.is_file():
         return outcomes
     for case in ET.parse(xml_path).iter("testcase"):
-        key = f"{case.get('classname', '')}.{case.get('name', '')}"
+        classname = case.get("classname", "") or ""
+        name = case.get("name", "") or ""
+        key = f"{classname}.{name}" if classname else name
         kinds = {child.tag: child for child in case}
+        if not classname:
+            # A collection failure is reported as an error case named after the
+            # MODULE (no classname): a file that failed to import, not a test id.
+            outcomes[f"file:{name}"] = "collect_error"
+            continue
         if "failure" in kinds or "error" in kinds:
             outcomes[key] = "failed"
         elif "skipped" in kinds:
@@ -265,16 +286,35 @@ def run_tests(root: Path, node_ids: list[str]) -> dict[str, str]:
     if not node_ids:
         return {}
     batched = _pytest_once(root, node_ids)
-    if batched is not None:
-        return {node: batched.get(_node_key(node), "missing") for node in node_ids}
-
     results: dict[str, str] = {}
-    for node in node_ids:
+    missing: list[str] = []
+    if batched is not None:
+        for node in node_ids:
+            outcome = batched.get(_node_key(node))
+            if outcome is None:
+                # A file that fails to IMPORT still writes a junit - holding only
+                # the error case - so "no junit" is not the only way a marker goes
+                # missing. Any id the batch did not answer is re-run on its own.
+                missing.append(node)
+            else:
+                results[node] = outcome
+    else:
+        missing = list(node_ids)
+
+    for node in missing:
         single = _pytest_once(root, [node])
         if single is None:
             results[node] = "collect_error"
-        else:
-            results[node] = single.get(_node_key(node), "missing")
+            continue
+        outcome = single.get(_node_key(node))
+        if outcome is not None:
+            results[node] = outcome
+            continue
+        # The id itself is absent. If junit carries a module-level error instead,
+        # the FILE is what broke (an import error), and that is a collection
+        # failure to name - not "this marker does not exist".
+        module = node.split("::", 1)[0].removesuffix(".py").replace("/", ".")
+        results[node] = "collect_error" if f"file:{module}" in single else "missing"
     return results
 
 
@@ -366,8 +406,34 @@ def main(argv: list[str] | None = None) -> int:
     print(f"shipped claims: {len(claims)} section(s), {marker_count} marker(s), every one proved by a passing test")
     for line in describe(root, args.docs):
         print(line)
-    print("  out of scope (records, not claims): " + ", ".join(sorted(OUT_OF_SCOPE)))
+    for line in scope_report(root, args.docs):
+        print(line)
+    print("  what this does NOT prove (a heuristic - see the module docstring for the full list):")
+    print("    - `assert True` counts; an assert inside a nested helper counts;")
+    print("    - a call whose name merely contains fail/raises/to_have_ counts;")
+    print("    - the class part of a node id is not matched; a green test can pass for the wrong reason.")
     return 0
+
+
+def scope_report(root: Path, docs_dir: str = "docs") -> list[str]:
+    """Live counts for what is out of scope - measured, never hardcoded."""
+    lines = ["  out of scope (records, not claims), as found in this checkout:"]
+    found = False
+    for name, reason in sorted(OUT_OF_SCOPE.items()):
+        directory = root / docs_dir / name
+        if not directory.is_dir():
+            continue
+        found = True
+        files = sorted(directory.rglob("*.md"))
+        banners = 0
+        for doc in files:
+            banners += sum(
+                1 for line in doc.read_text(encoding="utf-8", errors="replace").splitlines() if "**Status:**" in line
+            )
+        lines.append(f"    {name + '/':<14} {len(files):>3} page(s), {banners:>3} status line(s) - {reason}")
+    if not found:
+        lines.append("    (none of the known record directories is present in this checkout)")
+    return lines
 
 
 if __name__ == "__main__":

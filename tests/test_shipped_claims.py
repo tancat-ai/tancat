@@ -285,20 +285,42 @@ def _baseline_entries() -> set[str]:
     }
 
 
+#: The baseline was recorded with this vulture; message wording and the finding set
+#: are version-dependent, so a bump is a deliberate re-record, not a silent churn.
+PINNED_VULTURE = "2.16"
+
+
+def _vulture_version() -> str:
+    result = subprocess.run(VULTURE_COMMAND[:5] + ["--version"], cwd=ROOT, capture_output=True, text=True, timeout=300)
+    return (result.stdout or result.stderr).strip()
+
+
 def _vulture_findings() -> set[str]:
+    """The scan's findings as ``path: scope: message``, resolved against ROOT.
+
+    Vulture prints paths relative to the directory it ran in; joining them to the
+    *process* cwd (a test run from tests/ does that) made every path miss and the
+    scan read as "found nothing".
+    """
+    version = _vulture_version()
+    if PINNED_VULTURE not in version:
+        pytest.fail(
+            f"vulture {version or 'unknown'} != the pinned {PINNED_VULTURE}: the baseline in "
+            "scripts/dead_code_baseline.txt is version-specific (message wording and finding set "
+            "change between releases). Re-record it deliberately, then update PINNED_VULTURE."
+        )
     result = subprocess.run(VULTURE_COMMAND, cwd=ROOT, capture_output=True, text=True, timeout=600)
-    if result.returncode not in (0, 3):
-        pytest.skip(f"vulture could not run (offline?): {result.stderr.strip()[:200]}")
     findings: set[str] = set()
     for line in result.stdout.splitlines():
         match = re.match(r"^(?P<path>[^:]+):(?P<line>\d+):\s+(?P<what>.+?)\s+\(\d+% confidence\)$", line.strip())
         if not match:
             continue
-        path = Path(match.group("path").replace(chr(92), "/"))
+        reported = Path(match.group("path").replace(chr(92), "/"))
+        path = reported if reported.is_absolute() else ROOT / reported
         if not path.is_file():
             continue
-        findings.add(f"{path.as_posix()}: {_scope_for(path, int(match.group('line')))}: {match.group('what')}")
-    assert findings, "the scan found nothing at all, which is not credible for this tree"
+        findings.add(f"{reported.as_posix()}: {_scope_for(path, int(match.group('line')))}: {match.group('what')}")
+    assert findings, f"the scan found nothing at all, which is not credible for this tree (ran in {ROOT})"
     return findings
 
 
@@ -337,3 +359,127 @@ class TestTheDeadCodeCompanion:
         )
         assert _scope_for(sample, 2) == "StoreLock.__exit__"
         assert _scope_for(sample, 6) == "OtherLock.__exit__"
+
+
+class TestBatchBlameAttribution:
+    """t-1376: a file that fails to IMPORT still writes junit, so 'no junit' was the wrong trigger."""
+
+    def test_a_missing_id_triggers_the_per_marker_fallback(self, tmp_path: Path, monkeypatch: Any) -> None:
+        good = "tests/test_good.py::test_good"
+        broken = "tests/test_broken.py::test_broken"
+        _docs_with(tmp_path, "shipped", good, broken)
+
+        calls: list[list[str]] = []
+
+        def fake_once(_root: Path, ids: list[str]) -> dict[str, str] | None:
+            calls.append(list(ids))
+            if len(ids) > 1:
+                # The batch answered the good id and wrote a junit holding only the
+                # import error - so this is NOT "no junit", which is what the old
+                # fallback keyed on.
+                return {shipped._node_key(good): "passed"}
+            if ids == [broken]:
+                return {shipped._node_key(broken): "failed"}
+            return {}
+
+        monkeypatch.setattr(shipped, "_pytest_once", fake_once)
+
+        outcomes = shipped.run_tests(tmp_path, [good, broken])
+
+        assert outcomes == {good: "passed", broken: "failed"}
+        assert calls[0] == [good, broken], "the batch run comes first"
+        assert [broken] in calls, "the id the batch did not answer is re-run on its own"
+
+    def test_a_good_page_keeps_its_verdict_beside_a_broken_file(self, tmp_path: Path, monkeypatch: Any) -> None:
+        good = "tests/test_good.py::test_good"
+        broken = "tests/test_broken.py::test_broken"
+        root = _docs_with(tmp_path, "shipped", good, broken)
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_good.py").write_text("def test_good():\n    assert True\n", encoding="utf-8")
+
+        monkeypatch.setattr(
+            shipped, "_pytest_once", lambda _root, ids: {shipped._node_key(good): "passed"} if len(ids) > 1 else None
+        )
+        problems = shipped.verify(root, "docs")
+
+        assert len(problems) == 1, problems
+        assert broken in problems[0] and "collection" in problems[0]
+        assert good not in problems[0], "the good page must not be blamed for the broken file"
+
+
+class TestTheAssertionRead:
+    """t-1376: a parametrized test with a real assert was refused as 'could not be read'."""
+
+    def test_a_parametrized_id_is_read(self, tmp_path: Path) -> None:
+        node = "tests/test_param.py::test_amount[100]"
+        root = _docs_with(tmp_path, "shipped", node)
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_param.py").write_text(
+            "import pytest\n\n\n@pytest.mark.parametrize('amount', [100])\n"
+            "def test_amount(amount):\n    assert amount > 0\n",
+            encoding="utf-8",
+        )
+        assert shipped.verify(root, "docs", runner=_fake_runner({node: "passed"})) == []
+
+    def test_the_bare_function_name_is_also_read(self, tmp_path: Path) -> None:
+        path = tmp_path / "tests" / "test_param.py"
+        path.parent.mkdir()
+        path.write_text("def test_amount(amount):\n    assert amount > 0\n", encoding="utf-8")
+        assert shipped._has_assertion(tmp_path, "tests/test_param.py::test_amount[100]") is True
+
+
+class TestKnownLimits:
+    """t-1376: the heuristic says where it is weak, in the docstring and in its output."""
+
+    def test_the_limits_are_in_the_docstring(self) -> None:
+        text = (ROOT / "scripts" / "check_shipped_claims.py").read_text(encoding="utf-8")
+        for phrase in ("known ways to be dodged", "assert True", "class part of a node id", "nested helper"):
+            assert phrase in text, phrase
+
+    def test_the_limits_are_printed(self, capsys: pytest.CaptureFixture[str]) -> None:
+        assert shipped.main(["--root", str(ROOT), "--docs", "docs"]) == 0
+        out = capsys.readouterr().out
+        assert "what this does NOT prove" in out
+        assert "assert True" in out and "class part of a node id" in out
+
+
+class TestTheScopeReport:
+    """t-1376: counts are measured, never hardcoded, and absent directories are not claimed."""
+
+    def test_the_report_counts_what_is_there(self) -> None:
+        lines = "\n".join(shipped.scope_report(ROOT, "docs"))
+        plans = next(line for line in lines.splitlines() if "plans/" in line)
+        assert "page(s)" in plans and "status line(s)" in plans
+        assert "design records" in plans
+
+    def test_an_absent_directory_is_not_reported(self, tmp_path: Path) -> None:
+        (tmp_path / "docs").mkdir()
+        lines = shipped.scope_report(tmp_path, "docs")
+        assert not any("plans/" in line for line in lines)
+        assert any("none of the known record directories" in line for line in lines)
+
+    def test_the_docstring_does_not_hardcode_counts(self) -> None:
+        text = (ROOT / "scripts" / "check_shipped_claims.py").read_text(encoding="utf-8")
+        docstring = text.split('"""', 2)[1]
+        assert "13 files" not in docstring and "42 files" not in docstring
+        assert "The counts are not" in docstring or "measured" in docstring
+
+
+class TestTheJunitShapes:
+    """t-1376: the two ways a single-id run answers with no testcase are different faults."""
+
+    def test_a_module_level_error_is_a_collection_failure(self, tmp_path: Path) -> None:
+        junit = tmp_path / "j.xml"
+        junit.write_text(
+            '<?xml version="1.0"?><testsuites><testsuite>'
+            '<testcase classname="" name="tests.test_broken"><error message="collection failure" />'
+            "</testcase></testsuite></testsuites>",
+            encoding="utf-8",
+        )
+        outcomes = shipped._parse_junit(junit)
+        assert outcomes["file:tests.test_broken"] == "collect_error"
+
+    def test_an_empty_testsuite_is_no_testcase_at_all(self, tmp_path: Path) -> None:
+        junit = tmp_path / "j.xml"
+        junit.write_text('<?xml version="1.0"?><testsuites><testsuite /></testsuites>', encoding="utf-8")
+        assert shipped._parse_junit(junit) == {}

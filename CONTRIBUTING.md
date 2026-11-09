@@ -227,6 +227,14 @@ refusals, each reported with the file, the line and the section:
 A marker inside a `###` subsection counts for the `##` claim, and the report
 names the subsection. It never passes quietly.
 
+**It is a heuristic, and it says so.** The assertion read proves that a named test
+exists, is not skipped, runs green and contains something assertion-shaped - not
+that the assertion is meaningful. `assert True` passes it, an `assert` inside a
+nested helper passes it, a call whose name merely contains `fail`/`raises`/`to_have_`
+passes it, and the class part of a node id is not matched. The checker prints
+these limits every run; the full list is in the module docstring. Treat a green
+fence as "someone wrote a proof and it ran", never as "the claim is true".
+
 Two things follow, and both are deliberate:
 
 - **Writing the docs first is fine - the page goes red until the test exists.** A
