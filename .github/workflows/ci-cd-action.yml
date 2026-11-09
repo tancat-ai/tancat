@@ -213,23 +213,49 @@ jobs:
       contents: read
       issues: write
     steps:
+      - name: Checkout (for the report generator)
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.14
+        # j-0296: the repo's code is 3.14-only (t-strings), and this job has no
+        # uv sync. The stock runner's python3 is older, so the generator step
+        # would die and a red nightly would file NOTHING - the forced-visibility
+        # promise broken by the step added to keep it. Pin the interpreter.
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Fetch the run's report (if it was produced)
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: run-existing-artifacts
+          path: ci-results
+
+      - name: Build the issue body from the run's report
+        # j-0296 / d-0148: the body is generated from report.json - the same
+        # facts the PR comment and the HTML artefact come from - instead of
+        # hand-written prose here, which could only drift.
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 action/issue_body.py             --results ci-results             --run-url "$RUN_URL"             --output issue.md
+          cat issue.md
+
       - name: File issue on failure (forced visibility)
-        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python3 - <<'PY'
           import json, os, urllib.request
-          from datetime import UTC, datetime
+          from pathlib import Path
 
           token = os.environ["GH_TOKEN"]
           repo = os.environ["REPO"]
           api = f"https://api.github.com/repos/{repo}"
-          title = "\U0001F319 Nightly self-test failing"
-          run_url = os.environ["RUN_URL"]
-          today = datetime.now(UTC).strftime("%Y-%m-%d")
+          title = "🌙 Nightly self-test failing"
+          body = Path("issue.md").read_text(encoding="utf-8")
 
           def call(method, url, payload=None):
               data = json.dumps(payload).encode() if payload is not None else None
@@ -246,16 +272,9 @@ jobs:
               if i.get("title") == title and "pull_request" not in i
           ]
           if open_nums:
-              call("POST", f"{api}/issues/{open_nums[0]}/comments",
-                   {"body": f"Still failing — {run_url} ({today})"})
+              call("POST", f"{api}/issues/{open_nums[0]}/comments", {"body": body})
               print(f"still red — commented on existing #{open_nums[0]}")
           else:
-              created = call("POST", api + "/issues", {"title": title, "body": (
-                  "The forced nightly full self-test (all six modes) failed.\n\n"
-                  f"- Run: {run_url}\n"
-                  f"- Date: {today}\n\n"
-                  "Re-run: Actions → CI/CD Action Self-Test → Run workflow.\n"
-                  "Close this issue only after a green full run.\n"
-              )})
+              created = call("POST", api + "/issues", {"title": title, "body": body})
               print(f"filed issue #{created['number']}")
           PY

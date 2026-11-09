@@ -170,6 +170,60 @@ def _render_markdown(report: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _coverage_rows_for_html(report: dict[str, object]) -> list[dict[str, object]]:
+    """Named failing tests as coverage rows for the product's HTML writer (j-0296).
+
+    Reuses ``src.report_formatters.generate_html_report`` - the same writer the
+    menu and Streamlit use - instead of a second HTML implementation. Only NAMED
+    rows are listed here; the counts come from the report itself (see
+    :func:`render_report_html`), because a summary invented from these rows would
+    contradict report.json.
+    """
+    rows: list[dict[str, object]] = []
+    raw_failures = report.get("failed_tests")
+    failures: list[dict[str, object]] = (
+        [row for row in raw_failures if isinstance(row, dict)] if isinstance(raw_failures, list) else []
+    )
+    for failure in failures:
+        rows.append(
+            {
+                "test_name": str(failure.get("test") or "unknown"),
+                "status": "failed",
+                "duration": 0.0,
+                "screenshots": [],
+                "error_message": str(failure.get("message") or ""),
+            }
+        )
+    return rows
+
+
+def _report_totals(report: dict[str, object]) -> tuple[int, int, int, int]:
+    """(passed, failed, pending, unknown) for the HTML summary, from the report."""
+    raw_tests = report.get("tests") or {}
+    tests: dict[str, object] = raw_tests if isinstance(raw_tests, dict) else {}
+    passed = int(tests.get("passed") or 0)  # type: ignore[call-overload]
+    failed = int(tests.get("failed") or 0) + int(tests.get("errors") or 0)  # type: ignore[call-overload]
+    skipped = int(tests.get("skipped") or 0)  # type: ignore[call-overload]
+    return passed, failed, skipped, 0
+
+
+def render_report_html(report: dict[str, object]) -> str:
+    """Render the report as self-contained HTML with the product's own writer."""
+    import sys
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parent.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from src.report_formatters import generate_html_report
+
+    title = str(report.get("story") or report.get("package") or report.get("mode") or "CI run")
+    # The counts come from the report, not from the rows: the row list names the
+    # failures only, so counting it would print "1 passed" over a report that
+    # says 2 (j-0296 blocker).
+    return generate_html_report(_coverage_rows_for_html(report), title=title, totals=_report_totals(report))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="report",
@@ -234,6 +288,9 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (out_dir / "report.md").write_text(_render_markdown(report), encoding="utf-8")
+    # j-0296: the CI artefacts are the same two the other surfaces ship - JSON
+    # and HTML - so a CI run leaves evidence a person can open, not only prose.
+    (out_dir / "report.html").write_text(render_report_html(report), encoding="utf-8")
     print(
         f"report: {stats['total']} tests, {stats['failed']} failed, "
         f"{len(stats['repair_candidates'])} repair candidate(s) -> {out_dir}"

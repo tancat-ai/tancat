@@ -5,9 +5,8 @@ is offered the facts must agree, and every difference must carry a reason that
 is written down here - a surface that silently drops HTML or JSON leaves a run
 with nothing to check, which is the hole this table exists to catch.
 
-The CI surface is deliberately NOT listed: its schema is a separate job. Its
-report.py writes report.json and report.md today, and that gap is recorded, not
-decided here.
+The CI surface is listed (j-0296): its report.py now ships JSON and HTML beside
+the PR-comment markdown, so the parity rule holds there too.
 """
 
 from __future__ import annotations
@@ -38,6 +37,10 @@ SURFACE_FORMATS: dict[str, tuple[str, ...]] = {
     "headless": ("markdown", "json", "html", "jira"),
     # The evidence CLI exports the index only; it has no reports to make.
     "evidence_cli": ("csv", "ndjson", "junit"),
+    # The CI action: report.md is the PR comment, report.json and report.html
+    # are the artefacts (j-0296). No Jira markdown by the owner's decision -
+    # nothing consumes it and CI already files an issue.
+    "ci_action": ("markdown", "json", "html"),
 }
 
 #: The pair a run cannot be checked without. Every local surface must carry it.
@@ -46,6 +49,4 @@ PARITY_REQUIRED: tuple[str, ...] = ("json", "html")
 #: Surfaces the parity test holds to the rule above. The CI surface is out of
 #: scope until its own job settles it, and its current gap is named here so it
 #: cannot be forgotten.
-OUT_OF_SCOPE_SURFACES: dict[str, str] = {
-    "ci_action": "writes report.json + report.md only; schema is a separate job (j-0286 F2)",
-}
+OUT_OF_SCOPE_SURFACES: dict[str, str] = {}

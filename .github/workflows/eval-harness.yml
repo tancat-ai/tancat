@@ -70,6 +70,9 @@ jobs:
         continue-on-error: true
 
       - name: Generate markdown summary
+        # d-0150: a missing leg exits 3. Without continue-on-error the artifact
+        # and comment steps are skipped, so a red run announces nothing.
+        continue-on-error: true
         # d-0138 follow-up (review F1): a summary must not re-run a leg to report
         # on it. static is offline and cheap, so it still computes; a
         # model-bearing dispatch reads the leg the run step already stored.
@@ -86,7 +89,10 @@ jobs:
           fi
 
       - name: Post summary as PR comment
-        if: github.event_name == 'pull_request'
+        # d-0150: always(), not the default success() - a red dispatch must still
+        # post its summary, and the summary file is written even when the leg is
+        # missing (ci_summary writes an honest 'No summary' body and exits 3).
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           script: |
