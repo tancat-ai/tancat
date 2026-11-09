@@ -137,3 +137,87 @@ def test_the_nightly_issue_body_is_generated_not_typed() -> None:
 def test_the_changed_workflows_are_parseable(name: str) -> None:
     yaml = pytest.importorskip("yaml")
     assert isinstance(yaml.safe_load(_workflow(name)), dict)
+
+
+# -- j-0296 blockers: the interpreter the workflow uses, and HTML agreement ---
+
+
+def _html_stat(html: str, label: str) -> int:
+    """The number in the HTML stat tile for *label*."""
+    marker = f"<div class='stat-label'>{label}</div>"
+    head = html[: html.index(marker)]
+    value = head[head.rindex("<div class='stat-value'>") + len("<div class='stat-value'>") :]
+    return int(value.split("<", 1)[0])
+
+
+def test_the_html_totals_agree_with_the_report_it_was_built_from(tmp_path: Path) -> None:
+    """The old HTML said 3 tests / 1 passed for a report that says 4 / 2."""
+    out = tmp_path / "results"
+    assert ci_report.main(["--mode", "run-existing", "--junit", str(_junit(tmp_path)), "--output", str(out)]) == 0
+
+    payload = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    html = (out / "report.html").read_text(encoding="utf-8")
+    tests = payload["tests"]
+
+    assert _html_stat(html, "Total Tests") == tests["total"], "the HTML total disagrees with report.json"
+    assert _html_stat(html, "Passed") == tests["passed"], "the HTML passed count disagrees with report.json"
+    assert _html_stat(html, "Failed") == tests["failed"] + tests["errors"]
+    assert _html_stat(html, "Pending") == tests["skipped"]
+    # The named failures are still listed, so the HTML is not only counts.
+    assert "test_03_checkout[chromium]" in html
+
+
+def test_the_issue_body_labels_rows_by_mode_not_by_folder() -> None:
+    body = issue_body.render_issue_body(
+        [
+            {
+                "mode": "run-existing",
+                "tests": {"total": 2, "passed": 1, "failed": 1, "errors": 0, "skipped": 0},
+                "failed_tests": [{"test": "test_cart", "message": "boom"}],
+                "_report_path": "ci-results/report.json",
+            }
+        ],
+        run_url="https://example.test/runs/1",
+        date="2026-11-06",
+    )
+
+    assert "test_cart` (run-existing)" in body
+    assert "ci-results" not in body, "the row still labels the artifact folder"
+    assert "one leg" in body, "a single report must not imply the whole six-mode run"
+
+
+def test_the_nightly_generator_runs_under_an_interpreter_that_can_parse_it() -> None:
+    """j-0296 blocker: bare ``python3`` on the runner could not run this repo.
+
+    The finding: ``action/issue_body.py`` (like 75 other places in the tree) used
+    PEP 758's ``except A, B:`` - a SyntaxError below 3.14. Ruff's formatter here
+    targets 3.14 and normalises that form back, so "write parentheses everywhere"
+    is not a remedy the tree can hold: the interpreter must be pinned. The repo is
+    3.14-only anyway (four modules use t-strings).
+
+    So the guard is on the workflow, not on the syntax: the job that runs the
+    generator must set up Python 3.14 before it does, and the module must parse
+    under that grammar.
+    """
+    import ast
+
+    generator = REPO_ROOT / "action" / "issue_body.py"
+    ast.parse(generator.read_text(encoding="utf-8"), filename=str(generator), feature_version=(3, 14))
+
+    workflow = _workflow("ci-cd-action.yml")
+    generator_step = workflow.index("action/issue_body.py")
+    setup_step = workflow.rfind('python-version: "3.14"')
+    assert setup_step != -1, "the nightly job does not pin Python 3.14 - a bare python3 cannot parse this repo"
+    assert setup_step < generator_step, "the generator runs before the interpreter is set up"
+
+    # Any workflow that runs a repo MODULE must pin 3.14 (or go through uv).
+    # Inline ``python - <<PY`` stubs are exempt: they are the workflow's own few
+    # lines, not the repo's code.
+    import re
+
+    for name in ("ci.yml", "eval-harness.yml", "action-self-test-full.yml", "ci-cd-action.yml", "pages-deploy.yml"):
+        text = _workflow(name)
+        if re.search(r"python3?\s+(action|scripts|src|cli)/", text):
+            assert 'python-version: "3.14"' in text or "uv run" in text, (
+                f"{name} runs a repo module without pinning 3.14 or going through uv"
+            )

@@ -83,12 +83,15 @@ def render_issue_body(
         tests = report.get("tests") or {}
         for key in totals:
             totals[key] += int(tests.get(key) or 0)
+        # j-0296: label by the report's MODE (what ran), not by the folder it
+        # was downloaded into - every row said "(ci-results)".
+        leg = str(report.get("mode") or "run")
         for failure in report.get("failed_tests") or []:
             failed_rows.append(
                 (
                     str(failure.get("test") or "unknown"),
                     str(failure.get("message") or "")[:200],
-                    Path(str(report.get("_report_path") or "")).parent.name or "run",
+                    leg,
                 )
             )
 
@@ -97,7 +100,7 @@ def render_issue_body(
         "|---|---|",
         f"| Tests | {totals['total']} ({totals['passed']} passed · {totals['failed']} failed · "
         f"{totals['errors']} errors · {totals['skipped']} skipped) |",
-        f"| Reports read | {len(reports)} |",
+        f"| Legs read | {len(reports)}" + (" (one leg - a partial run)" if len(reports) == 1 else "") + " |",
         "",
     ]
     if failed_rows:

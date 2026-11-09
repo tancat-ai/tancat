@@ -31,6 +31,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Set up Python 3.14
+        # j-0296: this job runs repo modules (action/cache_key.py) with the
+        # runner's python3, which is older than the 3.14 grammar this repo uses.
+        # Pin it here, before any of them runs.
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
       # ── Step 1: generate-only against hermetic mock + fake LLM ──────────
       - name: Generate tests (self-test)
         id: generate

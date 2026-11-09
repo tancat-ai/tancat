@@ -216,6 +216,15 @@ jobs:
       - name: Checkout (for the report generator)
         uses: actions/checkout@v7
 
+      - name: Set up Python 3.14
+        # j-0296: the repo's code is 3.14-only (t-strings), and this job has no
+        # uv sync. The stock runner's python3 is older, so the generator step
+        # would die and a red nightly would file NOTHING - the forced-visibility
+        # promise broken by the step added to keep it. Pin the interpreter.
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
       - name: Fetch the run's report (if it was produced)
         uses: actions/download-artifact@v5
         continue-on-error: true

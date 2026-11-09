@@ -418,6 +418,7 @@ def generate_html_report(
     coverage: list[dict[str, Any]],
     screenshots_dir: Path | None = None,
     title: str = "",
+    totals: tuple[int, int, int, int] | None = None,
 ) -> str:
     """Generate self-contained HTML report with base64 embedded screenshots.
 
@@ -437,11 +438,23 @@ def generate_html_report(
         screenshots_dir: Directory containing screenshot files (optional, used for embedding)
         title: Optional package/story name shown under the heading so a report
             saved on its own says which run it belongs to.
+        totals: Optional (passed, failed, pending, unknown) for the summary line.
+            A caller whose rows are not one-per-test - the CI report names only
+            the failures - must pass the real counts here, or the summary would
+            count rows and contradict its own report (j-0296).
 
     Returns:
         HTML formatted report string as a complete standalone document
     """
-    passed_count, failed_count, pending_count, unknown_count = _status_summary(coverage)
+    if totals is not None:
+        # j-0296: the caller's rows may name only the failures, so the summary
+        # must use the caller's real counts - a total counted from rows would
+        # contradict the report this file was built from.
+        passed_count, failed_count, pending_count, unknown_count = totals
+        total_tests = sum(totals)
+    else:
+        passed_count, failed_count, pending_count, unknown_count = _status_summary(coverage)
+        total_tests = len(coverage)
 
     evidence_dir = (Path(screenshots_dir) / "evidence") if screenshots_dir else None
     sidecar_index = _index_sidecars(evidence_dir)
@@ -544,7 +557,7 @@ def generate_html_report(
         + "</p>",
         "",  # test-nav inserted below (needs the rows first)
         "        <div class='summary'>",
-        f"            <div class='stat total'><div class='stat-value'>{len(coverage)}</div><div class='stat-label'>Total Tests</div></div>",
+        f"            <div class='stat total'><div class='stat-value'>{total_tests}</div><div class='stat-label'>Total Tests</div></div>",
         f"            <div class='stat passed'><div class='stat-value'>{passed_count}</div><div class='stat-label'>Passed</div></div>",
         f"            <div class='stat failed'><div class='stat-value'>{failed_count}</div><div class='stat-label'>Failed</div></div>",
         f"            <div class='stat pending'><div class='stat-value'>{pending_count}</div><div class='stat-label'>Pending</div></div>",

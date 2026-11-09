@@ -171,12 +171,13 @@ def _render_markdown(report: dict[str, object]) -> str:
 
 
 def _coverage_rows_for_html(report: dict[str, object]) -> list[dict[str, object]]:
-    """The CI report as coverage rows for the product's HTML writer (j-0296).
+    """Named failing tests as coverage rows for the product's HTML writer (j-0296).
 
     Reuses ``src.report_formatters.generate_html_report`` - the same writer the
-    menu and Streamlit use - instead of a second HTML implementation. The junit
-    names every failed test but not the passed ones, so a passing count is shown
-    as one labelled row rather than inventing per-test names.
+    menu and Streamlit use - instead of a second HTML implementation. Only NAMED
+    rows are listed here; the counts come from the report itself (see
+    :func:`render_report_html`), because a summary invented from these rows would
+    contradict report.json.
     """
     rows: list[dict[str, object]] = []
     raw_failures = report.get("failed_tests")
@@ -190,27 +191,20 @@ def _coverage_rows_for_html(report: dict[str, object]) -> list[dict[str, object]
                 "status": "failed",
                 "duration": 0.0,
                 "screenshots": [],
+                "error_message": str(failure.get("message") or ""),
             }
         )
+    return rows
+
+
+def _report_totals(report: dict[str, object]) -> tuple[int, int, int, int]:
+    """(passed, failed, pending, unknown) for the HTML summary, from the report."""
     raw_tests = report.get("tests") or {}
     tests: dict[str, object] = raw_tests if isinstance(raw_tests, dict) else {}
-    duration = float(tests.get("duration_s") or 0.0)  # type: ignore[arg-type]
-    for label, status, key in (
-        ("passed", "passed", "passed"),
-        ("skipped", "pending", "skipped"),
-        ("errored", "failed", "errors"),
-    ):
-        count = int(tests.get(key) or 0)  # type: ignore[call-overload]
-        if count:
-            rows.append(
-                {
-                    "test_name": f"{count} {label} (names are in the junit)",
-                    "status": status,
-                    "duration": duration if label == "passed" else 0.0,
-                    "screenshots": [],
-                }
-            )
-    return rows
+    passed = int(tests.get("passed") or 0)  # type: ignore[call-overload]
+    failed = int(tests.get("failed") or 0) + int(tests.get("errors") or 0)  # type: ignore[call-overload]
+    skipped = int(tests.get("skipped") or 0)  # type: ignore[call-overload]
+    return passed, failed, skipped, 0
 
 
 def render_report_html(report: dict[str, object]) -> str:
@@ -224,7 +218,10 @@ def render_report_html(report: dict[str, object]) -> str:
     from src.report_formatters import generate_html_report
 
     title = str(report.get("story") or report.get("package") or report.get("mode") or "CI run")
-    return generate_html_report(_coverage_rows_for_html(report), title=title)
+    # The counts come from the report, not from the rows: the row list names the
+    # failures only, so counting it would print "1 passed" over a report that
+    # says 2 (j-0296 blocker).
+    return generate_html_report(_coverage_rows_for_html(report), title=title, totals=_report_totals(report))
 
 
 def build_parser() -> argparse.ArgumentParser:
