@@ -197,6 +197,56 @@ If you are adding a new `src/` module:
 
 ---
 
+### Saying "shipped" (the rule a page must follow)
+
+**A feature is shipped when a named test proves it, not when the code exists.**
+
+A page may put `shipped` or `available` in its status line only if the same
+section carries a marker naming the test that proves it:
+
+```markdown
+> **Status:** shipped — Phase 7 (... your feature ...)
+
+<!-- shipped-check: tests/test_ci_report.py::test_report_main_writes_comment_payload -->
+```
+
+The checker (`scripts/check_shipped_claims.py`, also run as
+`tests/test_shipped_claims.py`) collects **every** marker in the section - a
+broad claim with three proofs must be proved three times - and runs them. A
+marker counts only when its test **passes with an assertion**. These are
+refusals, each reported with the file, the line and the section:
+
+- no marker, or a marker naming a test that does not exist;
+- a test that fails, or that **breaks pytest's collection** (the report names
+  that marker, not every other page);
+- a test that is **skipped** or **xfail** - a skip is the absence of proof, not a
+  pass;
+- a test that **asserts nothing** - green means nothing if the test proves
+  nothing.
+
+A marker inside a `###` subsection counts for the `##` claim, and the report
+names the subsection. It never passes quietly.
+
+**It is a heuristic, and it says so.** The assertion read proves that a named test
+exists, is not skipped, runs green and contains something assertion-shaped - not
+that the assertion is meaningful. `assert True` passes it, an `assert` inside a
+nested helper passes it, a call whose name merely contains `fail`/`raises`/`to_have_`
+passes it, and the class part of a node id is not matched. The checker prints
+these limits every run; the full list is in the module docstring. Treat a green
+fence as "someone wrote a proof and it ran", never as "the claim is true".
+
+Two things follow, and both are deliberate:
+
+- **Writing the docs first is fine - the page goes red until the test exists.** A
+  red docs check is a task list, not a broken build; the alternative is the lie
+  this rule exists to stop (a shipped line for a feature nothing exercises).
+- **The compiler will not save you.** The dead-code scan beside this check
+  (`test_no_new_dead_code_outside_the_baseline`) finds unused locals, unused
+  parameters and unreachable statements - **not** unused functions, which need a
+  much noisier setting. And it would **not** have caught the ignore list: that
+  matcher was referenced, imported and unit-tested - what was missing was any path
+  that called it on a run. Referenced is not shipped.
+
 ## Commit Message Format
 
 Use plain, descriptive imperative sentences. No backticks in commit messages.

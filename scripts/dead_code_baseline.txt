@@ -1,0 +1,30 @@
+# Dead code found by vulture at its highest confidence, as of 2026-11-06.
+#
+# WHAT THIS IS: the baseline `tests/test_shipped_claims.py::test_no_new_dead_code_outside_the_baseline`
+# compares against. The scan runs `uv run --with vulture vulture src --min-confidence 100`
+# (vulture 2.16) and fails on anything NOT on this list. A key is
+# `path: enclosing_scope: finding`, so the same message in a different function or
+# class does not collapse onto an existing entry.
+#
+# WHAT IT CATCHES: unused locals and parameters, and unreachable statements - the
+# 100% tier. It does NOT catch unused functions or methods: those appear at vulture's
+# 60% tier, which returned 327 findings on src/ (nearly all public API), so it is not
+# usable as a gate without a large allowance list. The audit's "20 unreferenced names"
+# item owns that gap.
+#
+# WHAT IT WOULD NOT HAVE CAUGHT: the ignore list. That matcher was referenced,
+# imported and unit-tested; nothing ever called it. A dead-code scan answers "is this
+# name used?", not "does this feature work?".
+#
+# STALENESS: an entry with no current finding is a failure - the list cannot keep
+# ghosts. Delete the line when the dead code is fixed; add one only with a reason.
+
+src/cli/retro_ui.py: render_menu: unused variable 'group_labels'
+src/code_postprocessor.py: strip_evidence_from_pom: unreachable code after 'return'
+src/prompt_utils.py: build_single_condition_skeleton_prompt: unused variable 'target_condition_intent'
+src/rag_store_lock.py: StoreLock.__exit__: unused variable 'exc_type'
+src/rag_store_lock.py: StoreLock.__exit__: unused variable 'tb'
+src/skip_manager.py: insert_consolidated_skips: unused variable 'original_lines'
+src/sqlite_persistence.py: SQLitePersistence.__exit__: unused variable 'exc_tb'
+src/sqlite_persistence.py: SQLitePersistence.__exit__: unused variable 'exc_type'
+src/sqlite_persistence.py: SQLitePersistence.__exit__: unused variable 'exc_val'
