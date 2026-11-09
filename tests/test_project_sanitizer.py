@@ -86,3 +86,48 @@ class TestJunkCheckSkipsVendoredAssets:
 
         assert (ocr_dir / "ppocrv6_dict.txt").is_file(), "a vendored asset must survive the purge"
         assert not (tmp_path / "stray.txt").exists(), "real junk must still be purged"
+
+
+class TestTheJunkPathContract:
+    """t-1378: the junk pair returns absolute paths, and printing cannot raise.
+
+    The check used to return root-relative paths while the auto-move pair returned
+    absolute ones. A caller doing ``path.relative_to(root)`` on a junk result then
+    raised ``ValueError`` - unnoticed until a junk file existed to fill the list.
+    """
+
+    def test_the_check_returns_absolute_paths(self, sanitizer: Any, tmp_path: Path) -> None:
+        (tmp_path / "stray.txt").write_text("junk\n", encoding="utf-8")
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(sanitizer, "PROJECT_ROOT", tmp_path)
+            found = sanitizer.purge_junk_check()
+
+        assert found, "the stray .txt must be reported"
+        assert all(path.is_absolute() for path in found), found
+        # The call that used to raise: it works because the paths are absolute.
+        assert [path.relative_to(tmp_path).as_posix() for path in found] == ["stray.txt"]
+
+    def test_the_check_reports_from_a_different_cwd(self, sanitizer: Any, tmp_path: Path) -> None:
+        """A cwd other than the root must report, not raise."""
+        with pytest.MonkeyPatch.context() as patch:
+            patch.chdir(tmp_path)
+            found = sanitizer.purge_junk_check()
+
+        assert isinstance(found, list)  # reported (whatever the tree holds), never raised
+        names = [path.name for path in found]
+        assert "dead_code_baseline.txt" not in names
+
+    def test_display_path_cannot_raise(self, sanitizer: Any) -> None:
+        outside = Path(sanitizer.PROJECT_ROOT).parent / "somewhere-else.txt"
+        assert sanitizer.display_path(outside) == outside
+
+
+class TestTheBaselineIsDataNotJunk:
+    """t-1378: the dead-code baseline is a committed list a test reads, not scratch."""
+
+    def test_the_baseline_name_is_whitelisted(self, sanitizer: Any) -> None:
+        assert "dead_code_baseline.txt" in sanitizer.TXT_WHITELIST
+
+    def test_the_repo_check_reports_no_junk(self, sanitizer: Any) -> None:
+        found = [path.name for path in sanitizer.purge_junk_check()]
+        assert "dead_code_baseline.txt" not in found
