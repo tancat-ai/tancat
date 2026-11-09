@@ -4,6 +4,8 @@
 > with one piece of the spec not built: the ignore list is **parsed, validated and
 > counted only** — matching an ignore against a failure is not implemented, so an
 > ignore does not change a run's outcome (§6).
+
+<!-- shipped-check: tests/test_ci_report.py::test_report_main_writes_comment_payload -->
 > Spec: `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`. This page is the
 > configuration reference (modes, when to adapt, ignore-list format) — the
 > one-line education lives in the generated report itself.

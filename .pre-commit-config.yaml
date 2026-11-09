@@ -43,6 +43,16 @@ repos:
         always_run: true
         verbose: true
 
+      - id: shipped-claims
+        name: Shipped Claims Check
+        description: A docs page may say 'shipped' only when a named test proves it
+        # t-1350/t-1371: the rule is enforced where the claim is made. Runs when a
+        # docs page changes; ~10s (it collects and runs each marker's test).
+        entry: uv run --all-extras python scripts/check_shipped_claims.py
+        language: system
+        files: ^docs/.*\.md$
+        pass_filenames: false
+
       - id: kanban-freshness
         name: Kanban Freshness Check
         description: Blocks commits when kanban.html is stale vs BACKLOG.md

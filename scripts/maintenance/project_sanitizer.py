@@ -79,6 +79,13 @@ TXT_WHITELIST: set[str] = {
     # robots.txt is a product asset, not a temporary .txt — flagging it failed
     # the CI sanitizer job on PR #6.
     "robots.txt",
+    # t-1378: a committed BASELINE LIST, not scratch output. The shipped-claims
+    # test compares the dead-code scan against it and fails on any new finding or
+    # any stale entry, so the file is reviewed in git and changes only by
+    # re-recording the scan - the opposite of the temporary .txt this rule exists
+    # to purge. It stays beside the checker that reads it; the only whitelisted
+    # directory (src/data/ocr) holds vendored OCR models and would be a false home.
+    "dead_code_baseline.txt",
 }
 
 # Whitelisted .log files to keep (none by default)
@@ -92,6 +99,21 @@ LOG_WHITELIST: set[str] = set()
 # purge never looks inside it. Matched on the path relative to PROJECT_ROOT, so
 # anything new in here is covered without per-file names.
 WHITELISTED_DIRS: tuple[str, ...] = ("src/data/ocr",)
+
+
+def display_path(path: Path) -> Path:
+    """Root-relative for a message, the path itself when it is outside the root.
+
+    The JUNK functions used to return root-relative paths while the auto-move
+    functions returned absolute ones, so a caller doing ``path.relative_to(root)``
+    on a junk result raised ``ValueError`` instead of reporting (t-1378 - it went
+    unnoticed until a junk file existed to fill the list). One helper does the
+    conversion, and it cannot raise.
+    """
+    try:
+        return path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        return path
 
 
 def is_whitelisted_path(path: Path) -> bool:
@@ -247,19 +269,19 @@ def purge_junk() -> list[Path]:
 
     # Find .log files
     for log_file in find_all_files_matching_pattern("*.log", PROJECT_ROOT, SKIP_DIRS):
-        rel = log_file.relative_to(PROJECT_ROOT)
+        rel = display_path(log_file)
         if log_file.name in LOG_WHITELIST or is_whitelisted_path(log_file):
             continue
         try:
             log_file.unlink()
             print(f"  [DEL] {rel}")
-            purged.append(rel)
+            purged.append(log_file)
         except Exception as e:
             print(f"  [WARN] Could not delete {rel}: {e}")
 
     # Find temporary .txt files (exclude whitelisted)
     for txt_file in find_all_files_matching_pattern("*.txt", PROJECT_ROOT, SKIP_DIRS):
-        rel = txt_file.relative_to(PROJECT_ROOT)
+        rel = display_path(txt_file)
         if txt_file.name in TXT_WHITELIST or txt_file.name == "requirements.txt":
             continue
         # Exclude UAT output files that might be useful for debugging
@@ -268,7 +290,7 @@ def purge_junk() -> list[Path]:
         try:
             txt_file.unlink()
             print(f"  [DEL] {rel}")
-            purged.append(rel)
+            purged.append(txt_file)
         except Exception as e:
             print(f"  [WARN] Could not delete {rel}: {e}")
 
@@ -444,25 +466,23 @@ def purge_junk_check() -> list[Path]:
     purged: list[Path] = []
 
     for log_file in find_all_files_matching_pattern("*.log", PROJECT_ROOT, SKIP_DIRS):
-        rel = log_file.relative_to(PROJECT_ROOT)
         if log_file.name in LOG_WHITELIST or is_whitelisted_path(log_file):
             continue
-        purged.append(rel)
+        purged.append(log_file)
 
     for txt_file in find_all_files_matching_pattern("*.txt", PROJECT_ROOT, SKIP_DIRS):
-        rel = txt_file.relative_to(PROJECT_ROOT)
         if txt_file.name in TXT_WHITELIST or is_whitelisted_path(txt_file):
             continue
         if txt_file.name.startswith("uat_output"):
             continue
-        purged.append(rel)
+        purged.append(txt_file)
 
     if not purged:
         print("[OK] No junk files found.")
     else:
         print(f"\n[FAIL] Found {len(purged)} junk file(s):")
         for f in purged:
-            print(f"  - {f}")
+            print(f"  - {display_path(f)}")
     return purged
 
 
