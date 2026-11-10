@@ -10,9 +10,12 @@ The owner settled these on 2026-11-06:
   12 months of purchase; updates after that are not included and may be bought
   separately; nothing renews automatically.
 
-The pages are static HTML, so this module is the single source a test reads to
-hold the card and the terms to the same number - the same guard the free export
-cap needed after it drifted.
+The pages are static HTML. **This module does not render them, and nothing in
+``src/`` imports it** - the only importer is ``tests/test_landing_price.py``.
+What it gives you is a guard, not a renderer: change a number here and the price
+test fails until BOTH pages (and the order PDF) are updated to match. That is a
+weaker claim than "one source feeds both pages", and it is the true one - the same
+guard the free export cap needed after it drifted.
 """
 
 from __future__ import annotations

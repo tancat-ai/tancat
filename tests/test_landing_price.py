@@ -29,7 +29,28 @@ FORBIDDEN_CLAIMS = (
     "limited time",
     "launch offer",
     "special price",
+    # j-0297: the install page said "billed monthly or yearly", which contradicts
+    # a one-off price and "nothing renews automatically". The old test missed the
+    # words that would have caught it.
+    "monthly",
+    "yearly",
+    "billed",
 )
+
+#: The PDF that ships with an order, rendered from the source HTML.
+INSTALL_PDF = REPO_ROOT / "landing" / "tancat-pro-install-and-licence.pdf"
+
+
+def _pdf_text(path: Path = INSTALL_PDF) -> str:
+    """The PDF's text as one line, so a phrase check reads what a buyer reads."""
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        text = "\n".join(page.get_textpage().get_text_range() for page in pdf)
+    finally:
+        pdf.close()
+    return " ".join(text.split())
 
 
 def _flat(path: Path) -> str:
@@ -93,3 +114,32 @@ def test_the_terms_promise_nothing_about_future_years() -> None:
     page = _flat(TERMS).lower()
     for phrase in ("grandfathered", "price held", "prices will", "future price", "will not increase"):
         assert phrase not in page, f"the terms promise something about future pricing: {phrase!r}"
+
+
+def test_the_order_pdf_carries_the_settled_sentences_not_the_old_ones() -> None:
+    """j-0297: the PDF ships with every order and had fallen behind the site."""
+    text = _pdf_text()
+
+    for sentence in (
+        "perpetual for the version you receive",
+        f"all updates released within {UPDATES_INCLUDED_MONTHS} months of purchase",
+        "Updates released after that are not included",
+        "Nothing renews automatically",
+        "Security fixes and bug fixes for the version you hold are provided at no charge",
+    ):
+        assert sentence in text, f"the shipped PDF does not carry: {sentence!r}"
+
+    for stale in ("perpetual for the version you buy", "Updates after the first 12 months are paid"):
+        assert stale not in text, f"the shipped PDF still carries the old wording: {stale!r}"
+
+    lowered = text.lower()
+    for claim in FORBIDDEN_CLAIMS:
+        assert claim not in lowered, f"the shipped PDF carries a claim the owner rejected: {claim!r}"
+
+
+def test_the_order_pdf_price_matches_the_one_source() -> None:
+    text = _pdf_text()
+    if f"${PRICE_PER_DEPLOYMENT_USD}" in text:
+        return  # stated, and it is the settled number
+    # Not every order PDF states the price; then it must not state another one.
+    assert not re.search(r"\$\d", text), f"the PDF states a price that is not the settled one: {text[:200]}"
