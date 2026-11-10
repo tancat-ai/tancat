@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from src.licensing.pricing import (
     DEPLOYMENT_DEFINITION,
     PRICE_PER_DEPLOYMENT_USD,
@@ -20,6 +22,21 @@ from src.licensing.pricing import (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX = REPO_ROOT / "landing" / "index.html"
 TERMS = REPO_ROOT / "landing" / "terms.html"
+INSTALL = REPO_ROOT / "landing" / "install.html"
+LANDING = REPO_ROOT / "landing"
+
+#: The sentences the owner settled, compared WHOLE - a page or the order PDF that
+#: paraphrases them is a different document from the terms.
+SETTLED_SENTENCES = (
+    "This licence is perpetual for the version you receive. It does not expire.",
+    f"It includes all updates released within {UPDATES_INCLUDED_MONTHS} months of purchase.",
+    "Updates released after that are not included and can be bought separately if you want them.",
+    "Nothing renews automatically. You will not be charged again unless you choose to buy.",
+    "Security fixes and bug fixes for the version you hold are provided at no charge.",
+)
+
+#: Every amount any landing page may show: the free tier, the price, the renewal.
+ALLOWED_AMOUNTS = {0, PRICE_PER_DEPLOYMENT_USD, RENEWAL_PER_YEAR_USD}
 
 #: Claims the owner refused: an introductory price with no honest end date, a
 #: list price he never charged, and a launch offer.
@@ -42,8 +59,12 @@ INSTALL_PDF = REPO_ROOT / "landing" / "tancat-pro-install-and-licence.pdf"
 
 
 def _pdf_text(path: Path = INSTALL_PDF) -> str:
-    """The PDF's text as one line, so a phrase check reads what a buyer reads."""
-    import pypdfium2 as pdfium
+    """The PDF's text as one line, so a phrase check reads what a buyer reads.
+
+    pypdfium2 lives in the ``[pdf]`` extra, so a contributor on a plain
+    ``uv sync`` does not have it. The house convention is importorskip.
+    """
+    pdfium = pytest.importorskip("pypdfium2", reason="pypdfium2 is in the [pdf] extra")
 
     pdf = pdfium.PdfDocument(str(path))
     try:
@@ -77,6 +98,26 @@ def test_the_card_and_the_terms_define_a_deployment_the_same_way() -> None:
         assert DEPLOYMENT_DEFINITION in _flat(path), f"{path.name} does not carry the deployment definition"
 
 
+def test_every_page_that_states_a_price_states_the_settled_one() -> None:
+    """The install page shipped the price unguarded - changing it to $499 passed.
+
+    Any amount on any landing page must be the free tier's zero, the settled
+    price, or the renewal; and the page that ships with the order must state the
+    price itself, not merely avoid a wrong one.
+    """
+    wrong: dict[str, set[int]] = {}
+    for path in sorted(LANDING.glob("*.html")):
+        amounts = {int(match.replace(",", "")) for match in re.findall(r"\$([\d,]+)", _flat(path))}
+        unexpected = amounts - ALLOWED_AMOUNTS
+        if unexpected:
+            wrong[path.name] = unexpected
+    assert wrong == {}, f"page(s) quoting a price the constant does not hold: {wrong}"
+
+    assert f"${PRICE_PER_DEPLOYMENT_USD} per deployment" in _flat(INSTALL), (
+        "the install page does not state the settled price"
+    )
+
+
 def test_the_card_states_the_update_window_from_the_one_source() -> None:
     page = _flat(INDEX)
     assert f"{UPDATES_INCLUDED_MONTHS} months of purchase" in page
@@ -99,14 +140,7 @@ def test_no_claim_the_owner_rejected_appears_on_the_site() -> None:
 
 def test_the_terms_state_the_four_settled_sentences_and_the_security_line() -> None:
     page = _flat(TERMS)
-    settled = (
-        "This licence is perpetual for the version you receive. It does not expire.",
-        f"It includes all updates released within {UPDATES_INCLUDED_MONTHS} months of purchase.",
-        "Updates released after that are not included and can be bought separately if you want them.",
-        "Nothing renews automatically. You will not be charged again unless you choose to buy.",
-        "Security fixes and bug fixes for the version you hold are provided at no charge.",
-    )
-    for sentence in settled:
+    for sentence in SETTLED_SENTENCES:
         assert sentence in page, f"the terms do not carry the settled sentence: {sentence!r}"
 
 
@@ -116,20 +150,20 @@ def test_the_terms_promise_nothing_about_future_years() -> None:
         assert phrase not in page, f"the terms promise something about future pricing: {phrase!r}"
 
 
-def test_the_order_pdf_carries_the_settled_sentences_not_the_old_ones() -> None:
-    """j-0297: the PDF ships with every order and had fallen behind the site."""
+def test_the_order_pdf_carries_the_settled_sentences_verbatim() -> None:
+    """Whole sentences, not fragments: the order document is kept by the buyer."""
     text = _pdf_text()
 
-    for sentence in (
-        "perpetual for the version you receive",
-        f"all updates released within {UPDATES_INCLUDED_MONTHS} months of purchase",
-        "Updates released after that are not included",
-        "Nothing renews automatically",
-        "Security fixes and bug fixes for the version you hold are provided at no charge",
-    ):
-        assert sentence in text, f"the shipped PDF does not carry: {sentence!r}"
+    for sentence in SETTLED_SENTENCES:
+        assert sentence in text, f"the shipped PDF paraphrases or omits: {sentence!r}"
 
-    for stale in ("perpetual for the version you buy", "Updates after the first 12 months are paid"):
+    for stale in (
+        "perpetual for the version you buy",
+        "Updates after the first 12 months are paid",
+        # The two paraphrases the review found: same meaning, different words.
+        "A perpetual licence for the version you receive; it does not expire",
+        "All updates released within 12 months of purchase are included",
+    ):
         assert stale not in text, f"the shipped PDF still carries the old wording: {stale!r}"
 
     lowered = text.lower()
