@@ -18,7 +18,8 @@ model at runtime — the zero-egress rule.
 - Source: ModelScope, repository `RapidAI/RapidOCR`, release tag `v3.10.0`
   (`torch/PP-OCRv6/...`, `torch/PP-OCRv4/cls/...`, `paddle/PP-OCRv6/rec/...`).
 - Upstream weights: Baidu / PaddleOCR.
-- Licence: **Apache-2.0**, compatible with this Apache-2.0 product. The
+- Licence: **Apache-2.0**, compatible with TanCat's licence (the models are
+  used unmodified and impose no restriction of their own). The
   rapidocr wheel carries the same notice in its own `MODEL_LICENSES.md`.
 - Recorded in `docs/licenses/DOCUMENT_READER_LICENSES.md`.
 

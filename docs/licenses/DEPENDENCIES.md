@@ -1,6 +1,8 @@
 # TanCat dependency licences
 
-TanCat itself is **Apache-2.0** (see `LICENSE`, Copyright 2026 lacattano). This
+TanCat itself is **source-available under the Business Source License 1.1** (see
+`LICENSE`, Copyright 2026 lacattano; it converts to Apache-2.0 after the Change
+Date). This
 file is the licence record for everything TanCat installs, taken from the locked
 dependency set (`uv.lock`). It exists so the owner can confirm ownership and
 licensing for a store or customer review.
@@ -99,7 +101,7 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 
 | Package | Licence (as reported) | Flag |
 |---|---|---|
-| text-unidecode | Artistic License; GNU General Public License (GPL); GNU General Public License v2 or later (GPLv2+) | FLAG - dual GPL-2.0-or-later / Artistic-1.0. pip-licenses reports the GPL classifiers. The Artistic option is permissive, but the licence choice must be made and recorded; the GPL option alone would conflict with shipping Apache-2.0 TanCat. Pulled in by pytest-playwright -> python-slugify, so it is in the default install. |
+| text-unidecode | Artistic License; GNU General Public License (GPL); GNU General Public License v2 or later (GPLv2+) | FLAG - dual GPL-2.0-or-later / Artistic-1.0. pip-licenses reports the GPL classifiers. The Artistic option is permissive, but the licence choice must be made and recorded; the GPL option alone would conflict with shipping TanCat under the BSL 1.1. Pulled in by pytest-playwright -> python-slugify, so it is in the default install. |
 | certifi | Mozilla Public License 2.0 (MPL 2.0) | FLAG - MPL-2.0 (weak, file-level copyleft), not permissive. Used unmodified as a library; keep it unmodified and it is compatible. |
 | orjson | MPL-2.0 AND (Apache-2.0 OR MIT) | FLAG - MPL-2.0 AND (Apache-2.0 OR MIT). The Apache/MIT option applies, so it is effectively permissive; flagged because the metadata leads with MPL. |
 | tqdm | MPL-2.0 AND MIT | FLAG - MPL-2.0 AND MIT. The MIT option applies; flagged because the metadata leads with MPL. |
@@ -109,7 +111,7 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 | pillow | MIT-CMU | Note - MIT-CMU (permissive; a non-standard name, not a flag). |
 
 MPL-2.0 is a weak, file-level copyleft. Using the packages unmodified as
-libraries is fine and does not affect TanCat's Apache-2.0 licence. The flag is
+libraries is fine and does not affect TanCat's own licence. The flag is
 recorded so the position is a decision, not an oversight. For `text-unidecode`,
 the permissive Artistic option should be the one relied on.
 
@@ -122,7 +124,7 @@ with no row here fails `tests/test_licence_elections.py`.
 
 | Package | Elected licence | Scope | Why |
 |---|---|---|---|
-| text-unidecode | Artistic-1.0 | runtime (ships) | Dual-licensed GPL-2.0-or-later / Artistic-1.0. Artistic-1.0 is permissive and compatible with Apache-2.0, so that is the option relied on; the GPL option is not used. It reaches the default install through `pytest-playwright` -> `python-slugify` (a runtime dependency in `pyproject.toml`), so this is a shipped component, not a dev tool. The package is used unmodified. Elected 2026-11-05. |
+| text-unidecode | Artistic-1.0 | runtime (ships) | Dual-licensed GPL-2.0-or-later / Artistic-1.0. Artistic-1.0 is permissive and compatible with TanCat's licence, so that is the option relied on; the GPL option is not used. It reaches the default install through `pytest-playwright` -> `python-slugify` (a runtime dependency in `pyproject.toml`), so this is a shipped component, not a dev tool. The package is used unmodified. Elected 2026-11-05. |
 | certifi | MPL-2.0 | runtime (ships) | Weak, file-level copyleft; used unmodified as a library, so no obligation reaches TanCat's own files. |
 | orjson | MPL-2.0 AND Apache-2.0 | runtime (ships) | The expression is MPL-2.0 AND (Apache-2.0 OR MIT): BOTH terms are operative. The MPL's file-level obligations attach to orjson's own files, and the Apache-2.0 option satisfies the second term; the MPL is not a lead-in to be explained away. Used unmodified. |
 | tqdm | MPL-2.0 AND MIT | runtime (ships) | The expression is MPL-2.0 AND MIT: both terms are operative. MIT covers tqdm's own code and the MPL obligations attach to the files it carries. Used unmodified. |

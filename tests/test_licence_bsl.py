@@ -58,7 +58,27 @@ OWN_SURFACES = (
     "landing/terms.html",
     "landing/install.html",
     "docs/implementation/tancat-pro-install-and-licence.html",
+    # t-1395: these three spoke about the product too - the first two are the
+    # licence record a store reviewer reads, and the third ships inside the wheel.
+    "docs/licenses/DEPENDENCIES.md",
+    "docs/licenses/DOCUMENT_READER_LICENSES.md",
+    "src/data/ocr/README.md",
 )
+
+#: Surfaces where the word "Apache" may only appear in a sentence about the Change
+#: Licence. The dependency-record files are excluded: they legitimately name
+#: dependencies whose own licence is Apache-2.0.
+CHANGE_LICENCE_SURFACES = (
+    "README.md",
+    "NOTICE",
+    "landing/index.html",
+    "landing/terms.html",
+    "landing/install.html",
+    "docs/implementation/tancat-pro-install-and-licence.html",
+)
+
+#: One of these must be in a line that mentions Apache on those surfaces.
+APACHE_CONTEXT = ("converts to", "Change License", "four years", "Apache License, Version 2.0")
 
 
 def _license_text() -> str:
@@ -71,13 +91,28 @@ class TestTheLicenceText:
         missing = [line for line in CANONICAL_PROSE if line not in text]
         assert missing == [], f"LICENSE is missing canonical text: {missing}"
 
+    def _value_of(self, label: str) -> str:
+        """The label's own value: its line plus its indented continuation lines."""
+        lines = _license_text().splitlines()
+        start = next((i for i, line in enumerate(lines) if line.startswith(f"{label}:")), None)
+        assert start is not None, f"{label}: missing from the parameter block"
+        collected = [lines[start].split(":", 1)[1].strip()]
+        for line in lines[start + 1 :]:
+            if not line.strip() or not line.startswith(" " * 22):
+                break
+            collected.append(line.strip())
+        return " ".join(collected)
+
     def test_the_parameters_are_filled(self) -> None:
-        text = _license_text()
+        """Each value is bound to ITS label, not merely present somewhere in the block."""
         for label, value in PARAMETERS.items():
-            match = re.search(rf"^{re.escape(label)}:\s*(.+)$", text, re.MULTILINE)
-            assert match is not None, f"{label}: missing from the parameter block"
-            block = text[match.start() : text.index("\n\n", match.start())]
-            assert value in block, f"{label}: expected {value!r} in {block!r}"
+            owned = self._value_of(label)
+            assert value in owned, f"{label}: expected {value!r} in {owned!r}"
+
+    def test_the_contact_line_is_ours(self) -> None:
+        text = _license_text()
+        assert "please contact: hello@tancat.dev" in text
+        assert "mariadb.com/products" not in text
 
     def test_the_additional_use_grant_keeps_customers_free_and_blocks_resale(self) -> None:
         text = _license_text()
@@ -142,6 +177,39 @@ class TestNoSurfaceSaysOpenSourceOrApache:
         text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         assert 'license = "BUSL-1.1"' in text
         assert 'license = "Apache-2.0"' not in text
+
+    def test_every_apache_mention_is_about_the_change_licence(self) -> None:
+        """The gap the reviewer proved: an injected "TanCat is Apache-2.0 licensed." passed."""
+        offenders: list[str] = []
+        for name in CHANGE_LICENCE_SURFACES:
+            for line in (ROOT / name).read_text(encoding="utf-8").splitlines():
+                if "apache" not in line.lower():
+                    continue
+                if not any(context in line for context in APACHE_CONTEXT):
+                    offenders.append(f"{name}: {line.strip()[:120]}")
+        assert offenders == [], offenders
+
+    def test_the_product_licence_lines_in_the_records_are_bsl(self) -> None:
+        forbiddens = {
+            "docs/licenses/DEPENDENCIES.md": (
+                "TanCat itself is **Apache-2.0**",
+                "TanCat's Apache-2.0 licence",
+                "shipping Apache-2.0 TanCat",
+            ),
+            "docs/licenses/DOCUMENT_READER_LICENSES.md": ("The product is Apache-2.0", "an Apache-2.0 product"),
+            "src/data/ocr/README.md": ("this Apache-2.0 product",),
+        }
+        for name, phrases in forbiddens.items():
+            text = (ROOT / name).read_text(encoding="utf-8")
+            found = [phrase for phrase in phrases if phrase in text]
+            assert found == [], f"{name} still says {found}"
+            assert "Business Source License 1.1" in text or "TanCat's own licence" in text or "TanCat's licence" in text
+
+    def test_the_notice_artistic_sentence_is_the_reworded_one(self) -> None:
+        """The gap the reviewer proved: reverting this sentence passed."""
+        text = NOTICE.read_text(encoding="utf-8")
+        assert "is permissive and compatible with Apache-2.0" not in text
+        assert "is permissive and imposes no restriction of its own" in text
 
     def test_no_source_docstring_claims_apache_for_our_code(self) -> None:
         offenders: list[str] = []

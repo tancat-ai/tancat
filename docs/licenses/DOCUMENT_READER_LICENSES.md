@@ -4,14 +4,15 @@
 **Decision:** owner, 2026-10-01 - retire PyMuPDF, ship a licence-clean reader.
 
 This records every dependency the document reader pulls in, so the next reader
-can re-check it. The product is Apache-2.0; a dependency whose licence forbids
+can re-check it. The product is source-available under the Business Source License 1.1 (it
+converts to Apache-2.0 after the Change Date); a dependency whose licence forbids
 commercial use must not be shipped.
 
 ## Why PyMuPDF was removed
 
 `PyMuPDF` (import name `fitz`) is dual-licensed **AGPL-3.0 or a paid Artifex
-commercial licence**. AGPL-3.0 is strong copyleft and conflicts with an
-Apache-2.0 product, and with any proprietary release. It was declared as the
+commercial licence**. AGPL-3.0 is strong copyleft and conflicts with TanCat's own
+licence, and with any proprietary release. It was declared as the
 `[pdf]` extra but was not installed in the image, so the conflict was latent.
 It is now removed and must not come back.
 
