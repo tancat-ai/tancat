@@ -282,8 +282,11 @@ class TestThirdPartyStatementsAreUnchanged:
 # The word sweep: every tracked text file, not a hand-picked phrase list (t-1399)
 # ---------------------------------------------------------------------------
 
-#: Text files the sweep reads. Anything with these suffixes that is tracked by git.
+#: Text files the sweep reads. Anything with these suffixes that is tracked by git,
+#: plus the extensionless files - LICENSE and NOTICE are the two most licence-relevant
+#: files in the tree and a suffix whitelist made them invisible (t-1401).
 SWEEP_SUFFIXES = {".md", ".html", ".yml", ".yaml", ".toml", ".txt", ".py", ".json", ".cfg", ".ini", ".sh"}
+LICENCE_FILENAMES = {"LICENSE", "LICENCE", "NOTICE", "COPYING", "COPYRIGHT", "AUTHORS"}
 
 #: The words that must not appear about TanCat itself.
 SWEEP_WORDS = (
@@ -337,14 +340,31 @@ THIRD_PARTY_TOKENS = (
     "BSD-3-Clause",
 )
 
-#: A sentence about the Change Licence - the one Apache mention our own text needs.
-CHANGE_CONTEXT = ("Change License", "Change Date", "converts to", "four years", "not OSI")
+#: The words that make an Apache mention legitimate in our own text: a Change-Licence
+#: sentence says WHERE it converts and WHEN. "converts to" alone is not enough - the
+#: attack that passed last time was "TanCat converts to Apache-2.0 today, so it is
+#: Apache-2.0 now." (t-1401).
+CHANGE_WORDING = ("Change License", "Change Licence", "Change Date")
+CHANGE_DATE_WORDS = ("four years", "fourth anniversary")
+OSI_DISCLAIMER = ("not OSI",)
+
+#: A quoted SPDX value is a licence EXPRESSION - a dependency row, an election option,
+#: a metadata field - and never a product claim. These surfaces may not use it.
+NEVER_A_QUOTED_VALUE = ("landing/", "mkdocs.yml", "README.md", "NOTICE", "docs/user/")
+
+QUOTED_SPDX = re.compile(r"[\"']apache-2\.0[\"']", re.IGNORECASE)
 
 
 def _tracked_text_files() -> list[str]:
     result = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
     assert result.returncode == 0, "git ls-files failed, so the sweep cannot know the tracked tree"
-    return [name for name in result.stdout.split() if Path(name).suffix.lower() in SWEEP_SUFFIXES]
+    return [
+        name
+        for name in result.stdout.split()
+        if Path(name).suffix.lower() in SWEEP_SUFFIXES
+        or Path(name).suffix == ""
+        or Path(name).name in LICENCE_FILENAMES
+    ]
 
 
 def _sweep_hits() -> list[tuple[str, int, str]]:
@@ -365,15 +385,38 @@ def _sweep_allows(name: str, line: str) -> bool:
         return True
     if name in DATED_FILES or name.startswith(DATED_DIRS):
         return True
-    if any(context in line for context in CHANGE_CONTEXT):
+    # A Change-Licence sentence names the conversion and its date.
+    if any(word in line for word in CHANGE_WORDING):
         return True
-    # A QUOTED SPDX value is a licence expression - an election option, a metadata
-    # map, an assertion about a dependency's field. The product's own field is not
-    # covered by this: `test_pyproject_declares_the_bsl` pins it directly.
-    if re.search(r"[\"']apache-2\.0[\"']", line, re.IGNORECASE):
+    if any(span in line for span in CHANGE_DATE_WORDS):
         return True
+    if any(phrase in line for phrase in OSI_DISCLAIMER):
+        return True
+
+    # A quoted SPDX value is a licence EXPRESSION: a dependency row, an election
+    # option, or an assertion about a metadata field. Never a product claim, and
+    # never on a surface a buyer reads.
+    if QUOTED_SPDX.search(line):
+        if any(name.startswith(surface) for surface in NEVER_A_QUOTED_VALUE):
+            return False
+        return _is_licence_value_line(line)
+
     if "MPL-2.0 AND" in line or "Apache/MIT" in line:
         return True
+    return any(token in line for token in THIRD_PARTY_TOKENS)
+
+
+def _is_licence_value_line(line: str) -> bool:
+    """Whether this line is a licence VALUE, not a claim: a row, a map, or a field."""
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        return True  # a table row
+    if re.match(r"^[\"']?[\w.\-]+[\"']?\s*:\s*[\"']", stripped):
+        return True  # a mapping / election entry
+    if re.fullmatch(r"[\"']apache-2\.0[\"'],?", stripped, re.IGNORECASE):
+        return True  # a bare election option
+    if "manifest" in line and ("licence" in line or "license" in line):
+        return True  # an assertion about a component's manifest field
     return any(token in line for token in THIRD_PARTY_TOKENS)
 
 
@@ -402,7 +445,18 @@ class TestTheWordSweep:
         )
 
     def test_a_change_licence_sentence_passes(self) -> None:
-        assert _sweep_allows("README.md", "the licence converts to the Apache License, Version 2.0 on that date.")
+        assert _sweep_allows("NOTICE", "Apache License, Version 2.0 four years after each version's first public")
+        assert _sweep_allows("landing/terms.html", "it converts to Apache-2.0 four years after each version's release.")
+        assert _sweep_allows("README.md", "licence is not OSI open source until it converts to the Apache License")
+
+    def test_converts_to_without_a_date_fails(self) -> None:
+        """The attack that passed last time: the conversion words, no date (t-1401)."""
+        assert not _sweep_allows("README.md", "TanCat converts to Apache-2.0 today, so it is Apache-2.0 now.")
+
+    def test_a_quoted_spdx_value_on_a_landing_page_fails(self) -> None:
+        """A quoted value is an expression, not a product claim - never on a surface a buyer reads."""
+        assert not _sweep_allows("landing/index.html", '<meta name="licence" content="Apache-2.0">')
+        assert _sweep_allows("docs/licenses/DEPENDENCIES.md", "| orjson | 3.11.4 | MPL-2.0 AND (Apache-2.0 OR MIT) |")
 
     def test_an_injected_product_claim_fails(self) -> None:
         assert not _sweep_allows("mkdocs.yml", "copyright: TanCat - Apache-2.0")
