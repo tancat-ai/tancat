@@ -7,7 +7,7 @@ name = "tancat"
 version = "0.1.0"
 description = "AI-powered Playwright test generator using local LLMs (llama.cpp, Ollama, LM Studio)"
 readme = "README.md"
-license = "Apache-2.0"
+license = "BUSL-1.1"
 license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
@@ -60,7 +60,7 @@ tancat = "cli.main:main"
 # Licence-clean PDF reading (owner decision 2026-10-01): pypdfium2 extracts text
 # and renders pages (BSD-3-Clause / Apache-2.0); pdfplumber supplies layout and
 # table structure (MIT). PyMuPDF was removed - it is AGPL-3.0 or a paid Artifex
-# licence, a conflict for an Apache-2.0 product. Licence record:
+# licence, a conflict for a source-available (BSL 1.1) product. Licence record:
 # docs/licenses/DOCUMENT_READER_LICENSES.md.
 pdf = [
     "pypdfium2>=5.13.0",

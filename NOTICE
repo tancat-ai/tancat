@@ -1,7 +1,9 @@
 TanCat
 Copyright 2026 lacattano
 
-Licensed under the Apache License, Version 2.0 (see LICENSE).
+Licensed under the Business Source License 1.1 (see LICENSE). It converts to the
+Apache License, Version 2.0 four years after each version's first public
+distribution.
 
 TanCat includes third-party software. The licence for every dependency, direct
 and transitive, is recorded in docs/licenses/DEPENDENCIES.md. Two transitive
@@ -9,7 +11,7 @@ components are flagged there:
 
   - text-unidecode 1.3 - dual-licensed GPL-2.0-or-later / Artistic-1.0.
     TanCat elects, and relies on, the Artistic-1.0 option and not the GPL; it
-    is permissive and compatible with Apache-2.0. This package ships in the
+    is permissive and imposes no restriction of its own. This package ships in the
     default install (it arrives through pytest-playwright -> python-slugify),
     and it is used unmodified. Elected 2026-11-05; see the Elections section of
     docs/licenses/DEPENDENCIES.md.

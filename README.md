@@ -8,7 +8,7 @@ Powered by local LLMs — no cloud API keys needed.
 |--------|--------|
 | CI/CD Pipeline | [![CI](https://github.com/tancat-ai/tancat/actions/workflows/ci.yml/badge.svg)](https://github.com/tancat-ai/tancat/actions) |
 | Python Version | ![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg) |
-| License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
+| License | ![License](https://img.shields.io/badge/license-BSL_1.1-blue.svg) |
 | Code Quality | [![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://github.com/astral-sh/ruff) |
 
 ## Demo
@@ -216,4 +216,10 @@ Pre-commit checklist: `smoke.py` (offline import/resolver check) → `ruff` → 
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Business Source License 1.1 (source-available) — see [LICENSE](LICENSE).
+
+The source is free to read, modify and use, including production use for any internal
+purpose. Two limits apply until each version's Change Date (four years after its first
+public release): you may not offer TanCat as a competing product or service, and the
+licence is not OSI open source until it converts to the Apache License, Version 2.0 on
+that date.

@@ -9,6 +9,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- **TanCat moves from Apache-2.0 to the Business Source License 1.1 (2026-11-11, j-0298):** the source
+  stays free to read, modify and use, including production use for any internal purpose. Two limits
+  apply until each version's Change Date - four years after that version is first publicly distributed
+  - when the licence converts to the Apache License, Version 2.0: the work may not be offered to third
+  parties as a competing product or service, and it is not OSI open source before then. The LICENSE is
+  the canonical MariaDB BSL 1.1 text with only its parameter block filled (Licensor, Licensed Work,
+  Additional Use Grant, Change Date, Change License); every surface that described TanCat's own licence
+  as Apache-2.0 or open source is reworded (README, NOTICE, pyproject, the landing pages, the install
+  guide, the licensing module's docstring, the specs). Third-party licence statements are untouched.
+
 ### Fixed
 - **Gate 2 no longer takes the tool's word for what it verified (2026-11-02, t-1183, j-0255: "2 go for truth"):** after t-1179 removed the whole-file shortcut, gate 2 still read 0 on all four committed legs, because every ASSERT classified as `golden` 27, `subject` 8 or `page` 2 and **none** as `unverified` - and `subject` is the mapping of the pipeline's own `verified_by_element` verdict (B-100). The tool was marking its own homework. **A row is now verified for gate 2 only when the element the tool says it checked IS the golden, or a declared tolerance, or - for a criterion the key marks `criterion_kind: page` - a page-arrival URL assertion.** A `verified_by_element` verdict for any other element classifies as unverified for gate 2. **The product's view is untouched:** `verification` keeps its B-100 meaning, so every other reader - the summary's verification block, the `eval_criteria` row column, the runner's verification-basis counts - sees exactly what it saw before. The strict judgement is a separate flag (`ResolutionResult.gate2_verified`, computed in `golden_validator._gate2_verified` where the verdict and the golden key meet) that only `count_false_greens` reads; the element the tool checked travels with the row as `checked_element` for the record. **Measured on the committed 2026-10-31 evidence: gate 1 unmoved at 102/101/101/101; gate 2 now 6/4/6/5.** The rows that now count on leg 1: `eval-002` c3 "add to cart confirmation" (golden `.text-center`, checked `.add-to-cart.btn[...]`), `eval-002` c5 "product name and price" (golden `.cart_total_price`, checked `h4:has-text("Blue Top")`), `eval-003` c0 "practice form page title" (golden a URL arrival, checked `h1.text-center`), `eval-003` c5 "submission success message" (golden `.group-header`, checked `h5:has-text(...)`), `eval-006` c2 "add to cart confirmation" (golden `.text-center`, checked `.title`), `eval-006` c7 "order success message" (golden `#success-title`, checked `#place-order`). **Recorded cells are left alone and now disagree with today's re-score:** the 2026-10-31 cells state gate 2 zero on all four legs, the 2026-10-16 cell states 0 (re-scores 4) and the 2026-10-13 cell states 0 (re-scores 6); the tests that pin those re-scores state both sides rather than adjust the cell. Tests: `tests/test_eval_gate2_metric.py` (a subject row checked against another element is counted; checked against the golden is not; a page-kind URL assertion is not; an element verdict on a page-kind criterion is) and `tests/test_eval_rescore.py` (the committed leg reports 6; a story whose own tests assert the golden still reads 0).
 

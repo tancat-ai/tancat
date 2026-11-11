@@ -324,7 +324,8 @@ class UsageMeter:
         """Refuse a paid-gated export when the deployment's tier does not grant it.
 
         **This is a packaging choice, not a security gate.** The product is
-        Apache-2.0 and runs on the customer's own machine, so anyone can fork
+        source-available under BSL 1.1 and runs on the customer's own machine, so
+        anyone can fork
         the code and remove this check. It exists so the paid tier means
         something - a nudge, not a lock.
 

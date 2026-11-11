@@ -1,6 +1,7 @@
 """Licensing — tier config, claims, and ed25519 offline license validation.
 
-Phase 6e. Open-core honesty (spec §5.4 / §7.6): the repo is Apache-2.0; a
+Phase 6e. Open-core honesty (spec §5.4 / §7.6): the repo is BSL 1.1
+(source-available; converts to Apache-2.0 after the Change Date); a
 license key is an *entitlement marker*, not DRM. A modified fork can strip any
 check. The key's real value is ToS/support entitlement, honest tier enforcement
 for the 99% who run stock builds, and the air-gap premium bundle. Everything
