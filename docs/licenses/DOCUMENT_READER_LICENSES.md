@@ -101,7 +101,7 @@ licences.
 **Why MIT, not Apache-2.0.** The upstream GitHub `LICENSE` reads "Copyright (c)
 2026 Baidu" under the MIT licence, and the Hugging Face model card declares
 `license: mit`. Its base models are Apache-2.0. MIT is permissive and compatible
-with this product's Apache-2.0 licence.
+with TanCat's own licence.
 
 **Do not** replace the tier-3 model with one from the "Blocked" list below
 (non-commercial or AGPL) without re-checking this file. Re-check when tier 3 is

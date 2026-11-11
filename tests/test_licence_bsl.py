@@ -24,6 +24,7 @@ not OSI open source, until the Change Date.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,6 +69,8 @@ OWN_SURFACES = (
     "docs/licenses/DEPENDENCIES.md",
     "docs/licenses/DOCUMENT_READER_LICENSES.md",
     "src/data/ocr/README.md",
+    # t-1399: the site footer on every page - the reviewer found it live.
+    "mkdocs.yml",
 )
 
 #: Surfaces where the word "Apache" may only appear in a sentence about the Change
@@ -273,3 +276,135 @@ class TestThirdPartyStatementsAreUnchanged:
     def test_the_vendored_models_keep_their_licence_note(self) -> None:
         text = (ROOT / "src/data/ocr/README.md").read_text(encoding="utf-8")
         assert "Apache-2.0" in text
+
+
+# ---------------------------------------------------------------------------
+# The word sweep: every tracked text file, not a hand-picked phrase list (t-1399)
+# ---------------------------------------------------------------------------
+
+#: Text files the sweep reads. Anything with these suffixes that is tracked by git.
+SWEEP_SUFFIXES = {".md", ".html", ".yml", ".yaml", ".toml", ".txt", ".py", ".json", ".cfg", ".ini", ".sh"}
+
+#: The words that must not appear about TanCat itself.
+SWEEP_WORDS = (
+    re.compile(r"\bapache\b", re.IGNORECASE),
+    re.compile(r"\bopen[- ]source\b", re.IGNORECASE),
+    re.compile(r"\bOSI\b"),
+)
+
+#: Files whose whole purpose is to RECORD licences. Their product-licence lines are
+#: checked by `test_the_product_licence_lines_in_the_records_are_bsl` above; the
+#: sweep would otherwise fail on every dependency row they exist to carry.
+RECORD_FILES = (
+    "LICENSE",  # the canonical text: its Apache mention IS the Change Licence
+    "docs/licenses/",  # dependency and reader-licence records
+    "scripts/maintenance/licence_record.py",  # the generator that emits them
+    "scripts/maintenance/vendor_ocr_models.py",  # vendoring script: the models are Apache-2.0
+    "src/data/ocr/",  # the vendored models' own README and manifest
+    "src/ocr_backends.py",  # documents the OCR models' provenance
+    "tests/test_licence_bsl.py",  # this file: the words are its patterns
+)
+
+#: Dated records: what was true when they were written, not claims about today.
+DATED_FILES = ("CHANGELOG.md", "BACKLOG.md")
+DATED_DIRS = ("docs/sessions/", "docs/specs/", "docs/reviews/", "docs/private/")
+
+#: A line that is a dependency-table row, or names a third-party package/expression.
+THIRD_PARTY_TOKENS = (
+    "orjson",
+    "pypdfium2",
+    "pdfium",
+    "opencv",
+    "torch",
+    "rapidocr",
+    "PP-OCR",
+    "PaddleOCR",
+    "Baidu",
+    "tiktoken",
+    "openai",
+    "unsloth",
+    "zvec",
+    "Laya",
+    "Granite-Docling",
+    "LightOnOCR",
+    "OrangeHRM",
+    "text-unidecode",
+    "certifi",
+    "tqdm",
+    "fqdn",
+    "pathspec",
+    "MPL-2.0",
+    "BSD-3-Clause",
+)
+
+#: A sentence about the Change Licence - the one Apache mention our own text needs.
+CHANGE_CONTEXT = ("Change License", "Change Date", "converts to", "four years", "not OSI")
+
+
+def _tracked_text_files() -> list[str]:
+    result = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, "git ls-files failed, so the sweep cannot know the tracked tree"
+    return [name for name in result.stdout.split() if Path(name).suffix.lower() in SWEEP_SUFFIXES]
+
+
+def _sweep_hits() -> list[tuple[str, int, str]]:
+    hits: list[tuple[str, int, str]] = []
+    for name in _tracked_text_files():
+        path = ROOT / name
+        if not path.is_file():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            if any(pattern.search(line) for pattern in SWEEP_WORDS):
+                hits.append((name, number, line.strip()))
+    return hits
+
+
+def _sweep_allows(name: str, line: str) -> bool:
+    """Whether this line's mention is a legitimate one, and why (kept in the test)."""
+    if name in RECORD_FILES or name.startswith(RECORD_FILES):
+        return True
+    if name in DATED_FILES or name.startswith(DATED_DIRS):
+        return True
+    if any(context in line for context in CHANGE_CONTEXT):
+        return True
+    # A QUOTED SPDX value is a licence expression - an election option, a metadata
+    # map, an assertion about a dependency's field. The product's own field is not
+    # covered by this: `test_pyproject_declares_the_bsl` pins it directly.
+    if re.search(r"[\"']apache-2\.0[\"']", line, re.IGNORECASE):
+        return True
+    if "MPL-2.0 AND" in line or "Apache/MIT" in line:
+        return True
+    return any(token in line for token in THIRD_PARTY_TOKENS)
+
+
+class TestTheWordSweep:
+    """One scan over every tracked text file, not a list of phrases someone remembered."""
+
+    def test_no_unrelated_line_mentions_apache_open_source_or_osi(self) -> None:
+        offenders = [
+            f"{name}:{number}: {text[:120]}"
+            for name, number, text in _sweep_hits()
+            if not _sweep_allows(name, line=text)
+        ]
+        assert offenders == [], "line(s) claim a licence TanCat does not have:\n" + "\n".join(offenders[:20])
+
+    def test_the_sweep_covers_the_whole_tracked_tree(self) -> None:
+        """Guard against a scan that quietly sees nothing (the class this job exists to stop)."""
+        files = _tracked_text_files()
+        hits = _sweep_hits()
+        assert len(files) > 500, f"only {len(files)} tracked text files seen - the sweep has gone blind"
+        assert len(hits) > 50, f"only {len(hits)} lines mention the words - the patterns are not matching"
+
+    def test_a_legitimate_dependency_row_passes(self) -> None:
+        assert _sweep_allows(
+            "docs/licenses/DEPENDENCIES.md",
+            "| orjson | 3.11.4 | MPL-2.0 AND (Apache-2.0 OR MIT) | https://github.com/ijl/orjson |",
+        )
+
+    def test_a_change_licence_sentence_passes(self) -> None:
+        assert _sweep_allows("README.md", "the licence converts to the Apache License, Version 2.0 on that date.")
+
+    def test_an_injected_product_claim_fails(self) -> None:
+        assert not _sweep_allows("mkdocs.yml", "copyright: TanCat - Apache-2.0")
+        assert not _sweep_allows("landing/index.html", "<p>TanCat is Apache-2.0 licensed.</p>")
+        assert not _sweep_allows("README.md", "TanCat is open source.")

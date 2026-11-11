@@ -22,7 +22,8 @@ NOTICE = REPO_ROOT / "NOTICE"
 COPYLEFT_MARKERS = ("GPL", "MPL", "AGPL", "LGPL", "EUPL", "CDDL", "OSL")
 
 #: The licence options this project may elect. Every entry is compatible with
-#: shipping Apache-2.0 code, and each names the actual option relied on.
+#: shipping TanCat's own code (the BSL 1.1 work), and each names the actual
+#: option relied on.
 ALLOWED_ELECTIONS = {
     "Artistic-1.0",
     "Apache-2.0",
