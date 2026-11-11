@@ -2,8 +2,11 @@
 
 TanCat itself is **source-available under the Business Source License 1.1** (see
 `LICENSE`, Copyright 2026 lacattano; it converts to Apache-2.0 after the Change
-Date). This
-file is the licence record for everything TanCat installs, taken from the locked
+Date).
+
+Product licence: **BUSL-1.1** (Business Source License 1.1).
+
+This file is the licence record for everything TanCat installs, taken from the locked
 dependency set (`uv.lock`). It exists so the owner can confirm ownership and
 licensing for a store or customer review.
 

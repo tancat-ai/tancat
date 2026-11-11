@@ -203,8 +203,11 @@ HEADER = """# TanCat dependency licences
 
 TanCat itself is **source-available under the Business Source License 1.1** (see
 `LICENSE`, Copyright 2026 lacattano; it converts to Apache-2.0 after the Change
-Date). This
-file is the licence record for everything TanCat installs, taken from the locked
+Date).
+
+{product_licence}
+
+This file is the licence record for everything TanCat installs, taken from the locked
 dependency set (`uv.lock`). It exists so the owner can confirm ownership and
 licensing for a store or customer review.
 
@@ -359,7 +362,7 @@ def render(meta: Mapping[str, tuple[str, str]] | None = None) -> str:
     """Return the full expected document from the lock and *meta* licence facts."""
     meta = dict(meta or {})
     lock = lock_versions()
-    parts = [HEADER.rstrip("\n"), ""]
+    parts = [HEADER.replace("{product_licence}", product_licence_line()).rstrip("\n"), ""]
     for heading, names in read_sections():
         parts.append(f"### {heading}")
         parts.append("")
@@ -403,6 +406,23 @@ SPDX_DISPLAY = {
     "Apache-2.0": "Apache-2.0",
     "MIT": "MIT",
 }
+
+
+def _declared_spdx() -> str | None:
+    """The SPDX id ``pyproject.toml`` declares - the one source of truth (t-1397)."""
+    match = re.search(r'^license\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def product_licence_line() -> str:
+    """The record's own SPDX statement, built from pyproject.
+
+    Kept separate from the prose header on purpose: the prose mentions the Change
+    Licence (Apache-2.0), so a substring test on it cannot tell the product's
+    licence from the one it converts to. This line carries only the id.
+    """
+    spdx = _declared_spdx() or "UNKNOWN"
+    return f"Product licence: **{spdx}** ({SPDX_DISPLAY.get(spdx, spdx)})."
 
 
 def declared_product_licence() -> str | None:
@@ -456,16 +476,25 @@ def check(text: str | None = None, path: Path = OUTPUT) -> list[str]:
     if count and int(count.group(1)) != rows:
         problems.append(f"the appendix title says {count.group(1)} entries but the table has {rows} rows")
 
-    # t-1395: the record states the PRODUCT's licence in its header, and that line
-    # used to be a copy of this generator's boilerplate - so the check compared the
-    # generator with itself and stayed green while the record said Apache-2.0 for a
-    # BSL product. pyproject is the single source of truth for that field now.
-    declared = declared_product_licence()
-    if declared:
-        stated = next((line for line in committed.splitlines() if line.startswith("TanCat itself is")), "")
-        if declared not in stated:
+    # t-1395/t-1397: the record states the PRODUCT's licence, and that statement must
+    # match pyproject - the single source of truth. The first version compared a line
+    # by substring, so reflowing the header and setting pyproject back to Apache-2.0
+    # still passed (the prose mentions the Change Licence). The record now carries a
+    # dedicated SPDX line and the check compares ids, not prose.
+    declared_spdx = _declared_spdx()
+    if declared_spdx is None:
+        problems.append("pyproject declares no license field, so the record's product licence cannot be checked")
+    else:
+        stated_spdx = re.search(r"^Product licence:\s*\**([^*\s(]+)\**", committed, re.MULTILINE)
+        if stated_spdx is None:
             problems.append(
-                f"the record states the product licence as {stated.strip()!r}, but pyproject declares {declared!r}"
+                "the record carries no 'Product licence: <SPDX>' line, so its product licence cannot be "
+                "checked against pyproject"
+            )
+        elif stated_spdx.group(1).strip().lower() != declared_spdx.strip().lower():
+            problems.append(
+                f"the record states the product licence as {stated_spdx.group(1)!r}, but pyproject declares "
+                f"{declared_spdx!r}"
             )
 
     if not problems and render(parse_appendix_metadata(committed)) != committed:

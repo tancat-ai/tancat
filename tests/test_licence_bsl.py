@@ -31,9 +31,14 @@ LICENSE = ROOT / "LICENSE"
 NOTICE = ROOT / "NOTICE"
 README = ROOT / "README.md"
 
-PARAMETERS = {
+#: The record's SPDX id for the product, compared with pyproject (t-1397).
+PRODUCT_SPDX = "BUSL-1.1"
+
+#: Each parameter's ENTIRE value. Equality, not substring: a swap must fail.
+EXPECTED_PARAMETERS = {
     "Licensor": "Louis Cattano, trading as TanCat",
-    "Licensed Work": "TanCat",
+    "Licensed Work": ("TanCat version 0.1.0 or later. The Licensed Work is (c) 2026 Louis Cattano, trading as TanCat."),
+    "Change Date": "The fourth anniversary of the date the Licensed Work is first publicly distributed.",
     "Change License": "Apache License, Version 2.0",
 }
 
@@ -85,10 +90,16 @@ def _license_text() -> str:
     return LICENSE.read_text(encoding="utf-8")
 
 
+def _flat(text: str) -> str:
+    """Collapse whitespace: assertions must not depend on where a file wraps."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class TestTheLicenceText:
     def test_it_is_the_canonical_bsl_1_1(self) -> None:
-        text = _license_text()
-        missing = [line for line in CANONICAL_PROSE if line not in text]
+        """Phrase-based, so a reflow cannot fail it and a reword cannot pass it."""
+        flat = _flat(_license_text())
+        missing = [phrase for phrase in CANONICAL_PROSE if _flat(phrase) not in flat]
         assert missing == [], f"LICENSE is missing canonical text: {missing}"
 
     def _value_of(self, label: str) -> str:
@@ -104,10 +115,22 @@ class TestTheLicenceText:
         return " ".join(collected)
 
     def test_the_parameters_are_filled(self) -> None:
-        """Each value is bound to ITS label, not merely present somewhere in the block."""
-        for label, value in PARAMETERS.items():
-            owned = self._value_of(label)
-            assert value in owned, f"{label}: expected {value!r} in {owned!r}"
+        """Each label's WHOLE value is compared, so swapping two values fails.
+
+        A substring test passed a swap: with the Licensor and Licensed Work values
+        exchanged, each block still contained the other's expected text (t-1397).
+        """
+        for label, value in EXPECTED_PARAMETERS.items():
+            owned = _flat(self._value_of(label))
+            assert owned == _flat(value), f"{label}: expected {_flat(value)!r}, found {owned!r}"
+
+    def test_the_record_states_the_same_spdx_id_as_pyproject(self) -> None:
+        record = (ROOT / "docs/licenses/DEPENDENCIES.md").read_text(encoding="utf-8")
+        stated = re.search(r"^Product licence:\s*\**([^*\s(]+)\**", record, re.MULTILINE)
+        assert stated is not None, "the record carries no 'Product licence: <SPDX>' line"
+        assert stated.group(1) == PRODUCT_SPDX
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        assert f'license = "{PRODUCT_SPDX}"' in pyproject
 
     def test_the_contact_line_is_ours(self) -> None:
         text = _license_text()
@@ -115,21 +138,22 @@ class TestTheLicenceText:
         assert "mariadb.com/products" not in text
 
     def test_the_additional_use_grant_keeps_customers_free_and_blocks_resale(self) -> None:
-        text = _license_text()
-        grant = text[text.index("Additional Use Grant:") : text.index("Change Date:")]
-        assert "production use" in grant
-        assert "for any" in grant and "internal purpose" in grant
-        assert "competing product or service" in grant
-        assert "substantially the same" in grant and "functionality" in grant
+        grant = _flat(self._value_of("Additional Use Grant"))
+        for phrase in (
+            "production use",
+            "for any internal purpose",
+            "competing product or service",
+            "substantially the same functionality",
+        ):
+            assert phrase in grant, f"the grant lost {phrase!r}: {grant!r}"
 
     def test_the_change_date_is_four_years_after_first_distribution(self) -> None:
-        text = _license_text()
-        change_date = text[text.index("Change Date:") : text.index("Change License:")]
+        change_date = _flat(self._value_of("Change Date"))
         assert "fourth anniversary" in change_date
         assert "first publicly distributed" in change_date
 
     def test_it_converts_to_apache_2(self) -> None:
-        assert re.search(r"^Change License:\s+Apache License, Version 2\.0$", _license_text(), re.MULTILINE)
+        assert _flat(self._value_of("Change License")) == "Apache License, Version 2.0"
 
     def test_no_placeholder_or_foreign_parameter_survives(self) -> None:
         text = _license_text()
