@@ -248,7 +248,8 @@ No open questions remain.
 ---
 
 ## 13. Licensing & Commercial Model (open-core, recorded 2026-08-13)
-- The repo is **Apache 2.0** — the code (including the Action) is free forever; anyone may legally adapt a copy. This is a deliberate choice: it is the portfolio/building-in-public asset and it makes the Action the free adoption on-ramp.
-- **The Action carries zero license logic.** License keys / usage metering / tier enforcement (roadmap Phase 6 items) belong **only in the SaaS layer** (server-side, enforceable); in client code they would be theater under Apache 2.0.
+- The repo is **BSL 1.1** (source-available; converts to Apache-2.0 after the Change Date) — the code
+  (including the Action) is free to read, modify and use internally; anyone may legally adapt a copy. This is a deliberate choice: it is the portfolio/building-in-public asset and it makes the Action the free adoption on-ramp.
+- **The Action carries zero license logic.** License keys / usage metering / tier enforcement (roadmap Phase 6 items) belong **only in the SaaS layer** (server-side, enforceable); in client code they would be theater under any permissive licence.
 - **Paid CI features, if ever needed**, are delivered as the Action calling the SaaS API (a server-side meter) — one seam, same enforcement story.
-- **Cloud-fork risk is real only at traction.** Revisit licensing at Phase 8 (alongside AI-039 rename): levers are AGPL (network copyleft), source-available (ELv2/BSL), or keeping moats (RAG corpus, eval datasets) server-side. The RAG corpus/eval datasets are Apache-licensed today — the candidate asset to move server-side if a moat is wanted.
+- **Cloud-fork risk is real only at traction.** Revisit licensing at Phase 8 (alongside AI-039 rename): levers are AGPL (network copyleft), source-available (ELv2/BSL), or keeping moats (RAG corpus, eval datasets) server-side. The RAG corpus/eval datasets are BSL-licensed today — the candidate asset to move server-side if a moat is wanted.

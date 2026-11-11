@@ -201,8 +201,13 @@ def _parse_appendix_rows(text: str) -> dict[str, tuple[str, str]]:
 
 HEADER = """# TanCat dependency licences
 
-TanCat itself is **Apache-2.0** (see `LICENSE`, Copyright 2026 lacattano). This
-file is the licence record for everything TanCat installs, taken from the locked
+TanCat itself is **source-available under the Business Source License 1.1** (see
+`LICENSE`, Copyright 2026 lacattano; it converts to Apache-2.0 after the Change
+Date).
+
+{product_licence}
+
+This file is the licence record for everything TanCat installs, taken from the locked
 dependency set (`uv.lock`). It exists so the owner can confirm ownership and
 licensing for a store or customer review.
 
@@ -241,7 +246,7 @@ FLAGGED = """## Flagged: non-permissive or unclear
 
 | Package | Licence (as reported) | Flag |
 |---|---|---|
-| text-unidecode | Artistic License; GNU General Public License (GPL); GNU General Public License v2 or later (GPLv2+) | FLAG - dual GPL-2.0-or-later / Artistic-1.0. pip-licenses reports the GPL classifiers. The Artistic option is permissive, but the licence choice must be made and recorded; the GPL option alone would conflict with shipping Apache-2.0 TanCat. Pulled in by pytest-playwright -> python-slugify, so it is in the default install. |
+| text-unidecode | Artistic License; GNU General Public License (GPL); GNU General Public License v2 or later (GPLv2+) | FLAG - dual GPL-2.0-or-later / Artistic-1.0. pip-licenses reports the GPL classifiers. The Artistic option is permissive, but the licence choice must be made and recorded; the GPL option alone would conflict with shipping TanCat under the BSL 1.1. Pulled in by pytest-playwright -> python-slugify, so it is in the default install. |
 | certifi | Mozilla Public License 2.0 (MPL 2.0) | FLAG - MPL-2.0 (weak, file-level copyleft), not permissive. Used unmodified as a library; keep it unmodified and it is compatible. |
 | orjson | MPL-2.0 AND (Apache-2.0 OR MIT) | FLAG - MPL-2.0 AND (Apache-2.0 OR MIT). The Apache/MIT option applies, so it is effectively permissive; flagged because the metadata leads with MPL. |
 | tqdm | MPL-2.0 AND MIT | FLAG - MPL-2.0 AND MIT. The MIT option applies; flagged because the metadata leads with MPL. |
@@ -251,7 +256,7 @@ FLAGGED = """## Flagged: non-permissive or unclear
 | pillow | MIT-CMU | Note - MIT-CMU (permissive; a non-standard name, not a flag). |
 
 MPL-2.0 is a weak, file-level copyleft. Using the packages unmodified as
-libraries is fine and does not affect TanCat's Apache-2.0 licence. The flag is
+libraries is fine and does not affect TanCat's own licence. The flag is
 recorded so the position is a decision, not an oversight. For `text-unidecode`,
 the permissive Artistic option should be the one relied on.
 """
@@ -265,7 +270,7 @@ with no row here fails `tests/test_licence_elections.py`.
 
 | Package | Elected licence | Scope | Why |
 |---|---|---|---|
-| text-unidecode | Artistic-1.0 | runtime (ships) | Dual-licensed GPL-2.0-or-later / Artistic-1.0. Artistic-1.0 is permissive and compatible with Apache-2.0, so that is the option relied on; the GPL option is not used. It reaches the default install through `pytest-playwright` -> `python-slugify` (a runtime dependency in `pyproject.toml`), so this is a shipped component, not a dev tool. The package is used unmodified. Elected 2026-11-05. |
+| text-unidecode | Artistic-1.0 | runtime (ships) | Dual-licensed GPL-2.0-or-later / Artistic-1.0. Artistic-1.0 is permissive and compatible with TanCat's licence, so that is the option relied on; the GPL option is not used. It reaches the default install through `pytest-playwright` -> `python-slugify` (a runtime dependency in `pyproject.toml`), so this is a shipped component, not a dev tool. The package is used unmodified. Elected 2026-11-05. |
 | certifi | MPL-2.0 | runtime (ships) | Weak, file-level copyleft; used unmodified as a library, so no obligation reaches TanCat's own files. |
 | orjson | MPL-2.0 AND Apache-2.0 | runtime (ships) | The expression is MPL-2.0 AND (Apache-2.0 OR MIT): BOTH terms are operative. The MPL's file-level obligations attach to orjson's own files, and the Apache-2.0 option satisfies the second term; the MPL is not a lead-in to be explained away. Used unmodified. |
 | tqdm | MPL-2.0 AND MIT | runtime (ships) | The expression is MPL-2.0 AND MIT: both terms are operative. MIT covers tqdm's own code and the MPL obligations attach to the files it carries. Used unmodified. |
@@ -357,7 +362,7 @@ def render(meta: Mapping[str, tuple[str, str]] | None = None) -> str:
     """Return the full expected document from the lock and *meta* licence facts."""
     meta = dict(meta or {})
     lock = lock_versions()
-    parts = [HEADER.rstrip("\n"), ""]
+    parts = [HEADER.replace("{product_licence}", product_licence_line()).rstrip("\n"), ""]
     for heading, names in read_sections():
         parts.append(f"### {heading}")
         parts.append("")
@@ -393,6 +398,40 @@ def render(meta: Mapping[str, tuple[str, str]] | None = None) -> str:
 # ---------------------------------------------------------------------------
 # Check / write / CLI
 # ---------------------------------------------------------------------------
+
+
+#: SPDX id -> the name the record must use when it states the product's licence.
+SPDX_DISPLAY = {
+    "BUSL-1.1": "Business Source License 1.1",
+    "Apache-2.0": "Apache-2.0",
+    "MIT": "MIT",
+}
+
+
+def _declared_spdx() -> str | None:
+    """The SPDX id ``pyproject.toml`` declares - the one source of truth (t-1397)."""
+    match = re.search(r'^license\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def product_licence_line() -> str:
+    """The record's own SPDX statement, built from pyproject.
+
+    Kept separate from the prose header on purpose: the prose mentions the Change
+    Licence (Apache-2.0), so a substring test on it cannot tell the product's
+    licence from the one it converts to. This line carries only the id.
+    """
+    spdx = _declared_spdx() or "UNKNOWN"
+    return f"Product licence: **{spdx}** ({SPDX_DISPLAY.get(spdx, spdx)})."
+
+
+def declared_product_licence() -> str | None:
+    """The licence ``pyproject.toml`` declares, as the record must state it."""
+    match = re.search(r'^license\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
+    if match is None:
+        return None
+    spdx = match.group(1).strip()
+    return SPDX_DISPLAY.get(spdx, spdx)
 
 
 def check(text: str | None = None, path: Path = OUTPUT) -> list[str]:
@@ -436,6 +475,27 @@ def check(text: str | None = None, path: Path = OUTPUT) -> list[str]:
     )
     if count and int(count.group(1)) != rows:
         problems.append(f"the appendix title says {count.group(1)} entries but the table has {rows} rows")
+
+    # t-1395/t-1397: the record states the PRODUCT's licence, and that statement must
+    # match pyproject - the single source of truth. The first version compared a line
+    # by substring, so reflowing the header and setting pyproject back to Apache-2.0
+    # still passed (the prose mentions the Change Licence). The record now carries a
+    # dedicated SPDX line and the check compares ids, not prose.
+    declared_spdx = _declared_spdx()
+    if declared_spdx is None:
+        problems.append("pyproject declares no license field, so the record's product licence cannot be checked")
+    else:
+        stated_spdx = re.search(r"^Product licence:\s*\**([^*\s(]+)\**", committed, re.MULTILINE)
+        if stated_spdx is None:
+            problems.append(
+                "the record carries no 'Product licence: <SPDX>' line, so its product licence cannot be "
+                "checked against pyproject"
+            )
+        elif stated_spdx.group(1).strip().lower() != declared_spdx.strip().lower():
+            problems.append(
+                f"the record states the product licence as {stated_spdx.group(1)!r}, but pyproject declares "
+                f"{declared_spdx!r}"
+            )
 
     if not problems and render(parse_appendix_metadata(committed)) != committed:
         problems.append("the record differs from a fresh render (formatting or prose drift); re-run --write")

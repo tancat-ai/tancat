@@ -20,8 +20,10 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
+| Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence, key issued by us |
+| Price | Free | $399 per deployment |
 | Support | - | Email support and setup help - direct from the developer |
-| Updates | - | 12 months included; later updates paid |
+| Updates | - | All updates released within 12 months of purchase; later updates optional and paid |
 | Runs | 25 per 30 days | Unlimited |
 | Evidence exports | 10 per 30 days | Unlimited |
 
@@ -36,11 +38,18 @@ the evidence-export counter and storage used.](../assets/streamlit-license-usage
 
 ## Updates
 
-A licence is **perpetual for the version you buy**: it does not expire, and the
-version you hold keeps working. It includes **12 months of updates** from the
-date of purchase. After those 12 months, further updates are paid. Security
-fixes and bug fixes in the version line you bought stay free for the life of the
-licence.
+A licence is **perpetual for the version you receive**. It does not expire.
+
+It includes all updates released within 12 months of purchase. Updates released
+after that are not included and can be bought separately if you want them.
+
+**Nothing renews automatically.** You will not be charged again unless you choose
+to buy. Security fixes and bug fixes for the version you hold are provided at no
+charge.
+
+The software is licensed under the **Business Source License 1.1**: free to read,
+modify and use, including production use for any internal purpose, and it
+converts to Apache-2.0 four years after each version's release.
 
 Updates are files, not a service. They arrive on Lemon Squeezy and on the
 [releases page](https://github.com/tancat-ai/tancat/releases), and you choose

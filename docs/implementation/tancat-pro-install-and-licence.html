@@ -56,7 +56,7 @@ bash launch_cli.sh     # interactive CLI</pre>
   <li><strong>A file you point at</strong>: <code>AITEST_LICENSE_FILE=/path/to/license.key</code></li>
   <li><strong>The default key file</strong>: save the key as <code>~/.ai-test-gen/license.key</code></li>
 </ul>
-<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the key is missing or invalid the product keeps working on the free tier; it never locks you out of the open-source core.</div>
+<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the key is missing or invalid the product keeps working on the free tier; it never locks you out of the free core.</div>
 
 <h2>5. Where your data goes</h2>
 <p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint and <strong>your</strong> target site &mdash; no telemetry, no update check, no vendor call. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
