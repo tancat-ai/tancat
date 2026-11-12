@@ -45,7 +45,7 @@
 <div class="wrap">
 
 <h1>TanCat launch &mdash; Lemon Squeezy checklist</h1>
-<p class="sub">Step 3 of the solo launch plan. Free + Pro only. Pro is <strong>$99/month or $990/year</strong>, per deployment, self-serve. Lemon Squeezy is the merchant of record. Owner: Cat Tan Operations Ltd (company number 17576111).</p>
+<p class="sub">Step 3 of the solo launch plan. Free + Pro only. Pro is <strong>&pound;399 per deployment</strong>, one price, self-serve. Lemon Squeezy is the merchant of record. Owner: Cat Tan Operations Ltd (company number 17576111).</p>
 
 <div class="box note">
   <strong>Standing alone:</strong> every link below opens in a browser. Work top to bottom. Nothing here needs a terminal except steps 4 and 5, and those are copy-paste.
@@ -66,7 +66,7 @@
 
   <li>
     <strong>Create the store.</strong>
-    In the dashboard, create a store for TanCat. Pick the store name, country (United Kingdom), currency (GBP or USD &mdash; pick the one you will price in) and a store subdomain such as <code>tancat</code>. The subdomain is what your checkout links sit on.
+    In the dashboard, create a store for TanCat. Pick the store name, country (United Kingdom), currency (GBP &mdash; the price is set in pounds) and a store subdomain such as <code>tancat</code>. The subdomain is what your checkout links sit on.
     <div class="muted">Where: dashboard &rarr; store switcher &rarr; New store.</div>
   </li>
 
@@ -81,8 +81,7 @@
     Add a product named <code>TanCat Pro Deployment</code>. Product type: <strong>subscription</strong>. Add two variants:
     <table>
       <tr><th>Variant</th><th>Price</th><th>Billing</th></tr>
-      <tr><td>Pro &mdash; monthly</td><td>$99</td><td>Every month</td></tr>
-      <tr><td>Pro &mdash; yearly</td><td>$990</td><td>Every year</td></tr>
+      <tr><td>Pro &mdash; one-off</td><td>&pound;399</td><td>Per deployment; nothing renews automatically</td></tr>
     </table>
     Put the same feature list on both: unlimited runs and evidence exports, POM mode, multi-site suites, CI/CD Action, email support and setup help, direct from the developer (we aim to reply within two working days), a perpetual licence for the version bought with 12 months of updates included, and one deployment (whole team, no per-seat charge).
     <div class="muted">Update entitlement: 12 months of updates included; later updates are paid. Security fixes and bug fixes within the bought version line stay free. Updates are delivered as files on Lemon Squeezy and on the releases page; the product itself never checks for updates.</div>
@@ -153,7 +152,7 @@ done &lt; buyers.csv</code></pre>
     <strong>Go live.</strong>
     Turn <strong>Test mode</strong> off. Then walk the page as a stranger:
     <ul class="check">
-      <li><input type="checkbox"/> <a href="https://tancat.dev/#pricing" target="_blank" rel="noopener noreferrer">tancat.dev/#pricing</a> shows $99/month and $990/year, and <strong>Buy Pro</strong> opens the live checkout.</li>
+      <li><input type="checkbox"/> <a href="https://tancat.dev/#pricing" target="_blank" rel="noopener noreferrer">tancat.dev/#pricing</a> shows &pound;399 per deployment, and <strong>Buy Pro</strong> opens the live checkout.</li>
       <li><input type="checkbox"/> Buy Pro with a real card; confirm the charge, the confirmation email, and that you can issue the key.</li>
       <li><input type="checkbox"/> The install page name-checks all three activation routes: <code>AITEST_LICENSE_KEY</code>, <code>AITEST_LICENSE_FILE</code>, and <code>~/.ai-test-gen/license.key</code>.</li>
       <li><input type="checkbox"/> Terms and privacy name Lemon Squeezy as merchant of record.</li>
