@@ -108,9 +108,10 @@ instead.
 A licence is perpetual for the version you receive. It includes all updates
 released within 12 months of purchase; updates released after that can be bought
 separately. Nothing renews automatically, and security fixes and bug fixes for
-the version you hold are free. Updates arrive as files on Lemon Squeezy and on the
-[releases page](https://github.com/tancat-ai/tancat/releases), and there is no
-runtime update check - you choose when to update.
+the version you hold are free. Updates are released as installable Python packages on the
+[releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
+way you upgrade any Python tool. You choose when to install one. TanCat makes
+no call to a vendor server and has no automatic update check.
 
 From a source checkout:
 
