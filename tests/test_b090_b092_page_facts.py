@@ -331,7 +331,7 @@ def _price_tracker(tmp_path: Any, container_count: int, text: str) -> EvidenceTr
 
 
 def test_section_has_price_passes_when_amount_present(tmp_path: Any) -> None:
-    tracker = _price_tracker(tmp_path, 1, "Pro Deployment $399 / month / deployment")
+    tracker = _price_tracker(tmp_path, 1, "Pro Deployment £399 per deployment")
     tracker.assert_section_has_price("Pro Deployment", label="Pro price")
     assert tracker.steps[-1]["result"]["status"] == "passed"
 
