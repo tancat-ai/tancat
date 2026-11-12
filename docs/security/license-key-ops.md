@@ -1,7 +1,7 @@
 # License Key Operations (Phase 6e)
 
 **Created:** 2026-09-06 (audit follow-up — BACKLOG B-053)
-**Owner:** Cat Tan Operations (single-operator signing key holder)
+**Owner:** Cat Tan Operations Ltd (company number 17576111; single-operator signing key holder)
 **Scope:** operational security of the ed25519 license signing key. For the validation code, see `src/licensing/license.py`; for the tier table, `src/licensing/tiers.py`; for the spec, `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4.
 
 ---
