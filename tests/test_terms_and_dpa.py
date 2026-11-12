@@ -90,7 +90,7 @@ def test_the_terms_state_who_buys_and_keep_consumer_rights() -> None:
 def test_the_dpa_is_linked_from_both_legal_pages() -> None:
     for page, name in ((TERMS, "terms"), (PRIVACY, "privacy")):
         html = page.read_text(encoding="utf-8")
-        assert 'href="dpa.html"' in html, f"{name}.html does not link the data processing agreement"
+        assert 'href="dpa.html"' in html, f"{name}.html does not link the data processing statement"
 
 
 def test_the_page_title_matches_what_it_says() -> None:
@@ -152,65 +152,151 @@ def test_the_licence_is_the_business_source_licence() -> None:
     assert "Business Source License 1.1" in _text(TERMS), "the licence changed"
 
 
-# --- the same update truth on every page (t-1414) ---------------------------
+# --- the update truth, as a rule over every page (t-1416) --------------------
 
-#: Pages a buyer reads that state the update policy, besides the terms.
-UPDATE_SURFACES = (
-    LANDING / "index.html",
-    LANDING / "install.html",
-    ROOT / "docs" / "user" / "getting-started" / "install.md",
-    ROOT / "docs" / "user" / "reference" / "licensing.md",
+#: Every page a buyer can read. A glob, not a list: the reviewer defeated a fixed
+#: list by putting the old sentence on a fifth page.
+PAGE_GLOBS = (
+    (LANDING, "*.html"),
+    (ROOT / "docs" / "user", "**/*.md"),
 )
 
-#: The delivery the terms describe. Each page must carry it in its own markup.
+#: A sentence speaks of updates if it carries one of these forms. "Last updated" is
+#: a date stamp, not a delivery claim, so it is excluded.
+UPDATE_WORD = re.compile(r"\bupdates?\b|\bupdating\b|(?<!last )\bupdated\b", re.IGNORECASE)
+
+#: The one delivery the owner settled. A sentence carrying it is the settled claim.
 SETTLED_DELIVERY = "released as installable Python packages"
 
-#: The old delivery, in the shapes it appeared. None of these may survive.
-STALE_DELIVERY = (
-    "files on lemon squeezy",
-    "arrive as files",
-    "updates are files",
-    "delivered as files",
+#: How an update could be described as reaching a buyer. This is a RULE, not the old
+#: phrasing: the reviewer defeated a phrase list twice, so the test asks what an
+#: update sentence says rather than whether it contains one known string.
+DELIVERY_WORDS = (
+    "download",
+    "downloads",
+    "downloaded",
+    "downloading",
+    "deliver",
+    "delivers",
+    "delivered",
+    "delivery",
+    "arrive",
+    "arrives",
+    "arrived",
+    "arriving",
+    "file",
+    "files",
+    "store",
+    "stores",
+    "shop",
+    "shops",
+    "send",
+    "sends",
+    "sent",
+    # "we email you the update" is the same claim as "we send it to you": an early
+    # version of this list had only "emailed"/"emails" and my own attack walked past
+    # it (t-1416).
+    "email",
+    "emails",
+    "emailed",
+    "post",
+    "posted",
+    "courier",
+)
+
+#: Where a buyer could be told to go and fetch one.
+STORE_NAMES = ("lemon squeezy", "lemonsqueezy", "app store", "play store")
+
+#: An HTML tag that ends a block. Without this, whole tables flatten into one
+#: "sentence" and every block-level word lands in it.
+BLOCK_END = re.compile(
+    r"</(?:p|li|tr|td|th|h[1-6]|div|section|footer|title)>|<br\s*/?>",
+    re.IGNORECASE,
 )
 
 
-def _problems_report(problems: list[str]) -> str:
-    return "\n" + "  ".join(problems)
+def buyer_pages() -> list[Path]:
+    """Every page a buyer can read, from the two globs."""
+    found: set[Path] = set()
+    for base, pattern in PAGE_GLOBS:
+        found.update(path for path in base.glob(pattern) if path.is_file())
+    return sorted(found)
 
 
-def test_no_page_still_says_updates_arrive_as_files_on_lemon_squeezy() -> None:
-    """The terms were rewritten; four other pages kept the old sentence (t-1414)."""
+def _blocks(path: Path) -> list[str]:
+    """The page as block-level text: tags removed, entities decoded, blocks split."""
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    if path.suffix == ".html":
+        raw = BLOCK_END.sub("\n", raw)
+    raw = re.sub(r"<[^>]+>", " ", raw)
+    text = unescape(raw)
+    blocks = [" ".join(chunk.split()) for chunk in text.split("\n")]
+    return [block for block in blocks if block]
+
+
+def _sentences(path: Path) -> list[str]:
+    sentences: list[str] = []
+    for block in _blocks(path):
+        sentences.extend(part.strip() for part in re.split(r"(?<=[.!?])\s+", block) if part.strip())
+    return sentences
+
+
+def _delivery_hits(sentence: str) -> list[str]:
+    low = sentence.lower()
+    hits = [word.strip() for word in DELIVERY_WORDS if re.search(rf"\b{re.escape(word.strip())}\b", low)]
+    hits.extend(name for name in STORE_NAMES if name in low)
+    return sorted(set(hits))
+
+
+def test_no_update_sentence_delivers_an_update_any_other_way() -> None:
+    """Ask what each update sentence says, on every page, not a phrase list."""
+    pages = buyer_pages()
+    assert len(pages) >= 15, f"the page globs found only {len(pages)} pages - the scan is not seeing the site"
+
     problems: list[str] = []
-    for path in UPDATE_SURFACES:
-        page = _text(path).lower()
-        for phrase in STALE_DELIVERY:
-            if phrase in page:
-                problems.append(f"{path.relative_to(ROOT)}: still says {phrase!r}")
-        # A sentence that names the merchant of record as the delivery route is the
-        # same false claim in different words.
-        for sentence in re.split(r"(?<=[.!?])\s+", _text(path)):
-            low = sentence.lower()
-            if "lemon squeezy" in low and "update" in low:
-                problems.append(f"{path.relative_to(ROOT)}: names Lemon Squeezy in an update sentence")
+    seen = 0
+    for path in pages:
+        for sentence in _sentences(path):
+            if not UPDATE_WORD.search(sentence):
+                continue
+            seen += 1
+            if SETTLED_DELIVERY.lower() in sentence.lower():
+                continue  # this IS the settled claim
+            hits = _delivery_hits(sentence)
+            if hits:
+                problems.append(
+                    f"{path.relative_to(ROOT)}: update sentence claims delivery by {hits}: {sentence[:180]!r}"
+                )
 
-    assert problems == [], _problems_report(problems)
+    assert seen >= 20, f"only {seen} update sentences scanned - the sentence splitter is not working"
+    assert problems == [], (
+        "a page describes update delivery in words the terms do not use:" + "\n" + "  " + ("\n" + "  ").join(problems)
+    )
 
 
-def test_every_update_page_states_the_same_delivery() -> None:
+def test_every_page_that_speaks_of_updates_states_the_settled_delivery() -> None:
+    """Derived from the text: a new page that mentions updates inherits the rule."""
     problems = [
-        f"{path.relative_to(ROOT)}: no {SETTLED_DELIVERY!r}"
-        for path in UPDATE_SURFACES
-        if SETTLED_DELIVERY not in _text(path)
+        f"{path.relative_to(ROOT)}: speaks of updates but does not carry {SETTLED_DELIVERY!r}"
+        for path in buyer_pages()
+        if any(UPDATE_WORD.search(sentence) for sentence in _sentences(path)) and SETTLED_DELIVERY not in _text(path)
     ]
-    assert problems == [], _problems_report(problems)
+    assert problems == [], (
+        "a page speaks of updates without stating how they arrive:" + "\n" + "  " + ("\n" + "  ".join(problems))
+    )
 
 
-def test_every_update_page_rules_out_a_vendor_call_and_an_update_check() -> None:
+def test_every_page_that_states_the_delivery_also_rules_out_both_shortcuts() -> None:
+    """The settled sentence is followed by its guarantees; they cannot be dropped."""
     problems: list[str] = []
-    for path in UPDATE_SURFACES:
+    for path in buyer_pages():
         page = _text(path)
+        if SETTLED_DELIVERY not in page:
+            continue
         if "no call to a vendor server" not in page:
-            problems.append(f"{path.relative_to(ROOT)}: does not rule out a vendor call")
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the vendor-call guarantee")
         if "no automatic update check" not in page:
-            problems.append(f"{path.relative_to(ROOT)}: does not rule out an automatic update check")
-    assert problems == [], _problems_report(problems)
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the update-check guarantee")
+    assert problems == [], (
+        "a page leaves the product's update behaviour open:" + "\n" + "  " + ("\n" + "  ".join(problems))
+    )
