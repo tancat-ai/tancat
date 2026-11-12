@@ -131,7 +131,7 @@ def marker_blocks(path: Path) -> list[tuple[int, str]]:
 
 def test_every_landing_page_has_a_footer_naming_the_company() -> None:
     """No footer, or a footer that names nobody, is the failure mode a search misses."""
-    assert len(LANDING_PAGES) == 5, f"expected the five landing pages, found {len(LANDING_PAGES)}"
+    assert len(LANDING_PAGES) == 6, f"expected the six landing pages, found {len(LANDING_PAGES)}"
 
     problems: list[str] = []
     for page in LANDING_PAGES:

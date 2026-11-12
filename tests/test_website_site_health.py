@@ -23,7 +23,7 @@ DOCS = PROJECT_ROOT / "docs" / "user"
 MKDOCS = PROJECT_ROOT / "mkdocs.yml"
 
 #: Sub-pages the audit found without Open Graph tags (index.html always had them).
-OG_SUBPAGES = ("install.html", "privacy.html", "terms.html")
+OG_SUBPAGES = ("install.html", "privacy.html", "terms.html", "dpa.html")
 OG_PROPERTIES = (
     "og:type",
     "og:site_name",
