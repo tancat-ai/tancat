@@ -583,7 +583,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 | 2 | `landing/index.html` pricing cards | prices carry no period ("~$299-499 / deployment") | state the period (monthly) |
 | 3 | `landing/index.html` Pro card | lists self-healing and RAG as Pro features; `src/licensing/tiers.py` puts both in **free** | correct to match the tier table |
 | 4 | `landing/index.html` Pro card | promises a "priority security patch queue" that is in no tier table | add it to the table or remove the claim |
-| 5 | product + docs naming | the product upsell no longer names a company (verified 2026-10-13), but "Cat Tan Operations" still appears in `docs/security/license-key-ops.md:4` and `docs/launch/lemon-squeezy-checklist.html:48` | say "TanCat (sole trader)" in both |
+| 5 | product + docs naming | the product upsell no longer names a company (verified 2026-10-13), but "Cat Tan Operations" still appears in `docs/security/license-key-ops.md:4` and `docs/launch/lemon-squeezy-checklist.html:48` | say "Cat Tan Operations Ltd (company number 17576111)" in both (j-0299: the company is now incorporated) |
 | 6 | `src/ui/ui_sidebar.py` limit warning | advertises the bypass to the user who just hit the cap — "set `AITEST_ENFORCE_FREE_TIER=0` to disable the cap" | drop that sentence; keep the bypass documented in the docs, not in the upsell |
 | 7 | `landing/index.html` Free card | 10 exports/month is stated as a headline limit | see B-085 (only the compliance formats are metered; the HTML report is not metered at all) |
 | 8 | tier name "Air-Gap / Defence" (page card + `tiers.py` label) | names the *deployment*, not what the buyer pays for | see B-085 decision 3 |

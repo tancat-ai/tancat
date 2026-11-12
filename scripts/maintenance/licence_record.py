@@ -202,7 +202,7 @@ def _parse_appendix_rows(text: str) -> dict[str, tuple[str, str]]:
 HEADER = """# TanCat dependency licences
 
 TanCat itself is **source-available under the Business Source License 1.1** (see
-`LICENSE`, Copyright 2026 lacattano; it converts to Apache-2.0 after the Change
+`LICENSE`, Copyright 2026 Cat Tan Operations Ltd; it converts to Apache-2.0 after the Change
 Date).
 
 {product_licence}
