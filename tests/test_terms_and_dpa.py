@@ -24,6 +24,8 @@ import re
 from html import unescape
 from pathlib import Path
 
+from src.licensing.pricing import CURRENCY_SYMBOL, PRICE_PER_DEPLOYMENT
+
 ROOT = Path(__file__).resolve().parent.parent
 LANDING = ROOT / "landing"
 TERMS = LANDING / "terms.html"
@@ -91,6 +93,13 @@ def test_the_dpa_is_linked_from_both_legal_pages() -> None:
         assert 'href="dpa.html"' in html, f"{name}.html does not link the data processing agreement"
 
 
+def test_the_page_title_matches_what_it_says() -> None:
+    """It says we are not a processor, so it must not be titled an "agreement"."""
+    html = DPA.read_text(encoding="utf-8")
+    assert "<h1>Data processing statement</h1>" in html, "the page title no longer matches its content"
+    assert "data processing agreement" not in html.lower(), "the page calls itself an agreement again"
+
+
 def test_the_dpa_states_our_role_and_the_only_personal_data_we_handle() -> None:
     page = _text(DPA)
     assert "you are the controller and we are not a processor" in page, "the roles are not stated"
@@ -116,10 +125,92 @@ def test_the_dpa_keeps_the_retention_and_the_contact_the_privacy_notice_gives() 
     assert "ico.org.uk" in page, "the DPA does not mention the regulator"
 
 
-def test_the_guardrails_named_in_the_brief_are_untouched() -> None:
-    page = _text(TERMS)
-    assert "within 30 days of purchase" in page, "the refund window moved"
-    assert re.search(r"\$\s?399 per deployment", page), "the price moved"
-    assert "12 months before the claim" in page, "the liability cap moved"
-    assert "law of England and Wales" in page, "the governing law moved"
-    assert "Business Source License 1.1" in page, "the licence changed"
+# The four guardrails the brief said not to move, one test each. Four tests, not
+# one: a single function stops at its first failure, so a stale price assert hid
+# the law and the licence behind it (t-1414).
+
+
+def test_the_price_is_the_settled_one() -> None:
+    # Symbol and number come from src/licensing/pricing.py. A literal "$399" was
+    # the bug: the store moved to pounds and this pin went stale.
+    assert f"{CURRENCY_SYMBOL}{PRICE_PER_DEPLOYMENT} per deployment" in _text(TERMS), "the price moved"
+
+
+def test_the_refund_window_is_thirty_days() -> None:
+    assert "within 30 days of purchase" in _text(TERMS), "the refund window moved"
+
+
+def test_the_governing_law_is_england_and_wales() -> None:
+    assert "law of England and Wales" in _text(TERMS), "the governing law moved"
+
+
+def test_the_liability_cap_is_twelve_months_of_fees() -> None:
+    assert "12 months before the claim" in _text(TERMS), "the liability cap moved"
+
+
+def test_the_licence_is_the_business_source_licence() -> None:
+    assert "Business Source License 1.1" in _text(TERMS), "the licence changed"
+
+
+# --- the same update truth on every page (t-1414) ---------------------------
+
+#: Pages a buyer reads that state the update policy, besides the terms.
+UPDATE_SURFACES = (
+    LANDING / "index.html",
+    LANDING / "install.html",
+    ROOT / "docs" / "user" / "getting-started" / "install.md",
+    ROOT / "docs" / "user" / "reference" / "licensing.md",
+)
+
+#: The delivery the terms describe. Each page must carry it in its own markup.
+SETTLED_DELIVERY = "released as installable Python packages"
+
+#: The old delivery, in the shapes it appeared. None of these may survive.
+STALE_DELIVERY = (
+    "files on lemon squeezy",
+    "arrive as files",
+    "updates are files",
+    "delivered as files",
+)
+
+
+def _problems_report(problems: list[str]) -> str:
+    return "\n" + "  ".join(problems)
+
+
+def test_no_page_still_says_updates_arrive_as_files_on_lemon_squeezy() -> None:
+    """The terms were rewritten; four other pages kept the old sentence (t-1414)."""
+    problems: list[str] = []
+    for path in UPDATE_SURFACES:
+        page = _text(path).lower()
+        for phrase in STALE_DELIVERY:
+            if phrase in page:
+                problems.append(f"{path.relative_to(ROOT)}: still says {phrase!r}")
+        # A sentence that names the merchant of record as the delivery route is the
+        # same false claim in different words.
+        for sentence in re.split(r"(?<=[.!?])\s+", _text(path)):
+            low = sentence.lower()
+            if "lemon squeezy" in low and "update" in low:
+                problems.append(f"{path.relative_to(ROOT)}: names Lemon Squeezy in an update sentence")
+
+    assert problems == [], _problems_report(problems)
+
+
+def test_every_update_page_states_the_same_delivery() -> None:
+    problems = [
+        f"{path.relative_to(ROOT)}: no {SETTLED_DELIVERY!r}"
+        for path in UPDATE_SURFACES
+        if SETTLED_DELIVERY not in _text(path)
+    ]
+    assert problems == [], _problems_report(problems)
+
+
+def test_every_update_page_rules_out_a_vendor_call_and_an_update_check() -> None:
+    problems: list[str] = []
+    for path in UPDATE_SURFACES:
+        page = _text(path)
+        if "no call to a vendor server" not in page:
+            problems.append(f"{path.relative_to(ROOT)}: does not rule out a vendor call")
+        if "no automatic update check" not in page:
+            problems.append(f"{path.relative_to(ROOT)}: does not rule out an automatic update check")
+    assert problems == [], _problems_report(problems)

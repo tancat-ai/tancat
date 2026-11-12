@@ -51,10 +51,10 @@ The software is licensed under the **Business Source License 1.1**: free to read
 modify and use, including production use for any internal purpose, and it
 converts to Apache-2.0 four years after each version's release.
 
-Updates are files, not a service. They arrive on Lemon Squeezy and on the
-[releases page](https://github.com/tancat-ai/tancat/releases), and you choose
-when to install them. TanCat makes **no runtime update check** and calls no
-vendor server to ask for one.
+Updates are released as installable Python packages on the
+[releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
+way you upgrade any Python tool. You choose when to install one. TanCat makes
+**no call to a vendor server** and has **no automatic update check**.
 
 ## Install a licence key
 
