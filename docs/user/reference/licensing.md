@@ -21,7 +21,7 @@ tells the app what the deployment is allowed to do.
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
 | Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence, key issued by us |
-| Price | Free | $399 per deployment |
+| Price | Free | £399 per deployment |
 | Support | - | Email support and setup help - direct from the developer |
 | Updates | - | All updates released within 12 months of purchase; later updates optional and paid |
 | Runs | 25 per 30 days | Unlimited |
