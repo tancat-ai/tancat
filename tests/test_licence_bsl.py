@@ -41,9 +41,9 @@ EXPECTED_PARAMETERS = {
         "Cat Tan Operations Ltd, a company registered in England and Wales (company number 17576111), "
         "whose registered office is at Flat 2, Bournehall, 2 Bourne Close, Bournemouth, BH2 6BW"
     ),
-    # t-1405: the copyright line stays with the author. Incorporation does not move
-    # copyright; only a written assignment would. Change it when the owner assigns.
-    "Licensed Work": ("TanCat version 0.1.0 or later. The Licensed Work is (c) 2026 Louis Cattano, trading as TanCat."),
+    # t-1407 (j-0299): the author assigned the copyright to the company, so the
+    # Licensed Work names the company as holder. The Licensor line already did.
+    "Licensed Work": "TanCat version 0.1.0 or later. The Licensed Work is (c) 2026 Cat Tan Operations Ltd.",
     "Change Date": "The fourth anniversary of the date the Licensed Work is first publicly distributed.",
     "Change License": "Apache License, Version 2.0",
 }

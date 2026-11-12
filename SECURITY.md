@@ -27,8 +27,8 @@ Use GitHub's built-in private reporting:
 
 **Option 2 — Email**
 
-Send details to the repository maintainer directly. Find contact details on the
-[GitHub profile](https://github.com/lacattano).
+Send details to Cat Tan Operations Ltd, the company that owns TanCat, at
+[hello@tancat.dev](mailto:hello@tancat.dev). Do not post them publicly.
 
 ### What to include in your report
 

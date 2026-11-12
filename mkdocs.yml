@@ -10,6 +10,7 @@
 # CI:             the `docs-build` job in .github/workflows/ci.yml runs --strict
 # Pages:          .github/workflows/pages-deploy.yml stages this site at /docs/
 site_name: TanCat Docs
+site_author: Cat Tan Operations Ltd
 site_description: User documentation for TanCat - generate Playwright pytest tests from user stories with your own LLM.
 site_url: https://tancat.dev/docs/
 docs_dir: docs/user
@@ -77,4 +78,4 @@ nav:
 extra:
   generator: false
 
-copyright: TanCat - Business Source License 1.1
+copyright: Cat Tan Operations Ltd, company number 17576111 - Business Source License 1.1
