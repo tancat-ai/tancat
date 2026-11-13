@@ -187,7 +187,7 @@ jobs:
   # byte-reproducible on a Linux runner (OS font rasterisation, network
   # webfonts) and the Chromium PDF embeds a creation timestamp, so this
   # guard does not re-render: it checks the committed source fingerprint
-  # (landing/asset-sources.json) against the current sources. Any source
+  # (docs/implementation/landing-asset-sources.json) against the current sources. Any source
   # edit committed without a regeneration fails here.
   landing-assets-freshness:
     name: Landing Assets Freshness

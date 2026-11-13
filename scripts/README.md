@@ -283,7 +283,7 @@ These remain as specialized tools for specific scenarios:
 |--------|---------|
 | `project_sanitizer.py` | Auto-move misplaced tests, purge junk, audit doc links |
 | `cli_e2e_validation.py` | CLI pipeline E2E with Python syntax validation |
-| `make_landing_assets.py` | Regenerate `landing/` favicon, icon set, OG card, previews and install PDF, and rewrite `landing/asset-sources.json` |
+| `make_landing_assets.py` | Regenerate `landing/` favicon, icon set, OG card, previews and install PDF, and rewrite `docs/implementation/landing-asset-sources.json` |
 | `landing_assets_guard.py` | CI/pre-commit guard: fail when a landing source changed without a regeneration (stdlib-only) |
 
 ```bash

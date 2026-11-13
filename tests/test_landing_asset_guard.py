@@ -1,7 +1,7 @@
 """Guard: the committed landing assets match the sources they render from.
 
 The landing share card, previews, icon set and install PDF are generated
-artefacts. ``landing/asset-sources.json`` records the git blob hash of every
+artefacts. ``docs/implementation/landing-asset-sources.json`` records the git blob hash of every
 source (and of the generator), so a copy edit committed without a regeneration
 fails CI. These tests pin the committed manifest as current and pin the guard
 that catches drift.
