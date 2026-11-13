@@ -5,7 +5,7 @@ Fonts bundled in this directory (SIL Open Font License, Version 1.1)
 
 Both families are licensed under the SIL Open Font License, Version 1.1, reproduced
 below. The two woff2 files are the unmodified Latin-subset files Google Fonts serves
-for these families (see landing/fonts/README.md and docs/licenses/DEPENDENCIES.md);
+for these families (see docs/implementation/fonts/README.md and docs/licenses/DEPENDENCIES.md);
 nothing here comes from a font's own source repository.
 
 -----------------------------------------------------------

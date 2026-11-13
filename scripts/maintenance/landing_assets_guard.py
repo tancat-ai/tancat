@@ -12,7 +12,7 @@ showing the old wording until someone reruns the generator. That happened once:
 the air-gap wording change left the old badge in ``og:image`` and only a
 reviewer caught it.
 
-The generator writes ``landing/asset-sources.json`` -- the git blob hash of
+The generator writes ``docs/implementation/landing-asset-sources.json`` -- the git blob hash of
 every source and of the generator itself, plus which assets depend on which
 sources. This script recomputes those hashes and fails when a source changed
 without a regeneration. It has no Python dependencies (no browser, no Pillow,
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 __all__ = ["MANIFEST", "REPO_ROOT", "check", "git_blob_hash", "main", "write_manifest"]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MANIFEST = REPO_ROOT / "landing" / "asset-sources.json"
+MANIFEST = REPO_ROOT / "docs" / "implementation" / "landing-asset-sources.json"
 
 #: The only hash algorithm this manifest format uses. Git's own blob hashing
 #: normalises line endings through the repo's attributes, so a Windows checkout
@@ -171,7 +171,7 @@ def main() -> int:
             print(f"  - {problem}")
         print()
         print("Fix: python scripts/maintenance/make_landing_assets.py")
-        print("     then commit the regenerated assets and landing/asset-sources.json.")
+        print("     then commit the regenerated assets and docs/implementation/landing-asset-sources.json.")
         return 1
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))

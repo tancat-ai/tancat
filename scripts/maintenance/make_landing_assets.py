@@ -33,7 +33,7 @@ Run this after ANY landing or install-document copy change: a stale share image
 or PDF is the difference between a page that is fixed and one that still says
 the old thing.
 
-Every run also rewrites ``landing/asset-sources.json``, the fingerprint that
+Every run also rewrites ``docs/implementation/landing-asset-sources.json``, the fingerprint that
 ``scripts/maintenance/landing_assets_guard.py`` checks in CI and in a pre-commit
 hook. The guard catches a source edit that was committed without this rebuild;
 it does not re-render, because browser captures and the PDF are not

@@ -15,7 +15,7 @@ module.exports = {
   content: ['landing/*.html'],
   theme: { extend: {
     colors: { midnight:'#070b10',darkslate:'#0d131b',cardbg:'#111823',amberGlow:'#f59e0b',amberBright:'#fbbf24',cyberBlue:'#38bdf8',neonViolet:'#818cf8',accentPink:'#f43f5e' },
-    fontFamily: { sans:['Inter','system-ui','-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','sans-serif'], mono:['JetBrains Mono','Fira Code','SFMono-Regular','Menlo','Monaco','Consolas','monospace'], serif:['Newsreader','Playfair Display','Georgia','serif'] },
+    fontFamily: { sans:['Inter','system-ui','-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','sans-serif'], mono:['JetBrains Mono','Fira Code','SFMono-Regular','Menlo','Monaco','Consolas','monospace'], serif:['Georgia','serif'] },
     boxShadow: { 'amber-glow':'0 0 45px -10px rgba(245,158,11,0.35)','cyber-glow':'0 0 50px -12px rgba(56,189,248,0.25)','neon-glow':'0 0 35px -8px rgba(129,140,248,0.3)' }
   } },
 };

@@ -305,7 +305,9 @@ def test_every_font_the_stylesheet_sets_is_a_local_file() -> None:
 def test_the_font_notice_describes_the_files_it_ships() -> None:
     """The OFL requires the licence to travel with the files, and it must be true."""
     licence = (FONTS_DIR / "OFL-1.1.md").read_text(encoding="utf-8")
-    readme = (FONTS_DIR / "README.md").read_text(encoding="utf-8")
+    # The provenance note is internal: landing/ is deployed, so it lives in docs/implementation.
+    readme = (PROJECT_ROOT / "docs" / "implementation" / "fonts" / "README.md").read_text(encoding="utf-8")
+    assert not (FONTS_DIR / "README.md").exists(), "the provenance note is back in the deployed directory"
 
     assert "SIL OPEN FONT LICENSE" in licence, "the OFL text is missing from landing/fonts"
     for family, copyright_line in FONT_COPYRIGHTS.items():
@@ -343,3 +345,63 @@ def test_the_docs_theme_loads_no_third_party_fonts() -> None:
     assert "--md-code-font:" in css, "the docs stylesheet does not set the theme's code-font hook"
     for name in re.findall(r"/fonts/([a-z0-9-]+\.woff2)", css):
         assert (FONTS_DIR / name).is_file(), f"{name} is referenced but missing from landing/fonts"
+
+
+# --- only site files live in landing/ (t-1422) -------------------------------
+
+#: The deploy copies landing/ wholesale, so every file in it is published:
+#: ``cp -r landing/. _site/`` in .github/workflows/pages-deploy.yml.
+DEPLOY_WORKFLOW = PROJECT_ROOT / ".github" / "workflows" / "pages-deploy.yml"
+
+#: Extensions the site actually serves.
+SITE_EXTENSIONS = {".html", ".css", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".pdf", ".woff2", ".txt", ".xml"}
+
+#: Files with no extension that the site needs.
+SITE_NAMELESS = {"CNAME"}
+
+#: Deliberate exceptions, each with its reason. Keep this list short: a file that is
+#: not served is internal and belongs in docs/implementation/.
+SITE_EXCEPTIONS = {
+    "fonts/OFL-1.1.md": "the OFL requires the licence to sit beside the fonts, and a reader may want to see it",
+}
+
+
+def landing_files() -> list[Path]:
+    return sorted(path for path in LANDING.rglob("*") if path.is_file())
+
+
+def test_the_deploy_publishes_landing_wholesale() -> None:
+    """The check below is only meaningful while the deploy copies the directory."""
+    workflow = DEPLOY_WORKFLOW.read_text(encoding="utf-8")
+    assert "cp -r landing/. _site/" in workflow, (
+        "pages-deploy no longer copies landing/ wholesale - re-read this test's premise"
+    )
+
+
+def test_only_site_files_live_in_landing() -> None:
+    """A developer note or a build file left in landing/ is published to the world."""
+    problems: list[str] = []
+    for path in landing_files():
+        relative = path.relative_to(LANDING).as_posix()
+        if relative in SITE_EXCEPTIONS:
+            continue
+        if path.suffix.lower() in SITE_EXTENSIONS:
+            continue
+        if path.suffix == "" and path.name in SITE_NAMELESS:
+            continue
+        problems.append(f"landing/{relative} ({path.suffix or 'no extension'}) is published by the deploy")
+
+    assert problems == [], (
+        "landing/ holds files that are not for the site - move them to docs/implementation/:"
+        + "\n  "
+        + "\n  ".join(problems)
+    )
+
+
+def test_landing_holds_no_unexpected_directories() -> None:
+    """A stray evidence/ or generated_tests/ directory would be copied too."""
+    allowed = {"fonts"}
+    unexpected = sorted(
+        path.relative_to(LANDING).as_posix() for path in LANDING.iterdir() if path.is_dir() and path.name not in allowed
+    )
+    assert unexpected == [], f"landing/ holds directories that are not site assets: {unexpected}"

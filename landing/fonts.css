@@ -5,8 +5,8 @@
    that your data stays with you. These are the unmodified Latin woff2 files Google
    Fonts serves for Inter and JetBrains Mono, with the same unicode-range, so the
    pages render as before. The pages are English, so the wider subsets are not
-   bundled. Licence: SIL Open Font License 1.1 - see fonts/OFL-1.1.md and
-   fonts/README.md. */
+   bundled. Licence: SIL Open Font License 1.1 - see fonts/OFL-1.1.md beside the
+   files, and docs/implementation/fonts/README.md for provenance. */
 
 @font-face {
   font-family: 'Inter';
