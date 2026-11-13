@@ -136,22 +136,22 @@ with no row here fails `tests/test_licence_elections.py`.
 
 ## Fonts
 
-The landing pages (`landing/index.html`, `landing/install.html`) serve three fonts
-**from this site**: `landing/fonts.css` points at six woff2 files in `landing/fonts/`.
+The landing pages (`landing/index.html`, `landing/install.html`) serve two fonts
+**from this site**: `landing/fonts.css` points at two woff2 files in `landing/fonts/`.
 A visitor's IP address therefore never reaches a font CDN - it used to reach Google
 Fonts before the page rendered.
 
-| Font | Licence | Copyright | Files |
+| Font | Licence | Copyright | File |
 |---|---|---|---|
-| Inter | SIL Open Font License 1.1 | Copyright (c) 2016 The Inter Project Authors | `inter-normal-latin.woff2`, `inter-normal-latin-ext.woff2` |
-| JetBrains Mono | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors | `jetbrains-mono-normal-latin.woff2`, `jetbrains-mono-normal-latin-ext.woff2` |
-| Newsreader | SIL Open Font License 1.1 | Copyright 2020 The Newsreader Project Authors | `newsreader-italic-latin.woff2`, `newsreader-italic-latin-ext.woff2` |
+| Inter | SIL Open Font License 1.1 | Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) | `inter-normal-latin.woff2` |
+| JetBrains Mono | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) | `jetbrains-mono-normal-latin.woff2` |
 
-All three are OFL-1.1, which permits web embedding and redistribution. The files are
-the unmodified woff2 files Google Fonts serves for these families (Latin and
-Latin-Ext subsets, variable weights), so the rendering is unchanged. The licence text
-and the three copyright notices are in `landing/fonts/OFL-1.1.md`, and
-`landing/fonts/README.md` says where the files came from.
+Both are OFL-1.1, which permits web embedding and redistribution. The files are the
+unmodified Latin-subset woff2 files Google Fonts serves for these families (variable
+weights), so the rendering is unchanged; the wider subsets are not bundled because no
+page uses them. The licence text and the two copyright notices are in
+`landing/fonts/OFL-1.1.md`, and `landing/fonts/README.md` says where the files came
+from. The docs site loads the same two files through `docs/user/assets/fonts.css`.
 
 The Pro install/licence PDF (`landing/tancat-pro-install-and-licence.pdf`) is
 different: it **redistributes** four font files, bundled in

@@ -159,29 +159,120 @@ def test_landing_has_a_reachable_mobile_menu() -> None:
         assert f'href="{anchor}"' in html
 
 
-# --- fonts are served from this site (t-1419) --------------------------------
-
-#: Hosts that would see a visitor's IP address just for reading the page.
-FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
-
-#: The families the landing pages set in CSS. Each must resolve to a local file.
-FONT_FAMILIES = ("Inter", "JetBrains Mono", "Newsreader")
+# --- nothing on this site loads a resource from another host (t-1419, t-1421) --
 
 FONTS_CSS = LANDING / "fonts.css"
 FONTS_DIR = LANDING / "fonts"
+OVERRIDES = PROJECT_ROOT / "overrides"
+
+#: The two families the pages actually use. Newsreader was declared in the original
+#: @import but no page sets serif text, so it was never fetched (t-1421 removed it).
+FONT_FAMILIES = ("Inter", "JetBrains Mono")
+
+#: The copyright line each family carries, as the font's own metadata gives it.
+FONT_COPYRIGHTS = {
+    "Inter": "Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)",
+    "JetBrains Mono": "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)",
+}
+
+#: This site. A resource may point here, or at a path with no host at all.
+OWN_HOSTS = ("tancat.dev", "www.tancat.dev")
+
+#: Elements whose attribute makes the browser fetch something. An <a href> is a
+#: navigation the reader chooses, so it is deliberately not in this list.
+RESOURCE_TAGS = ("link", "script", "img", "iframe", "source", "video", "audio")
+
+TAG = re.compile(r"<(link|script|img|iframe|source|video|audio)\b([^>]*)>", re.IGNORECASE)
+ATTR = re.compile(r"""\b(src|href|poster|data-src)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+REL = re.compile(r"""\brel\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
+CSS_URL = re.compile(r"""url\(\s*["']?([^"')]+)["']?\s*\)""", re.IGNORECASE)
+MD_IMAGE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)", re.IGNORECASE)
+
+#: A link rel that is metadata or navigation, not a fetch.
+NON_FETCH_REL = ("canonical", "alternate", "author", "license", "next", "prev", "me")
 
 
-def test_no_landing_page_requests_a_font_from_a_third_party() -> None:
-    """The site's pitch is that your data stays with you, fonts included."""
+def resource_sources() -> list[Path]:
+    """Every file that can make a browser fetch something."""
+    files: list[Path] = [
+        *sorted(LANDING.glob("*.html")),
+        *sorted(DOCS.rglob("*.md")),
+        *sorted(OVERRIDES.rglob("*.html")),
+        *sorted(LANDING.glob("*.css")),
+        *sorted((DOCS / "assets").glob("*.css")),
+        MKDOCS,
+    ]
+    return [path for path in files if path.is_file()]
+
+
+def urls_loaded_by(path: Path) -> list[str]:
+    """The URLs *path* makes a browser fetch, in order."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    found: list[str] = []
+
+    if path.suffix == ".md":
+        found.extend(match.group(1) for match in MD_IMAGE.finditer(text))
+
+    if path.suffix in {".html", ".md"}:
+        for tag, attrs in TAG.findall(text):
+            rel = REL.search(attrs)
+            if tag.lower() == "link" and rel and any(word in rel.group(1).lower() for word in NON_FETCH_REL):
+                continue
+            for attr, value in ATTR.findall(attrs):
+                if tag.lower() == "script" and attr.lower() != "src":
+                    continue
+                found.append(value)
+
+    if path.suffix == ".css":
+        found.extend(match.group(1) for match in CSS_URL.finditer(text))
+
+    if path.name == "mkdocs.yml":
+        config = yaml.safe_load(text)
+        theme = config.get("theme") or {}
+        for key in ("favicon", "logo"):
+            value = theme.get(key)
+            if isinstance(value, str):
+                found.append(value)
+        for key in ("extra_css", "extra_javascript"):
+            for entry in config.get(key) or []:
+                found.append(entry if isinstance(entry, str) else str(entry.get("path", "")))
+
+    return [url.strip() for url in found if url and url.strip()]
+
+
+def external_host(url: str) -> str | None:
+    """The host a URL points at, or None when it stays on this site."""
+    low = url.lower()
+    if low.startswith(("data:", "#", "mailto:", "tel:", "javascript:", "about:")):
+        return None
+    if low.startswith("//"):
+        return url[2:].split("/", 1)[0]
+    match = re.match(r"^[a-z][a-z0-9+.-]*://([^/]+)", url, re.IGNORECASE)
+    if not match:
+        return None  # relative or site-absolute path
+    host = match.group(1).split(":", 1)[0].lower()
+    return None if host in OWN_HOSTS else host
+
+
+def test_nothing_on_this_site_loads_a_resource_from_another_host() -> None:
+    """Not 'no Google font' - no third-party resource at all, whatever the host."""
+    sources = resource_sources()
+    assert len(sources) >= 20, f"the scan found only {len(sources)} files - it is not seeing the site"
+
     problems: list[str] = []
-    for page in sorted(LANDING.glob("*.html")):
-        html = page.read_text(encoding="utf-8")
-        for host in FONT_HOSTS:
-            if host in html:
-                problems.append(f"{page.name} still requests {host}")
-        if "@import" in html and "font" in html.split("@import", 1)[1][:200].lower():
-            problems.append(f"{page.name} uses an @import for a font - a third-party request before render")
-    assert problems == [], "a landing page sends a visitor's IP to a font host:" + "\n  ".join(problems)
+    for path in sources:
+        for url in urls_loaded_by(path):
+            host = external_host(url)
+            if host is not None:
+                problems.append(f"{path.relative_to(PROJECT_ROOT)} loads {url} from {host}")
+
+    assert problems == [], "a page loads a resource from another host:\n  " + "\n  ".join(problems)
+
+
+def test_the_resource_scan_covers_every_kind_of_page() -> None:
+    names = {path.name for path in resource_sources()}
+    for required in ("index.html", "install.html", "404.html", "fonts.css", "mkdocs.yml"):
+        assert required in names, f"the resource scan does not cover {required}"
 
 
 def test_the_landing_pages_link_the_self_hosted_stylesheet() -> None:
@@ -196,20 +287,36 @@ def test_every_font_the_stylesheet_sets_is_a_local_file() -> None:
         assert f"'{family}'" in css, f"fonts.css does not define {family}"
 
     referenced = re.findall(r"url\('fonts/([^']+)'\)", css)
-    assert len(referenced) >= 6, f"fonts.css references only {len(referenced)} font files"
+    assert len(referenced) == len(FONT_FAMILIES), (
+        f"fonts.css references {len(referenced)} files for {len(FONT_FAMILIES)} families"
+    )
     missing = [name for name in referenced if not (FONTS_DIR / name).is_file()]
     assert missing == [], f"fonts.css points at files that do not exist: {missing}"
+
+    on_disk = sorted(path.name for path in FONTS_DIR.glob("*.woff2"))
+    assert on_disk == sorted(referenced), (
+        f"landing/fonts holds files no stylesheet fetches: {sorted(set(on_disk) - set(referenced))}"
+    )
 
     for name in referenced:
         assert (FONTS_DIR / name).stat().st_size > 1000, f"{name} is empty or truncated"
 
 
-def test_the_bundled_fonts_carry_their_licence_and_notice() -> None:
-    """The OFL requires the licence to travel with the files."""
+def test_the_font_notice_describes_the_files_it_ships() -> None:
+    """The OFL requires the licence to travel with the files, and it must be true."""
     licence = (FONTS_DIR / "OFL-1.1.md").read_text(encoding="utf-8")
+    readme = (FONTS_DIR / "README.md").read_text(encoding="utf-8")
+
     assert "SIL OPEN FONT LICENSE" in licence, "the OFL text is missing from landing/fonts"
-    for family in FONT_FAMILIES:
+    for family, copyright_line in FONT_COPYRIGHTS.items():
         assert family in licence, f"the licence notice does not name {family}"
+        assert copyright_line in licence, f"the licence notice does not carry {family}'s own copyright line"
+        assert copyright_line in readme, f"the README does not carry {family}'s own copyright line"
+    assert "Newsreader" not in licence, "the notice still names a family that is not shipped"
+
+    for sentence in ("Both families are licensed", "Google Fonts serves"):
+        assert sentence in licence, f"the notice does not say {sentence!r}"
+    assert "repositories" not in licence, "the notice still claims the files come from the font repositories"
 
 
 def test_the_privacy_notice_no_longer_names_a_font_processor() -> None:
@@ -228,9 +335,7 @@ def test_the_docs_theme_loads_no_third_party_fonts() -> None:
     assert "assets/fonts.css" in extra_css, "the docs site does not load the self-hosted fonts"
 
     css = (DOCS / "assets" / "fonts.css").read_text(encoding="utf-8")
-    for host in FONT_HOSTS:
-        assert host not in css, f"the docs stylesheet requests {host}"
-    for family in ("Inter", "JetBrains Mono"):
+    for family in FONT_FAMILIES:
         assert family in css, f"the docs stylesheet does not set {family}"
     # Material builds its stacks as var(--md-text-font,...), so the hook must be set;
     # --md-text-font-family alone loses to the theme's own body rule.

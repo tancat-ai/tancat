@@ -107,15 +107,11 @@ PREVIEW_VIEWPORTS: dict[str, tuple[int, int]] = {
 
 #: The landing pages' own webfonts, served from this site (t-1419). They are
 #: committed files, so the captures can depend on them like any other source - a
-#: font swap or a subset change re-renders the card and both previews.
+#: font swap re-renders the card and both previews.
 LANDING_FONTS: tuple[str, ...] = (
     "landing/fonts.css",
     "landing/fonts/inter-normal-latin.woff2",
-    "landing/fonts/inter-normal-latin-ext.woff2",
     "landing/fonts/jetbrains-mono-normal-latin.woff2",
-    "landing/fonts/jetbrains-mono-normal-latin-ext.woff2",
-    "landing/fonts/newsreader-italic-latin.woff2",
-    "landing/fonts/newsreader-italic-latin-ext.woff2",
 )
 
 #: Generated asset -> the repo-relative sources it is rendered from. This is the

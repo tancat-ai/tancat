@@ -11,8 +11,7 @@
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;
-  src: url('/fonts/inter-normal-latin.woff2') format('woff2'),
-       url('/fonts/inter-normal-latin-ext.woff2') format('woff2');
+  src: url('/fonts/inter-normal-latin.woff2') format('woff2');
 }
 
 @font-face {
@@ -20,8 +19,7 @@
   font-style: normal;
   font-weight: 400 600;
   font-display: swap;
-  src: url('/fonts/jetbrains-mono-normal-latin.woff2') format('woff2'),
-       url('/fonts/jetbrains-mono-normal-latin-ext.woff2') format('woff2');
+  src: url('/fonts/jetbrains-mono-normal-latin.woff2') format('woff2');
 }
 
 /* Material builds its own stacks as `var(--md-text-font,_),-apple-system,...`, so the

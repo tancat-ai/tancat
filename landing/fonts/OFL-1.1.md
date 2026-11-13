@@ -1,12 +1,12 @@
 Fonts bundled in this directory (SIL Open Font License, Version 1.1)
 
-- Inter - Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+- Inter - Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
 - JetBrains Mono - Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
-- Newsreader - Copyright 2020 The Newsreader Project Authors (https://github.com/productiontype/Newsreader)
 
-Both are licensed under the SIL Open Font License, Version 1.1, reproduced below.
-The font files are unmodified release files fetched from the Inter and JetBrains Mono
-repositories (see docs/licenses/DEPENDENCIES.md).
+Both families are licensed under the SIL Open Font License, Version 1.1, reproduced
+below. The two woff2 files are the unmodified Latin-subset files Google Fonts serves
+for these families (see landing/fonts/README.md and docs/licenses/DEPENDENCIES.md);
+nothing here comes from a font's own source repository.
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
