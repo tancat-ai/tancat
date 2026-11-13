@@ -216,3 +216,25 @@ def test_the_privacy_notice_no_longer_names_a_font_processor() -> None:
     html = (LANDING / "privacy.html").read_text(encoding="utf-8")
     assert "Google Fonts" not in html, "the privacy notice still names Google Fonts as a processor"
     assert "fonts are served from this site" in html, "the privacy notice does not say where the fonts come from"
+
+
+def test_the_docs_theme_loads_no_third_party_fonts() -> None:
+    """Material loads Roboto from Google by default; the theme's fonts are off."""
+    config = yaml.safe_load(MKDOCS.read_text(encoding="utf-8"))
+    theme = config["theme"]
+    assert theme.get("font") is False, "the docs theme still loads its fonts from Google"
+
+    extra_css = config.get("extra_css") or []
+    assert "assets/fonts.css" in extra_css, "the docs site does not load the self-hosted fonts"
+
+    css = (DOCS / "assets" / "fonts.css").read_text(encoding="utf-8")
+    for host in FONT_HOSTS:
+        assert host not in css, f"the docs stylesheet requests {host}"
+    for family in ("Inter", "JetBrains Mono"):
+        assert family in css, f"the docs stylesheet does not set {family}"
+    # Material builds its stacks as var(--md-text-font,...), so the hook must be set;
+    # --md-text-font-family alone loses to the theme's own body rule.
+    assert "--md-text-font:" in css, "the docs stylesheet does not set the theme's text-font hook"
+    assert "--md-code-font:" in css, "the docs stylesheet does not set the theme's code-font hook"
+    for name in re.findall(r"/fonts/([a-z0-9-]+\.woff2)", css):
+        assert (FONTS_DIR / name).is_file(), f"{name} is referenced but missing from landing/fonts"

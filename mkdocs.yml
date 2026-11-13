@@ -17,9 +17,15 @@ docs_dir: docs/user
 site_dir: site
 strict: true
 
+extra_css:
+  - assets/fonts.css
+
 theme:
   name: material
   language: en
+  # No Roboto from Google Fonts: the theme's font links are off, and
+  # docs/user/assets/fonts.css serves the families from /fonts/ (t-1419).
+  font: false
   favicon: assets/favicon.ico
   # overrides/404.html replaces Material's stock "404 - Not found" page.
   custom_dir: overrides

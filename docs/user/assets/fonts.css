@@ -1,0 +1,34 @@
+/* The docs site's fonts, served from this domain (t-1419).
+
+   The Material theme loads Roboto and Roboto Mono from Google Fonts by default,
+   which sends every reader's IP address to Google - the same leak the landing page
+   had. The theme's fonts are switched off in mkdocs.yml (`font: false`) and these
+   two families come from /fonts/, which is the landing site's own directory, staged
+   at the site root by pages-deploy. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/fonts/inter-normal-latin.woff2') format('woff2'),
+       url('/fonts/inter-normal-latin-ext.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-normal-latin.woff2') format('woff2'),
+       url('/fonts/jetbrains-mono-normal-latin-ext.woff2') format('woff2');
+}
+
+/* Material builds its own stacks as `var(--md-text-font,_),-apple-system,...`, so the
+   documented hooks are --md-text-font and --md-code-font. Setting
+   --md-text-font-family directly loses to the theme's own body rule. */
+:root,
+body {
+  --md-text-font: 'Inter';
+  --md-code-font: 'JetBrains Mono';
+}
