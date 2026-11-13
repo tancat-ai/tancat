@@ -136,17 +136,22 @@ with no row here fails `tests/test_licence_elections.py`.
 
 ## Fonts
 
-The landing page (`landing/index.html`, `landing/install.html`) loads three
-fonts from Google Fonts:
+The landing pages (`landing/index.html`, `landing/install.html`) serve three fonts
+**from this site**: `landing/fonts.css` points at six woff2 files in `landing/fonts/`.
+A visitor's IP address therefore never reaches a font CDN - it used to reach Google
+Fonts before the page rendered.
 
-| Font | Licence | Copyright |
-|---|---|---|
-| Inter | SIL Open Font License 1.1 | Copyright (c) 2016 The Inter Project Authors |
-| JetBrains Mono | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors |
-| Newsreader | SIL Open Font License 1.1 | Copyright 2020 The Newsreader Project Authors |
+| Font | Licence | Copyright | Files |
+|---|---|---|---|
+| Inter | SIL Open Font License 1.1 | Copyright (c) 2016 The Inter Project Authors | `inter-normal-latin.woff2`, `inter-normal-latin-ext.woff2` |
+| JetBrains Mono | SIL Open Font License 1.1 | Copyright 2020 The JetBrains Mono Project Authors | `jetbrains-mono-normal-latin.woff2`, `jetbrains-mono-normal-latin-ext.woff2` |
+| Newsreader | SIL Open Font License 1.1 | Copyright 2020 The Newsreader Project Authors | `newsreader-italic-latin.woff2`, `newsreader-italic-latin-ext.woff2` |
 
-All three are OFL-1.1, which permits web and print use. They are fetched from
-Google's CDN at page load and are **not redistributed** by the landing page.
+All three are OFL-1.1, which permits web embedding and redistribution. The files are
+the unmodified woff2 files Google Fonts serves for these families (Latin and
+Latin-Ext subsets, variable weights), so the rendering is unchanged. The licence text
+and the three copyright notices are in `landing/fonts/OFL-1.1.md`, and
+`landing/fonts/README.md` says where the files came from.
 
 The Pro install/licence PDF (`landing/tancat-pro-install-and-licence.pdf`) is
 different: it **redistributes** four font files, bundled in

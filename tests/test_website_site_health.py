@@ -157,3 +157,62 @@ def test_landing_has_a_reachable_mobile_menu() -> None:
     assert "md:hidden" in html, "the desktop nav is hidden below md; a hamburger must show"
     for anchor in ("#how-it-works", "#pipeline", "#regulated", "#pricing"):
         assert f'href="{anchor}"' in html
+
+
+# --- fonts are served from this site (t-1419) --------------------------------
+
+#: Hosts that would see a visitor's IP address just for reading the page.
+FONT_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
+
+#: The families the landing pages set in CSS. Each must resolve to a local file.
+FONT_FAMILIES = ("Inter", "JetBrains Mono", "Newsreader")
+
+FONTS_CSS = LANDING / "fonts.css"
+FONTS_DIR = LANDING / "fonts"
+
+
+def test_no_landing_page_requests_a_font_from_a_third_party() -> None:
+    """The site's pitch is that your data stays with you, fonts included."""
+    problems: list[str] = []
+    for page in sorted(LANDING.glob("*.html")):
+        html = page.read_text(encoding="utf-8")
+        for host in FONT_HOSTS:
+            if host in html:
+                problems.append(f"{page.name} still requests {host}")
+        if "@import" in html and "font" in html.split("@import", 1)[1][:200].lower():
+            problems.append(f"{page.name} uses an @import for a font - a third-party request before render")
+    assert problems == [], "a landing page sends a visitor's IP to a font host:" + "\n  ".join(problems)
+
+
+def test_the_landing_pages_link_the_self_hosted_stylesheet() -> None:
+    for name in ("index.html", "install.html"):
+        html = (LANDING / name).read_text(encoding="utf-8")
+        assert 'href="fonts.css"' in html, f"{name} does not link the self-hosted fonts"
+
+
+def test_every_font_the_stylesheet_sets_is_a_local_file() -> None:
+    css = FONTS_CSS.read_text(encoding="utf-8")
+    for family in FONT_FAMILIES:
+        assert f"'{family}'" in css, f"fonts.css does not define {family}"
+
+    referenced = re.findall(r"url\('fonts/([^']+)'\)", css)
+    assert len(referenced) >= 6, f"fonts.css references only {len(referenced)} font files"
+    missing = [name for name in referenced if not (FONTS_DIR / name).is_file()]
+    assert missing == [], f"fonts.css points at files that do not exist: {missing}"
+
+    for name in referenced:
+        assert (FONTS_DIR / name).stat().st_size > 1000, f"{name} is empty or truncated"
+
+
+def test_the_bundled_fonts_carry_their_licence_and_notice() -> None:
+    """The OFL requires the licence to travel with the files."""
+    licence = (FONTS_DIR / "OFL-1.1.md").read_text(encoding="utf-8")
+    assert "SIL OPEN FONT LICENSE" in licence, "the OFL text is missing from landing/fonts"
+    for family in FONT_FAMILIES:
+        assert family in licence, f"the licence notice does not name {family}"
+
+
+def test_the_privacy_notice_no_longer_names_a_font_processor() -> None:
+    html = (LANDING / "privacy.html").read_text(encoding="utf-8")
+    assert "Google Fonts" not in html, "the privacy notice still names Google Fonts as a processor"
+    assert "fonts are served from this site" in html, "the privacy notice does not say where the fonts come from"

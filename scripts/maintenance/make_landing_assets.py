@@ -105,11 +105,22 @@ PREVIEW_VIEWPORTS: dict[str, tuple[int, int]] = {
     "preview_mobile_390.png": (390, 844),
 }
 
+#: The landing pages' own webfonts, served from this site (t-1419). They are
+#: committed files, so the captures can depend on them like any other source - a
+#: font swap or a subset change re-renders the card and both previews.
+LANDING_FONTS: tuple[str, ...] = (
+    "landing/fonts.css",
+    "landing/fonts/inter-normal-latin.woff2",
+    "landing/fonts/inter-normal-latin-ext.woff2",
+    "landing/fonts/jetbrains-mono-normal-latin.woff2",
+    "landing/fonts/jetbrains-mono-normal-latin-ext.woff2",
+    "landing/fonts/newsreader-italic-latin.woff2",
+    "landing/fonts/newsreader-italic-latin-ext.woff2",
+)
+
 #: Generated asset -> the repo-relative sources it is rendered from. This is the
 #: contract the freshness guard checks: edit a source here and the guard fails
-#: until the generator has re-rendered and rewritten the manifest. The browser
-#: captures also depend on the webfonts fetched from Google Fonts, which cannot
-#: be hashed; the fingerprint covers the files that are committed.
+#: until the generator has re-rendered and rewritten the manifest.
 ASSET_SOURCES: dict[str, tuple[str, ...]] = {
     "favicon.ico": ("landing/logo_transparent.png",),
     "icon-192.png": ("landing/logo_transparent.png",),
@@ -119,6 +130,7 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
         "landing/index.html",
         "landing/tailwind.css",
         "landing/logo_transparent.png",
+        *LANDING_FONTS,
     ),
     # The previews are full-page captures, so they also depend on the images the
     # page embeds: the hero shows landing/streamlit_real_1280x820.png and the nav
@@ -132,6 +144,7 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
         "landing/ci_action.png",
         "landing/ci-badge.svg",
         "landing/logo_transparent.png",
+        *LANDING_FONTS,
     ),
     "preview_mobile_390.png": (
         "landing/index.html",
@@ -141,6 +154,7 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
         "landing/ci_action.png",
         "landing/ci-badge.svg",
         "landing/logo_transparent.png",
+        *LANDING_FONTS,
     ),
     "tancat-pro-install-and-licence.pdf": (
         "docs/implementation/tancat-pro-install-and-licence.html",
