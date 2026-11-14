@@ -611,6 +611,8 @@ Usage:
   tancat                     Start the interactive session (the default).
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
+  tancat licence status      Show the licence and its update window.
+  tancat licence activate K  Activate a Lemon Squeezy key on this machine (one call).
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
 
@@ -729,6 +731,64 @@ def _run_interactive() -> int:
         return 1
 
 
+def _licence_command(argv: list[str]) -> int:
+    """``tancat licence status|activate`` - the only place a key is pasted.
+
+    ``status`` reads the local licence file and says what the window is;
+    ``activate`` makes the single call to Lemon Squeezy (j-0304). Neither is
+    needed on a Free install.
+    """
+    import getpass
+
+    from src.licensing import activation
+
+    action = argv[0] if argv else "status"
+    licence = activation.read_licence()
+    if action == "status":
+        if not licence:
+            print("No licence on this machine: running as Free Community.")
+            print("Activate with: tancat licence activate <key from your receipt>")
+            return 0
+        decision = activation.entitlement(licence)
+        print(f"Licence key:  {licence.get('key', '(not stored)')[:12]}...")
+        print(f"Purchased:    {licence.get('key_created_at') or '(not recorded)'}")
+        print(f"Window ends:  {decision.window_end.isoformat() if decision.window_end else '(unknown)'}")
+        print(
+            f"This build:   {activation.RELEASE_DATE.isoformat()} - {'inside' if decision.allowed else 'AFTER'} the window"
+        )
+        if not decision.allowed:
+            print()
+            print(activation.startup_check(licence).message)
+        return 0
+
+    if action == "activate":
+        key = argv[1] if len(argv) > 1 else ""
+        if not key:
+            key = getpass.getpass("Paste your Lemon Squeezy licence key: ").strip()
+        result = activation.activate(key, instance_name=str(Path.cwd()))
+        print(result.message)
+        return 0 if result.ok else 2
+
+    print("Usage: tancat licence [status|activate <key>]", file=sys.stderr)
+    return 2
+
+
+def _startup_backstop() -> int | None:
+    """Refuse to start a build released after the update window (j-0304).
+
+    The backstop for a wheel installed by hand: nothing is modified, and the
+    message names the window end, the version that keeps working and how to
+    renew. A Free install (no licence) is never refused.
+    """
+    from src.licensing.activation import startup_check
+
+    decision = startup_check()
+    if decision.allowed:
+        return None
+    print(f"ERROR: {decision.message}", file=sys.stderr)
+    return 3
+
+
 def main(argv: list[str] | None = None) -> int:
     """Product CLI entry point.
 
@@ -738,6 +798,22 @@ def main(argv: list[str] | None = None) -> int:
     - an unknown flag or command: error and exit 2
     """
     args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "licence":
+        return _licence_command(args[1:])
+
+    backstop = _startup_backstop()
+    if backstop is not None:
+        return backstop
+
+    # j-0304: last_seen_at is recorded on every start. A local file write, no
+    # call out - the licence file is the only thing touched.
+    try:
+        from src.licensing.activation import touch_last_seen
+
+        touch_last_seen()
+    except OSError:  # a read-only install still runs; the timestamp is a convenience
+        pass
+
     if not args:
         return _run_interactive()
     if args in (["--help"], ["-h"], ["help"]):

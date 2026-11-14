@@ -58,7 +58,7 @@
   },
   "sources": {
     "landing/logo_transparent.png": "76403fa176ee398fa1d02e4add5ba6b528191bae",
-    "landing/index.html": "d6be8c88fa5d520376e873d5e73d89b0d7656945",
+    "landing/index.html": "11a8729810923f479ff118da6f129d9f3e16b19c",
     "landing/tailwind.css": "a7d88fd158395b6c07e85dabdbe9b4e651030cd4",
     "landing/fonts.css": "46e225345a5fc8e3195912841ade11ce7d0ffde1",
     "landing/fonts/inter-normal-latin.woff2": "d15208de03cd1ad7c5199f0a0ce915fe841e4722",
@@ -67,7 +67,7 @@
     "landing/cli_run.png": "7649f7823f8757e17780283a5f65ab04975ca7cb",
     "landing/ci_action.png": "c4856aff2d66bdefad8b9238792204d7d11e6047",
     "landing/ci-badge.svg": "9c86cafea918693403dfa59bf174e6b688b803de",
-    "docs/implementation/tancat-pro-install-and-licence.html": "e3324581d4d859fe3fc3c0508e49a2cc89470bf4",
+    "docs/implementation/tancat-pro-install-and-licence.html": "cffbaed693b796089e2dfa6484453c600de0321e",
     "docs/implementation/fonts/inter-regular.woff2": "2bcd222ecfae996d035ff72bf70672305cc29261",
     "docs/implementation/fonts/inter-bold.woff2": "b9e3cb3b1fde34010b001d0a069b6a5ce2a08d0f",
     "docs/implementation/fonts/inter-italic.woff2": "9a1ad2167a9a751c601d5e4b63bde32f8f0677bc",
