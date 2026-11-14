@@ -233,6 +233,99 @@ def test_adapt_package_only_test_filter(tmp_path: Path, monkeypatch: pytest.Monk
     assert report.kept[0]["test"] == "test_02"
 
 
+# ---------------------------------------------------------------------------
+# Carry-on failures: the sidecar is the only place the dead locator survives
+# ---------------------------------------------------------------------------
+
+
+def _assertion_junit(tmp_path: Path, test: str = "test_04") -> Path:
+    """The junit shape carry-on produces: an assertion, not the locator."""
+    path = tmp_path / "junit.xml"
+    suite = ET.Element("testsuite", {"tests": "1"})
+    case = ET.SubElement(suite, "testcase", {"name": test, "classname": "pkg"})
+    ET.SubElement(
+        case,
+        "failure",
+        {
+            "message": "AssertionError: Page URL expected to be 'http://x/cart.html' (actual: http://x/index.html)",
+        },
+    ).text = "log"
+    ET.ElementTree(suite).write(path, encoding="utf-8", xml_declaration=False)
+    return path
+
+
+def _evidence(pkg: Path, test: str, error: str) -> Path:
+    out = pkg / "evidence" / f"{test}.evidence.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(
+            {
+                "schema_version": "1.0",
+                "test": {"name": test, "status": "failed"},
+                "steps": [
+                    {"label": "go to store", "result": {"status": "passed"}},
+                    {"label": "Cart link", "result": {"status": "failed", "error": error}},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return out
+
+
+def test_a_carried_on_locator_failure_is_still_a_candidate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """t-1426: since t-1057 the junit message is the later assertion, not the locator.
+
+    A junit-only read reported zero candidates for fifteen nightly runs; the sidecar
+    holds the dead locator, so the engine must read it.
+    """
+    pkg = _package(tmp_path)
+    _evidence(pkg, "test_01", "Locator 'a[href=\"/nope\"]' not found on current page (http://x).")
+    junit = _assertion_junit(tmp_path, test="test_01")
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: _fake_elements())
+    monkeypatch.setattr(adapt, "run_single_test", lambda pkg, test, root: (0, "1 passed"))
+
+    report = adapt_package(pkg, junit)
+    assert report.summary["candidates"] == 1, report.to_dict()
+    assert report.summary["adapted"] == 1, report.to_dict()
+    assert report.kept[0]["old_locator"] == 'a[href="/nope"]'
+    assert 'a[href="/products.html"]' in (pkg / "pages" / "home_page.py").read_text(encoding="utf-8")
+
+
+def test_the_two_sources_do_not_double_count_one_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pkg = _package(tmp_path)
+    junit = _junit_with_failure(tmp_path, test="test_01")
+    _evidence(pkg, "test_01", "Locator 'a[href=\"/nope\"]' not found on current page (http://x).")
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: _fake_elements())
+    monkeypatch.setattr(adapt, "run_single_test", lambda pkg, test, root: (0, "1 passed"))
+
+    report = adapt_package(pkg, junit)
+    assert report.summary["candidates"] == 1, report.to_dict()
+
+
+def test_the_evidence_candidates_honour_the_only_test_filter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pkg = _package(tmp_path)
+    _evidence(pkg, "test_01", "Locator 'a[href=\"/nope\"]' not found on current page (http://x).")
+    _evidence(pkg, "test_02", "Locator 'a[href=\"/nope\"]' not found on current page (http://x).")
+    junit = _assertion_junit(tmp_path, test="test_02")
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: _fake_elements())
+    monkeypatch.setattr(adapt, "run_single_test", lambda pkg, test, root: (0, "1 passed"))
+
+    report = adapt_package(pkg, junit, only_test="test_02")
+    assert report.summary["candidates"] == 1
+    assert report.kept[0]["test"] == "test_02"
+
+
+def test_an_assertion_failure_with_no_evidence_is_still_not_adapted(tmp_path: Path) -> None:
+    """The carry-on bridge must not turn every assertion into an adaptation."""
+    pkg = _package(tmp_path)
+    junit = _assertion_junit(tmp_path, test="test_01")
+
+    report = adapt_package(pkg, junit)
+    assert report.summary["candidates"] == 0
+    assert report.kept == []
+
+
 def test_adapt_skips_non_repair_failures(tmp_path: Path) -> None:
     """Assertion failures are filtered BEFORE the engine — they always surface."""
     pkg = _package(tmp_path)

@@ -12,6 +12,7 @@ The live build is covered separately: CI job ``docs-build`` runs
 from __future__ import annotations
 
 import re
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -367,7 +368,15 @@ SITE_EXCEPTIONS = {
 
 
 def landing_files() -> list[Path]:
-    return sorted(path for path in LANDING.rglob("*") if path.is_file())
+    """The files the deploy ships: what git tracks under landing/.
+
+    Untracked artefacts can appear in a working tree (a local run writes an empty
+    evidence/ directory); they are not in a CI checkout and cannot ship, so the
+    check is against the tracked set rather than the filesystem.
+    """
+    result = subprocess.run(["git", "ls-files", "landing"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, "git ls-files failed, so the scan cannot know what ships"
+    return sorted(PROJECT_ROOT / name for name in result.stdout.split() if name.strip())
 
 
 def test_the_deploy_publishes_landing_wholesale() -> None:
@@ -399,9 +408,8 @@ def test_only_site_files_live_in_landing() -> None:
 
 
 def test_landing_holds_no_unexpected_directories() -> None:
-    """A stray evidence/ or generated_tests/ directory would be copied too."""
+    """A tracked directory other than fonts/ would be copied too."""
     allowed = {"fonts"}
-    unexpected = sorted(
-        path.relative_to(LANDING).as_posix() for path in LANDING.iterdir() if path.is_dir() and path.name not in allowed
-    )
-    assert unexpected == [], f"landing/ holds directories that are not site assets: {unexpected}"
+    directories = {path.parent.relative_to(LANDING).as_posix() for path in landing_files() if path.parent != LANDING}
+    unexpected = sorted(directory for directory in directories if directory.split("/")[0] not in allowed)
+    assert unexpected == [], f"landing/ tracks directories that are not site assets: {unexpected}"

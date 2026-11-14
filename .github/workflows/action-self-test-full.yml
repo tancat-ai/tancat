@@ -325,6 +325,12 @@ jobs:
       # ── Step 5: slash-command /adapt — verified adaptation (spec §9.6) ───
       # Sabotage the Cart-link locator, then /adapt it: patch -> re-run ->
       # assertion gate -> keep. Reply payload asserted; posting skipped.
+      #
+      # Since t-1057 the sabotaged click no longer ends its test: the tracker records
+      # the dead locator in the package's evidence sidecar and the test carries on to
+      # a URL assertion. The adaptation engine reads BOTH the junit message and the
+      # sidecar (t-1426), because a junit-only read sees the assertion and reports no
+      # candidates - which is how this step stayed red for fifteen nights.
       # (sudo: the cached files were created by the container's root user;
       # the runner edits them as root on an ephemeral scratch workspace.)
       - name: Sabotage Cart-link locator
@@ -364,6 +370,38 @@ jobs:
           workspace: ai-test-workspace
           self-test: 'true'
 
+      # Read the adaptation result whatever happened, so a red nightly says WHY in
+      # its own log (t-1426: fifteen nights of "adapted: 0" with no reason shown).
+      - name: Report the adaptation result
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('ai-test-workspace/results/adaptation.json')
+          if not path.exists():
+              print('adaptation.json missing - the /adapt step did not produce a report')
+              raise SystemExit(0)
+
+          report = json.loads(path.read_text(encoding='utf-8'))
+          summary = report.get('summary', {})
+          print('adaptation summary:', json.dumps(summary, sort_keys=True))
+          for cand in report.get('candidates', []):
+              print(
+                  f"  candidate {cand.get('test')}: {cand.get('status')}"
+                  f" {cand.get('old_locator')!r} -> {cand.get('new_locator')!r}"
+                  f" ({cand.get('message', '')[:160]})"
+              )
+          if not report.get('candidates'):
+              print(
+                  '  no candidates: neither the test-level junit failure nor any evidence '
+                  'sidecar reported a locator-class failure. If the test failed on an '
+                  'assertion after a step failed, the sidecar should have carried the '
+                  'locator - check that the tracker wrote *.evidence.json next to the package.'
+              )
+          PY
+
       - name: Assert verified adaptation (stub step)
         if: steps.adapt.outcome == 'success'
         run: |
@@ -374,8 +412,11 @@ jobs:
           results = Path('ai-test-workspace/results')
           report = json.loads((results / 'adaptation.json').read_text(encoding='utf-8'))
           summary = report['summary']
-          assert summary['adapted'] >= 1, report
-          assert summary['reverted'] == 0, report
+          # The message carries the report: a failure prints the summary and every
+          # candidate status instead of a bare AssertionError (t-1426).
+          detail = json.dumps({'summary': summary, 'candidates': report.get('candidates', [])}, indent=1)
+          assert summary['adapted'] >= 1, f'no adaptation was kept: {detail}'
+          assert summary['reverted'] == 0, f'a patch was reverted: {detail}'
           assert report['kept'][0]['new_locator'] != 'a[href="/bogus.html"]', report['kept']
 
           # The sabotaged source is fixed on disk

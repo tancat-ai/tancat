@@ -106,3 +106,27 @@ def test_mypy_parity_uses_the_pr_base_and_full_history() -> None:
     assert "github.event.pull_request.base.sha" in body
     checkout = next(step for step in steps if str(step.get("uses", "")).startswith("actions/checkout"))
     assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_the_adapt_gate_reports_before_it_asserts() -> None:
+    """t-1426: a red nightly must say why in its own log, not just fail.
+
+    The /adapt gate now prints the adaptation summary and every candidate status
+    with ``if: always()`` before the stub assertion runs, so the next failure (if
+    any) carries a reason instead of "adapted: 0".
+    """
+    reusable = _load("action-self-test-full.yml")
+    steps = reusable["jobs"]["action-self-test-full"]["steps"]
+    names = [step.get("name") for step in steps]
+
+    assert "Report the adaptation result" in names, "the nightly has no step that explains an adaptation failure"
+    report = next(step for step in steps if step.get("name") == "Report the adaptation result")
+    assert report["if"] == "always()", "the report step must run when /adapt fails too"
+    body = str(report["run"])
+    assert "adaptation summary" in body
+    assert "no candidates" in body, "the report does not explain the empty-candidate case"
+
+    # And the stub assertion carries the report in its message.
+    stub = next(step for step in steps if step.get("name") == "Assert verified adaptation (stub step)")
+    assert "no adaptation was kept" in str(stub["run"])
+    assert "candidates" in str(stub["run"])
