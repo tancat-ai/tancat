@@ -52,7 +52,9 @@ def test_the_updates_clause_describes_installable_packages_and_no_runtime_call()
     assert "installable Python packages" in page, "the updates clause does not say how updates arrive"
     assert "upgrade the way you upgrade any Python tool" in page, "the clause does not say how a customer upgrades"
     assert "delivered as files" not in page, "the clause still describes the old file delivery"
-    assert "no call to a vendor server" in page, "the clause does not rule out a runtime call"
+    # j-0304: the activation call exists, so the clause says ONE call, then none.
+    assert "one call to a vendor server" in page, "the clause does not say the activation call happens"
+    assert "After activation it makes no further call." in page, "the clause does not say the call is once"
     assert "no automatic update check" in page, "the clause does not rule out an update check"
     assert "choose when to install" in page, "the clause does not say the buyer chooses when to install"
 
@@ -293,8 +295,12 @@ def test_every_page_that_states_the_delivery_also_rules_out_both_shortcuts() -> 
         page = _text(path)
         if SETTLED_DELIVERY not in page:
             continue
-        if "no call to a vendor server" not in page:
-            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the vendor-call guarantee")
+        # j-0304: the guarantee is now "one activation call, then none" - a page
+        # that still says "no call to a vendor server" is the false claim.
+        if "no call to a vendor server" in page:
+            problems.append(f"{path.relative_to(ROOT)}: still claims there is no vendor call at all")
+        if "activation" not in page.lower():
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the one activation call")
         if "no automatic update check" not in page:
             problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the update-check guarantee")
     assert problems == [], (

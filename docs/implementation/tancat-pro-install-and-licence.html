@@ -59,10 +59,10 @@ bash launch_cli.sh     # interactive CLI</pre>
 <div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the key is missing or invalid the product keeps working on the free tier; it never locks you out of the free core.</div>
 
 <h2>5. Where your data goes</h2>
-<p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint and <strong>your</strong> target site &mdash; no telemetry, no update check, no vendor call. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
+<p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint, <strong>your</strong> target site, and <strong>once</strong> to our licensing service when you activate a licence key &mdash; no telemetry, no automatic update check. After activation the licensing path makes no further call. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
 
 <h2>6. Updates</h2>
-<p>Updates are files, not a service: they arrive on Lemon Squeezy and on the releases page (github.com/tancat-ai/tancat/releases), and you choose when to install them. The product makes <strong>no runtime update check</strong> and calls no vendor server.</p>
+<p>Updates are installable Python packages, released on the releases page (github.com/tancat-ai/tancat/releases). You choose when to upgrade, the way you upgrade any Python tool. The product makes <strong>no runtime update check</strong> as part of its normal operation.</p>
 
 <h2>7. Support</h2>
 <p>Support is provided by email at <strong>hello@tancat.dev</strong>, by the developer who builds TanCat. You get help with installation, licensing, and defects in TanCat. We aim to reply within two working days, Monday to Friday, UK business hours. Support does not include custom development, third-party systems, or on-site work, and we do not offer telephone or out-of-hours support. A contractual service level is available on request.</p>
