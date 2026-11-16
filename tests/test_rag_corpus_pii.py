@@ -3,8 +3,9 @@
 Three documents in ``docs/rag_corpus/lv_docs`` were named ``*_redacted.md`` and were
 not: a real person's car-insurance schedule, amendment letter and certificate, each
 carrying an email address, telephone numbers and postcodes, in a public repository.
-They are synthetic now, and this test refuses the whole class rather than those
-three strings:
+They are synthetic now, and named ``*_synthetic.md`` - a file called "redacted" in a
+public repository tells a reader the opposite of what is true. This test refuses the
+whole class rather than those three strings:
 
 - an **email address** must be at a reserved domain (``example.com``, ``.org``,
   ``.net`` - RFC 2606);
@@ -147,21 +148,32 @@ def test_no_personal_data_in_the_corpus_pdfs() -> None:
 
 def test_the_synthetic_documents_say_they_are_synthetic() -> None:
     """A reader (and the next agent) must not mistake the sample for a real policy."""
-    for name in ("schedule_redacted.md", "letter_redacted.md", "certificate_redacted.md"):
+    for name in ("schedule_synthetic.md", "letter_synthetic.md", "certificate_synthetic.md"):
         text = (CORPUS / "lv_docs" / name).read_text(encoding="utf-8")
         assert "Synthetic example document" in text, f"{name} does not declare itself synthetic"
 
 
 def test_the_synthetic_documents_keep_the_sections_ingestion_exercises() -> None:
     """Same shape as before: the corpus still tests 'personal documents'."""
-    schedule = (CORPUS / "lv_docs" / "schedule_redacted.md").read_text(encoding="utf-8")
+    schedule = (CORPUS / "lv_docs" / "schedule_synthetic.md").read_text(encoding="utf-8")
     for marker in ("Policy No.", "Insured from:", "Registration number:", "Cover:", "Excesses"):
         assert marker in schedule, f"the schedule lost its {marker!r} section"
 
-    letter = (CORPUS / "lv_docs" / "letter_redacted.md").read_text(encoding="utf-8")
+    letter = (CORPUS / "lv_docs" / "letter_synthetic.md").read_text(encoding="utf-8")
     for marker in ("Policy number", "Effective start date", "Additional premium", "Registration"):
         assert marker in letter, f"the letter lost its {marker!r} section"
 
-    certificate = (CORPUS / "lv_docs" / "certificate_redacted.md").read_text(encoding="utf-8")
+    certificate = (CORPUS / "lv_docs" / "certificate_synthetic.md").read_text(encoding="utf-8")
     for marker in ("Certificate Number", "Registration mark", "Date of expiry", "Limitations as to use"):
         assert marker in certificate, f"the certificate lost its {marker!r} section"
+
+
+def test_no_corpus_file_is_named_redacted() -> None:
+    """The name is a claim about the content, so it must not survive the rewrite.
+
+    A reader who sees ``*_redacted.md`` learns that something was taken out of a
+    document - which was true of the old files and is false of these. The class
+    rule above covers the data; this covers the name.
+    """
+    offenders = sorted(path.relative_to(ROOT).as_posix() for path in corpus_files() if "redacted" in path.name.lower())
+    assert offenders == [], f"a corpus file still claims to be a redaction: {offenders}"
