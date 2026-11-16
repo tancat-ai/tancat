@@ -11,6 +11,7 @@ import ast
 import csv
 import json
 import os
+import subprocess
 from collections import Counter
 
 ###############################################################################
@@ -136,9 +137,17 @@ LAYER_MAP = {
 }
 
 ###############################################################################
-# 2. ALL PROJECT FILES — scan for real files
+# 2. ALL PROJECT FILES — only what git tracks
 ###############################################################################
-ALL_FILES = set()
+# The indexes are committed and published, so they must describe the REPOSITORY,
+# not whoever's working tree ran the generator. A filesystem walk did exactly the
+# opposite: it indexed 1102 paths that exist only here - exported test output,
+# captured scrapes under scripts/eval/scraped_pages/, and the private research
+# notes under docs/private/ - so the public map leaked internal note names and
+# nobody else could reproduce it (t-1440).
+#
+# The rule is "only paths git knows about", which cannot rot: a file is indexed
+# when the repository has it, and never when the filesystem does.
 SKIP_DIRS = {
     ".venv",
     "__pycache__",
@@ -166,37 +175,8 @@ SKIP_DIRS = {
     # drown the real architecture in the 3D map (2026-08-13).
     "graphify-out",
 }
-for root, dirs, files in os.walk("."):
-    dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
-    for f in files:
-        full = os.path.join(root, f)
-        rel = full.replace("\\", "/")
-        if f.startswith("."):
-            continue
-        skip_ext = (
-            ".pyc",
-            ".pyo",
-            ".so",
-            ".dll",
-            ".exe",
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".gif",
-            ".svg",
-            ".woff",
-            ".ttf",
-            ".woff2",
-            ".map",
-            ".lock",
-            ".tag",
-            ".met",
-            ".wheel",
-        )
-        if f.endswith(skip_ext):
-            continue
-        ALL_FILES.add(rel)
 
+#: Dotfiles at the repo root that ARE part of the project's shape.
 ROOT_CONFIG_FILES = [
     ".clinerules",
     ".clineignore",
@@ -214,34 +194,63 @@ ROOT_CONFIG_FILES = [
     "launch_ui.sh",
     "launch_dev.sh",
 ]
-for f in ROOT_CONFIG_FILES:
-    if os.path.exists(f):
-        ALL_FILES.add("./" + f)
 
-for subdir in ["cli", "src", "tests", "docs", "docs/plans", "scripts"]:
-    if os.path.isdir(subdir):
-        for f in os.listdir(subdir):
-            full = "./" + subdir + "/" + f
-            if f.endswith(".py") or f.endswith(".md"):
-                ALL_FILES.add(full)
-        for root2, _dirs2, files2 in os.walk(subdir):
-            for f in files2:
-                if f.endswith(".py") or f.endswith(".md"):
-                    full = "./" + os.path.join(root2, f).replace("\\", "/")
-                    ALL_FILES.add(full)
+#: Directories that must never be indexed even if a file inside one gets tracked:
+#: private notes and captured data are not architecture.
+NEVER_INDEXED = (
+    "docs/private/",
+    "exported_tests/",
+    "scripts/eval/scraped_pages/",
+    # Committed, but captured page data, not architecture: a scrape is evidence, not
+    # a file a reader navigates the map to.
+    "fixtures/scraped_pages/",
+)
 
-# Filters
-ALL_FILES = {f for f in ALL_FILES if not f.endswith((".xml", ".lock"))}
-ALL_FILES = {f for f in ALL_FILES if "mock_insurance_site" not in f and "cart.html" not in f}
-ALL_FILES = {f for f in ALL_FILES if "cline-mcp-memory-bank" not in f}
-ALL_FILES = {f for f in ALL_FILES if not f.endswith((".txt", ".log", ".err")) or f in (".env.example",)}
-ALL_FILES = {
-    f
-    for f in ALL_FILES
-    if f not in ("3d_map_data.json", "nodes.csv", "links.csv")
-    and f not in ("./3d_map_data.json", "./nodes.csv", "./links.csv")
-    and f not in ("docs/3d_map_data.json", "docs/nodes.csv", "docs/links.csv")
-}
+SKIP_EXTENSIONS = (
+    ".pyc",
+    ".pyo",
+    ".so",
+    ".dll",
+    ".exe",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".woff",
+    ".ttf",
+    ".woff2",
+    ".map",
+    ".lock",
+    ".tag",
+    ".met",
+    ".wheel",
+)
+
+
+def tracked_files() -> list[str]:
+    """Every path git tracks, from the index (not from the filesystem)."""
+    result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True)
+    return [name for name in result.stdout.decode("utf-8").split("\0") if name]
+
+
+ALL_FILES = set()
+for rel in tracked_files():
+    if rel.startswith(NEVER_INDEXED):
+        continue
+    parts = rel.split("/")
+    if any(part in SKIP_DIRS for part in parts[:-1]):
+        continue
+    if any(part.startswith(".") for part in parts[:-1]):
+        continue
+
+    name = parts[-1]
+    if name.startswith(".") and rel not in ROOT_CONFIG_FILES:
+        continue
+    if name.endswith(SKIP_EXTENSIONS):
+        continue
+
+    ALL_FILES.add("./" + rel)
 
 ###############################################################################
 # 3. SMART DOC LINKS
