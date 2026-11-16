@@ -25,6 +25,15 @@ The feed is ``FEED_URL``: PyPI's JSON for this distribution. The package is not
 published yet (the URL answers 404 today), so in practice the check is inert -
 every failure is silent by design, and the constant is the single line that
 changes when it is published.
+
+**A feed we do not own is an attack surface, not a version.** ``tancat`` is a name
+anyone can register on PyPI while it is free. If someone else published it first,
+our own check would read THEIR version number and tell every customer to run
+``tancat update`` - which would install their package. So an answer is trusted
+only when the project's identity is ours: ``info.name`` must be exactly
+``tancat``, and at least one project URL or author field must point at
+``tancat.dev`` or ``github.com/tancat-ai/tancat``. Anything else is treated as no
+answer - silent, like every other failure.
 """
 
 from __future__ import annotations
@@ -45,6 +54,12 @@ DEFAULT_UPDATE_CHECK = True
 #: Where the answer comes from. PyPI's JSON for this distribution; the constant
 #: is the one line to change if the feed moves.
 FEED_URL = "https://pypi.org/pypi/tancat/json"
+
+#: The project's own identity. An answer from a project that is not this one is
+#: refused: while the name is unregistered, anyone could publish under it and our
+#: notice would point customers at their package.
+FEED_PROJECT_NAME = "tancat"
+IDENTITY_MARKERS: tuple[str, ...] = ("tancat.dev", "github.com/tancat-ai/tancat")
 
 #: The call must never hold anything up.
 TIMEOUT_S = 2.0
@@ -135,15 +150,52 @@ def write_cache(data: dict[str, Any], path: Path | None = None) -> None:
         pass
 
 
+def _identity_strings(info: dict[str, Any]) -> list[str]:
+    """Every field the feed publishes that can point at the project's home."""
+    values: list[str] = []
+    for key in ("name", "home_page", "author", "author_email", "maintainer", "maintainer_email"):
+        value = info.get(key)
+        if isinstance(value, str):
+            values.append(value)
+    urls = info.get("project_urls")
+    if isinstance(urls, dict):
+        for key, value in urls.items():
+            if isinstance(key, str):
+                values.append(key)
+            if isinstance(value, str):
+                values.append(value)
+    return values
+
+
+def identity_matches(payload: dict[str, Any]) -> bool:
+    """True only when the feed describes THIS project.
+
+    ``info.name`` must match exactly, and one URL or author field must carry our
+    repository or domain. A feed we do not own is refused - see the module
+    docstring: it is an attack surface, not a version.
+    """
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return False
+    name = info.get("name")
+    if not isinstance(name, str) or name.strip().lower() != FEED_PROJECT_NAME:
+        return False
+    haystack = " ".join(_identity_strings(info)).lower()
+    return any(marker in haystack for marker in IDENTITY_MARKERS)
+
+
 def _fetch(url: str, timeout: float = TIMEOUT_S) -> str | None:
-    """Ask the feed for the latest version. Any failure is ``None``, silently."""
+    """Ask the feed for the latest version. Any failure, or a feed that is not
+    ours, is ``None`` - silently."""
     try:
         request = urllib.request.Request(url, headers={"Accept": "application/json"})
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https URL
             payload = json.loads(response.read().decode("utf-8", errors="replace"))
     except urllib.error.URLError, OSError, ValueError, TimeoutError:
         return None
-    info = payload.get("info") if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or not identity_matches(payload):
+        return None
+    info = payload.get("info")
     version = info.get("version") if isinstance(info, dict) else None
     return str(version).strip() if version else None
 
@@ -261,7 +313,10 @@ __all__ = [
     "CACHE_NAME",
     "CheckResult",
     "DEFAULT_UPDATE_CHECK",
+    "FEED_PROJECT_NAME",
     "FEED_URL",
+    "IDENTITY_MARKERS",
+    "identity_matches",
     "NOTICE",
     "TIMEOUT_S",
     "UPDATE_CHECK_SETTING",

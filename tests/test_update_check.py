@@ -5,6 +5,8 @@ Every call is stubbed: no test touches the network or the real settings store.
 
 from __future__ import annotations
 
+import json
+import urllib.request
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -166,3 +168,73 @@ def test_the_upgrade_inside_the_window_prints_the_command_and_does_not_shell_out
     assert cli_main.main(["update"]) == 0
     out = capsys.readouterr().out
     assert "pip install --upgrade tancat" in out
+
+
+# -- j-0306 follow-up: an unowned feed is an attack surface ------------------
+
+
+def _feed(**info_overrides: object) -> dict[str, Any]:
+    info: dict[str, Any] = {
+        "name": "tancat",
+        "version": "1.5.0",
+        "home_page": "https://tancat.dev",
+        "project_urls": {"Repository": "https://github.com/tancat-ai/tancat"},
+        "author": "Louis Cattano",
+    }
+    info.update(info_overrides)
+    return {"info": info}
+
+
+class _Response:
+    """A urlopen() response that carries a fixed JSON body."""
+
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def _stub_urlopen(payload: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> _Response:
+        return _Response(payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+
+def test_a_feed_with_our_identity_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_urlopen(_feed(), monkeypatch)
+
+    assert V._fetch(V.FEED_URL) == "1.5.0"
+
+
+def test_a_feed_whose_author_and_urls_are_not_ours_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The supply-chain case: someone else registered the name first."""
+    squatter = _feed(
+        home_page="https://example.com/tancat",
+        project_urls={"Homepage": "https://example.com"},
+        author="Somebody Else",
+    )
+    _stub_urlopen(squatter, monkeypatch)
+
+    assert V._fetch(V.FEED_URL) is None, "a feed that is not ours was trusted"
+
+
+def test_identity_matches_requires_the_exact_name_and_our_marker() -> None:
+    assert V.identity_matches(_feed())
+    assert not V.identity_matches(_feed(name="tancat-pro"))
+    assert not V.identity_matches(_feed(name="tancat", home_page="", project_urls={}, author="Anon"))
+
+    # A repository URL is enough on its own.
+    assert V.identity_matches(_feed(home_page="", project_urls={"Source": "https://github.com/tancat-ai/tancat"}))
+    # As is the domain in an author field.
+    assert V.identity_matches(_feed(home_page="", project_urls={}, author="hello@tancat.dev"))
+    # An empty or malformed payload is no answer.
+    assert not V.identity_matches({})
+    assert not V.identity_matches({"info": "nope"})
