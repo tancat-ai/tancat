@@ -230,7 +230,7 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 - **2026-05-16:** Resolver audit — live call graph traced and documented, four dead methods confirmed in `placeholder_resolver.py`, resolver restructure plan created (`RESTRUCTURE_PLAN.md`), vulture findings documented.
 - **2026-07-20:** AI-028 Evidence Search & Export shipped (73 tests). AI-029 Workspace & Storage shipped (30 tests). Self-healing core loop shipped (28 tests). State-dependent scraping (B-022) and cart modal fix (B-023) shipped.
 - **2026-07-21:** Phase 3 RAG complete — Milvus Lite store, resolver integration, ingestion CLI, measurement (40/40 self-consistency, +11.6pp accuracy). 1625 tests pass.
-- **2026-07-22:** LV Insurance mock site built (7-step quote flow, 60KB HTML). 7-document rag_corpus assembled (real LV PDFs + redacted personal + synthetic guide). eval-005 dataset created (10 criteria, 33 placeholders). Phase 1 agent split designed: Synthesizer (dense/Gemma 31B) + Resolver (MoE/Gemma 26B) + Ingester (PDF/Docling).
+- **2026-07-22:** LV Insurance mock site built (7-step quote flow, 60KB HTML). 7-document rag_corpus assembled (real LV PDFs + synthetic personal documents + synthetic guide). eval-005 dataset created (10 criteria, 33 placeholders). Phase 1 agent split designed: Synthesizer (dense/Gemma 31B) + Resolver (MoE/Gemma 26B) + Ingester (PDF/Docling).
 
 ---
 
