@@ -52,10 +52,10 @@ def test_the_updates_clause_describes_installable_packages_and_no_runtime_call()
     assert "installable Python packages" in page, "the updates clause does not say how updates arrive"
     assert "upgrade the way you upgrade any Python tool" in page, "the clause does not say how a customer upgrades"
     assert "delivered as files" not in page, "the clause still describes the old file delivery"
-    # j-0304: the activation call exists, so the clause says ONE call, then none.
-    assert "one call to a vendor server" in page, "the clause does not say the activation call happens"
-    assert "After activation it makes no further call." in page, "the clause does not say the call is once"
-    assert "no automatic update check" in page, "the clause does not rule out an update check"
+    # j-0306: two kinds of call, and the product still works offline.
+    assert "two kinds of outbound call and no others" in page, "the clause does not state the calls it makes"
+    assert "version check at most once a day" in page, "the clause does not state the daily version check"
+    assert "works with no internet connection" in page, "the clause does not say the product works offline"
     assert "choose when to install" in page, "the clause does not say the buyer chooses when to install"
 
 
@@ -243,6 +243,11 @@ def _sentences(path: Path) -> list[str]:
     return sentences
 
 
+def _is_version_check_sentence(sentence: str) -> bool:
+    """j-0306: sentences about the version check are not update-DELIVERY claims."""
+    return "version check" in sentence.lower()
+
+
 def _delivery_hits(sentence: str) -> list[str]:
     low = sentence.lower()
     hits = [word.strip() for word in DELIVERY_WORDS if re.search(rf"\b{re.escape(word.strip())}\b", low)]
@@ -261,6 +266,8 @@ def test_no_update_sentence_delivers_an_update_any_other_way() -> None:
         for sentence in _sentences(path):
             if not UPDATE_WORD.search(sentence):
                 continue
+            if _is_version_check_sentence(sentence):
+                continue  # speaking of the version check is not claiming a delivery channel
             seen += 1
             if SETTLED_DELIVERY.lower() in sentence.lower():
                 continue  # this IS the settled claim
@@ -281,7 +288,13 @@ def test_every_page_that_speaks_of_updates_states_the_settled_delivery() -> None
     problems = [
         f"{path.relative_to(ROOT)}: speaks of updates but does not carry {SETTLED_DELIVERY!r}"
         for path in buyer_pages()
-        if any(UPDATE_WORD.search(sentence) for sentence in _sentences(path)) and SETTLED_DELIVERY not in _text(path)
+        if (
+            any(
+                UPDATE_WORD.search(sentence) and not _is_version_check_sentence(sentence)
+                for sentence in _sentences(path)
+            )
+            and SETTLED_DELIVERY not in _text(path)
+        )
     ]
     assert problems == [], (
         "a page speaks of updates without stating how they arrive:" + "\n" + "  " + ("\n" + "  ".join(problems))
@@ -295,14 +308,19 @@ def test_every_page_that_states_the_delivery_also_rules_out_both_shortcuts() -> 
         page = _text(path)
         if SETTLED_DELIVERY not in page:
             continue
-        # j-0304: the guarantee is now "one activation call, then none" - a page
-        # that still says "no call to a vendor server" is the false claim.
+        # j-0306: the guarantees are now "one activation call" and "a version
+        # check at most once a day". A page that claims no vendor call at all, or
+        # leaves the version check out, is the false one.
         if "no call to a vendor server" in page:
             problems.append(f"{path.relative_to(ROOT)}: still claims there is no vendor call at all")
         if "activation" not in page.lower():
-            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the one activation call")
-        if "no automatic update check" not in page:
-            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the update-check guarantee")
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the activation call")
+        if "version check" not in page.lower():
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the daily version check")
+        # j-0306: the old guarantee was "no automatic update check"; the truth is
+        # now that the check exists and never installs anything by itself.
+        if "no automatic upgrade" not in page.lower() and "no automatic update check" not in page.lower():
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not that upgrades are chosen")
     assert problems == [], (
         "a page leaves the product's update behaviour open:" + "\n" + "  " + ("\n" + "  ".join(problems))
     )

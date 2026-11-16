@@ -111,8 +111,9 @@ separately. Nothing renews automatically, and security fixes and bug fixes for
 the version you hold are free. Updates are released as installable Python packages on the
 [releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
 way you upgrade any Python tool. You choose when to install one. TanCat makes
-one call to a vendor server - the activation request the licence key triggers -
-and no automatic update check.
+two kinds of call and no others - the activation request the licence key triggers, and
+a version check at most once a day if you leave it on (nothing about you is sent; settings turns
+it off). No automatic upgrade - you choose when to install one.
 
 From a source checkout:
 
