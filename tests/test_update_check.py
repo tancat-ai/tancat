@@ -238,3 +238,38 @@ def test_identity_matches_requires_the_exact_name_and_our_marker() -> None:
     # An empty or malformed payload is no answer.
     assert not V.identity_matches({})
     assert not V.identity_matches({"info": "nope"})
+
+
+# -- the packaging metadata must satisfy the identity gate --------------------
+
+
+def test_the_real_pyproject_publishes_the_identity_the_check_requires() -> None:
+    """The point of the marker: our first release must satisfy our own gate.
+
+    If the published metadata lacks these, every customer's check silently sees
+    "no answer" - the worst failure mode, because nobody would notice.
+    """
+    import tomllib
+
+    root = Path(__file__).resolve().parent.parent
+    with (root / "pyproject.toml").open("rb") as handle:
+        project = tomllib.load(handle)["project"]
+
+    urls = project.get("project_urls") or {}
+    assert urls.get("Repository") == "https://github.com/tancat-ai/tancat"
+    assert urls.get("Homepage") == "https://tancat.dev"
+
+    published = " ".join(str(value) for value in urls.values()).lower()
+    for marker in V.IDENTITY_MARKERS:
+        assert marker in published, f"the packaging metadata does not carry the marker {marker!r}"
+
+    # And the whole thing passes the gate as published.
+    feed = {
+        "info": {
+            "name": project["name"],
+            "version": project["version"],
+            "author_email": project["authors"][0]["email"],
+            "project_urls": dict(urls),
+        }
+    }
+    assert V.identity_matches(feed), "our own published metadata would fail our own check"

@@ -10,6 +10,9 @@ readme = "README.md"
 authors = [{ name = "Cat Tan Operations Ltd", email = "hello@tancat.dev" }]
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
+# j-0306: the update check trusts a PyPI answer only when it carries our
+# repository or domain, so the FIRST published release must carry them too.
+project_urls = { Repository = "https://github.com/tancat-ai/tancat", Homepage = "https://tancat.dev" }
 requires-python = ">=3.14"
 dependencies = [
     "playwright>=1.40.0",
