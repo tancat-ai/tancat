@@ -2059,7 +2059,7 @@ differs from the golden key's expected format, causing a comparison failure.
 
 **Delivered:**
 - ✅ `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
-- ✅ `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
+- ✅ `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 synthetic personal documents + 1 synthetic underwriting guide)
 - ✅ `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
 - ✅ `src/pdf_ingest.py` — PyMuPDF extraction pipeline (headings, tables, chunking)
 - ✅ `rag_ingest.py --pdfs` — CLI flag ingests PDFs into vector store
