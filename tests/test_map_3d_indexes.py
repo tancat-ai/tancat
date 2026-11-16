@@ -20,9 +20,11 @@ from __future__ import annotations
 import csv
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+MAP_DIR = ROOT / "scripts" / "map_3d"
 NODES = ROOT / "docs" / "nodes.csv"
 LINKS = ROOT / "docs" / "links.csv"
 MAP_JSON = ROOT / "scripts" / "3d_map_data.json"
@@ -50,14 +52,27 @@ def _link_rows() -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def test_every_indexed_path_is_tracked() -> None:
-    tracked = _tracked()
-    labels = _node_labels()
+def test_the_index_matches_the_repository_exactly() -> None:
+    """Both directions: nothing indexed that git lacks, nothing tracked that is missing.
 
-    untracked = sorted(label for label in labels if label not in tracked)
-    assert untracked == [], (
-        "the 3D map indexes paths the repository does not have - regenerate it from a clean "
-        f"checkout ({len(untracked)} of {len(labels)}): " + ", ".join(untracked[:10])
+    One direction (indexed must be tracked) let a stale index pass: a file added since
+    the last regeneration was simply absent, and absence is not a broken reference
+    (t-1446). The expectation is the generator's own selection, imported rather than
+    re-implemented, so the two cannot drift.
+    """
+    sys.path.insert(0, str(MAP_DIR))
+    from index_selection import select_indexed_files
+
+    expected = {_label(label) for label in select_indexed_files(ROOT)}
+    indexed = set(_node_labels())
+
+    extra = sorted(indexed - expected)
+    missing = sorted(expected - indexed)
+
+    assert extra == [] and missing == [], (
+        "the 3D map is out of date with the repository - regenerate it from a clean checkout. "
+        f"indexed but not selectable ({len(extra)}): " + ", ".join(extra[:10]) + " | "
+        f"selectable but not indexed ({len(missing)}): " + ", ".join(missing[:10])
     )
 
 

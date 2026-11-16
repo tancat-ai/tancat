@@ -11,8 +11,9 @@ import ast
 import csv
 import json
 import os
-import subprocess
+import sys
 from collections import Counter
+from pathlib import Path
 
 ###############################################################################
 # 1. LAYER MAP — all .py files → group
@@ -139,118 +140,13 @@ LAYER_MAP = {
 ###############################################################################
 # 2. ALL PROJECT FILES — only what git tracks
 ###############################################################################
-# The indexes are committed and published, so they must describe the REPOSITORY,
-# not whoever's working tree ran the generator. A filesystem walk did exactly the
-# opposite: it indexed 1102 paths that exist only here - exported test output,
-# captured scrapes under scripts/eval/scraped_pages/, and the private research
-# notes under docs/private/ - so the public map leaked internal note names and
-# nobody else could reproduce it (t-1440).
-#
-# The rule is "only paths git knows about", which cannot rot: a file is indexed
-# when the repository has it, and never when the filesystem does.
-SKIP_DIRS = {
-    ".venv",
-    "__pycache__",
-    "node_modules",
-    ".git",
-    "screenshots",
-    "htmlcov",
-    "pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    "playwright",
-    "test-results",
-    "playwright-report",
-    "blob-report",
-    "scratch",
-    ".uv-cache",
-    ".pytest_cache",
-    ".tmp",
-    ".streamlit",
-    ".cache",
-    "cline-mcp-memory-bank",
-    "memory-bank",
-    "evidence",
-    # Generated graph artifacts — thousands of hashed AST-cache nodes that
-    # drown the real architecture in the 3D map (2026-08-13).
-    "graphify-out",
-}
+# The selection rule lives in index_selection.py so the test that checks these files
+# asks the same question the generator answered (t-1446). See that module for why the
+# walk was replaced by git ls-files.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from index_selection import select_indexed_files  # noqa: E402
 
-#: Dotfiles at the repo root that ARE part of the project's shape.
-ROOT_CONFIG_FILES = [
-    ".clinerules",
-    ".clineignore",
-    ".dockerignore",
-    ".gitignore",
-    ".env.example",
-    ".python-version",
-    "pyproject.toml",
-    "pytest.ini",
-    "requirements.txt",
-    "Dockerfile",
-    "docker-compose.yml",
-    "LICENSE",
-    "fix.sh",
-    "launch_ui.sh",
-    "launch_dev.sh",
-]
-
-#: Directories that must never be indexed even if a file inside one gets tracked:
-#: private notes and captured data are not architecture.
-NEVER_INDEXED = (
-    "docs/private/",
-    "exported_tests/",
-    "scripts/eval/scraped_pages/",
-    # Committed, but captured page data, not architecture: a scrape is evidence, not
-    # a file a reader navigates the map to.
-    "fixtures/scraped_pages/",
-)
-
-SKIP_EXTENSIONS = (
-    ".pyc",
-    ".pyo",
-    ".so",
-    ".dll",
-    ".exe",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".svg",
-    ".woff",
-    ".ttf",
-    ".woff2",
-    ".map",
-    ".lock",
-    ".tag",
-    ".met",
-    ".wheel",
-)
-
-
-def tracked_files() -> list[str]:
-    """Every path git tracks, from the index (not from the filesystem)."""
-    result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True)
-    return [name for name in result.stdout.decode("utf-8").split("\0") if name]
-
-
-ALL_FILES = set()
-for rel in tracked_files():
-    if rel.startswith(NEVER_INDEXED):
-        continue
-    parts = rel.split("/")
-    if any(part in SKIP_DIRS for part in parts[:-1]):
-        continue
-    if any(part.startswith(".") for part in parts[:-1]):
-        continue
-
-    name = parts[-1]
-    if name.startswith(".") and rel not in ROOT_CONFIG_FILES:
-        continue
-    if name.endswith(SKIP_EXTENSIONS):
-        continue
-
-    ALL_FILES.add("./" + rel)
+ALL_FILES = set(select_indexed_files(Path.cwd()))
 
 ###############################################################################
 # 3. SMART DOC LINKS
