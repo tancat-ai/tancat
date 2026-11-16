@@ -3,9 +3,15 @@
 
 Locator-only, assertion-gated, transparent:
 
-1. Parse junit.xml failure messages; keep ONLY LocatorNotFound-class failures
-   (the same classification the report's repair-candidate marking uses —
-   assertion failures always surface, never auto-adapted).
+1. Find LocatorNotFound-class failures — the same classification the report's
+   repair-candidate marking uses (assertion failures always surface, never
+   auto-adapted). Two sources, because one is no longer enough:
+   - the test-level ``junit.xml`` failure message, and
+   - the evidence sidecar (``*.evidence.json``): since t-1057 a failed step no
+     longer ends its test, so the sidecar records the dead locator and the test
+     carries on until a later assertion fails. A junit-only read sees that
+     assertion and reports "no candidates" for a locator that is right there
+     (the nightly self-test was red for fifteen nights on exactly this, t-1426).
 2. For each candidate, find the source step(s) in the package that use the
    failing locator (``tracker.click/fill/assert_visible('…', label=…)`` in
    POM pages, or ``page.locator('…')`` in flat tests).
@@ -310,6 +316,52 @@ def _junit_repair_candidates(junit: Path) -> list[dict[str, str]]:
     return records
 
 
+_EVIDENCE_SUFFIX = ".evidence.json"
+
+
+def _evidence_repair_candidates(package: Path) -> list[dict[str, str]]:
+    """(test, message) pairs for LocatorNotFound-class steps the tracker recorded.
+
+    The carry-on rule (t-1057) means a dead locator does not end its test: the step
+    is written to the sidecar with status ``failed`` and an error naming the
+    locator, and the test fails later on whatever assertion trips. Reading only the
+    junit message therefore misses every repairable failure of this shape.
+    """
+    records: list[dict[str, str]] = []
+    for path in sorted(package.rglob(f"*{_EVIDENCE_SUFFIX}")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError, OSError:
+            continue
+        test = str((data.get("test") or {}).get("name") or path.name[: -len(_EVIDENCE_SUFFIX)])
+        for step in data.get("steps") or []:
+            result = step.get("result") or {}
+            if result.get("status") != "failed":
+                continue
+            message = str(result.get("error") or result.get("failure_note") or "").strip()
+            if message and is_repair_candidate(message):
+                records.append({"test": test, "message": message})
+    return records
+
+
+def repair_candidates(package: Path, junit: Path) -> list[dict[str, str]]:
+    """Every locator-class candidate from both sources, one per (test, locator).
+
+    The junit record wins when both sources name the same failure: it carries the
+    test name the runner reported.
+    """
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for record in [*_junit_repair_candidates(junit), *_evidence_repair_candidates(package)]:
+        base = record["test"].split("[", 1)[0]
+        key = (base, _extract_locator(record["message"]) or record["message"][:120])
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(record)
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
@@ -333,7 +385,7 @@ def adapt_package(
         package=str(package),
         url=_package_url(package, url),
     )
-    candidates = _junit_repair_candidates(junit)
+    candidates = repair_candidates(package, junit)
     if only_test:
         base = only_test.split("[", 1)[0]
         candidates = [c for c in candidates if c["test"].split("[", 1)[0] == base]
