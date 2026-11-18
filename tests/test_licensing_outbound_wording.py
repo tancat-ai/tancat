@@ -1,9 +1,10 @@
-"""j-0304: no page may claim "no outbound traffic" while activation exists.
+"""j-0304 / j-0306: the site must state the two calls it makes, and no other.
 
-The activation call made five sentences false. This test holds the pages and the
-licensing docs to what the code does: one activation call to Lemon Squeezy, then
-nothing. It fails if any page claims otherwise, and it checks the replacement
-sentences are present, so a future revert is caught too.
+TanCat makes two kinds of outbound call: one activation request, and a version
+check at most once a day that can be switched off. These tests hold every buyer
+document - pages, the PDF source, the order PDF itself and the user docs - to that
+truth, and fail on any document that claims there is no outbound call at all or
+leaves the version check out.
 """
 
 from __future__ import annotations
@@ -27,17 +28,86 @@ FALSE_CLAIMS = (
     "no vendor server call",
 )
 
+#: The check phrase, in every form a denial uses: noun, plural and verb.
+CHECK_WORD = re.compile(r"check(ed|s|ing)?(?![a-z])", re.IGNORECASE)
+CHECK_TOPIC = re.compile(r"(update|version)s?(?![a-z])", re.IGNORECASE)
+
+#: Negations and DISABLING verbs. "are never performed", "is disabled", "avoids",
+#: "free of" and "switched off" are all denials a positional-before rule missed.
+DENIAL_CUES = re.compile(
+    r"(?<![a-z])(no|never|not|none|without|free of|zero|disabled|disable|avoids?|avoided|"
+    r"omits?|omitted|skips?|suppressed|removed)(?![a-z])",
+    re.IGNORECASE,
+)
+SWITCHED_OFF = re.compile(r"(switched|turned) off(?![a-z])", re.IGNORECASE)
+
+#: Benign shapes that contain a cue word but say the OPPOSITE. Each is here for a
+#: reason, and the test below asserts every one still passes:
+#:  - "two kinds of call and no others ... a version check": "no others" counts the
+#:    KINDS of call; it does not deny the check;
+#:  - "the version check sends nothing about you": that is what the check sends,
+#:    not whether it happens;
+#:  - "can be turned off in settings": the CUSTOMER may switch it off; the product
+#:    still checks unless told not to.
+BENIGN = (
+    "no others",
+    "two kinds of call",
+    "sends nothing about you",
+    "nothing about you is sent",
+    "carries nothing about you",
+    "can be turned off",
+    "turned off in settings",
+    "settings turns it off",
+    "turn the update check off",
+    "if you leave the update check on",
+)
+
+#: How far either side of the check phrase a cue counts. A short window, not the
+#: whole clause: "no others: ... a version check" is far enough away to be a list,
+#: while "checks are never performed" is inside it.
+WINDOW_CHARS = 60
+
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def denies_a_check(sentence: str) -> bool:
+    """True when *sentence* mentions an update/version check and denies one.
+
+    A RULE, not a phrase list. A denial counts when a negation or a disabling verb
+    sits within ``WINDOW_CHARS`` on EITHER side of the check phrase - the earlier
+    version looked only backwards, so "Update checks are never performed" and "The
+    version check is disabled" slipped through. The vocabulary carries the passive
+    and disabling forms ("are never performed", "is disabled", "avoids", "free of",
+    "switched off") and "checked" as a verb.
+
+    Residual risk: any rule over English has gaps. These are the shapes we know
+    about; a reviewer who finds a new one adds it as a test here, and the rule grows
+    rather than being re-listed.
+    """
+    if not CHECK_TOPIC.search(sentence):
+        return False
+    low = sentence.lower()
+    if any(marker in low for marker in BENIGN):
+        return False
+    match = CHECK_WORD.search(low)
+    if match is None:
+        return False
+    window = low[max(0, match.start() - WINDOW_CHARS) : match.end() + WINDOW_CHARS]
+    return bool(DENIAL_CUES.search(window) or SWITCHED_OFF.search(window))
+
+
 #: The order PDF ships with every purchase, and its source is docs/implementation.
 ORDER_PDF = LANDING / "tancat-pro-install-and-licence.pdf"
 IMPLEMENTATION = REPO_ROOT / "docs" / "implementation"
 
 #: Documents that must now say the activation call happens.
 MUST_SAY = {
-    LANDING / "privacy.html": "Lemon Squeezy",
-    LANDING / "install.html": "licensing service",
-    LANDING / "terms.html": "merchant of record named above",
-    DOCS / "reference" / "licensing.md": "one call to a vendor",
-    DOCS / "getting-started" / "install.md": "one call to a vendor",
+    LANDING / "privacy.html": "version check",
+    LANDING / "install.html": "version check a day",
+    LANDING / "terms.html": "version check at most once a day",
+    DOCS / "reference" / "licensing.md": "version check at most once a day",
+    DOCS / "getting-started" / "install.md": "version check at most once a day",
+    IMPLEMENTATION / "tancat-pro-install-and-licence.html": "one version check a day",
 }
 
 
@@ -79,6 +149,47 @@ def _scanned_documents() -> list[tuple[str, str]]:
     return docs
 
 
+def test_no_document_denies_an_update_check() -> None:
+    """Every sentence on every buyer document, through the rule."""
+    offenders: dict[str, list[str]] = {}
+    for name, text in _scanned_documents():
+        bad = [sentence for sentence in SENTENCE_END.split(text) if denies_a_check(sentence)]
+        if bad:
+            offenders[name] = bad[:3]
+    assert offenders == {}, f"document(s) that deny an update check while one exists: {offenders}"
+
+
+def test_the_denial_rule_catches_the_four_that_slipped_and_three_more() -> None:
+    """Proof the rule, not a list. The first four are the review's slipped shapes."""
+    denied = [
+        "Update checks are never performed.",
+        "The version check is disabled.",
+        "TanCat avoids any update check.",
+        "Updates are never checked.",
+        # Three more of the same family, none of them on any list.
+        "The product performs no update checks.",
+        "TanCat never performs an update check.",
+        "Update checking is switched off by the application.",
+    ]
+    for sentence in denied:
+        assert denies_a_check(sentence), sentence
+
+
+def test_the_denial_rule_still_passes_the_three_known_good_shapes() -> None:
+    """Why each passes: the cue word is about something else, or the customer acts."""
+    allowed = [
+        # "no others" counts the kinds of call, not the check.
+        "TanCat makes two kinds of call and no others: the activation request, and a version check at most once a day.",
+        # This is what the check sends, not whether it happens.
+        "The version check sends nothing about you.",
+        # The customer may switch it off; the product still checks unless told not to.
+        "It can be turned off in settings.",
+        "It makes at most one version check a day.",
+    ]
+    for sentence in allowed:
+        assert not denies_a_check(sentence), sentence
+
+
 def test_no_page_claims_no_outbound_traffic() -> None:
     """Pages, the PDF source and the PDFs themselves - a shipped document counts."""
     offenders: dict[str, list[str]] = {}
@@ -93,7 +204,8 @@ def test_the_order_pdf_carries_the_activation_truth() -> None:
     """The PDF is regenerated from its source; the shipped text must say so too."""
     text = _pdf_text(ORDER_PDF)
     assert "once to our licensing service" in text, "the shipped PDF does not say one activation call"
-    assert "no further call" in text, "the shipped PDF does not say the call is once"
+    assert "one version check a day" in text, "the shipped PDF does not state the daily version check"
+    assert "sends nothing about you" in text, "the shipped PDF does not draw the line"
     assert "installable Python packages" in text, "the shipped PDF describes update delivery the old way"
 
 
@@ -102,11 +214,13 @@ def test_each_document_names_the_one_activation_call() -> None:
     assert missing == [], f"document(s) that do not mention the activation call: {missing}"
 
 
-def test_the_privacy_notice_names_the_runtime_recipient() -> None:
-    """Lemon Squeezy receives the key and the instance name at activation."""
+def test_the_privacy_notice_names_both_runtime_recipients() -> None:
+    """Lemon Squeezy gets the key; PyPI gets the version question and nothing else."""
     page = _flat(LANDING / "privacy.html")
     assert "Lemon Squeezy" in page
-    assert re.search(r"activation call to Lemon Squeezy|single activation call", page), page[:200]
+    assert re.search(r"single activation call to Lemon Squeezy", page), page[:200]
+    assert "pypi.org" in page, "the notice does not name what the version check contacts"
+    assert "sends nothing about you" in page, "the notice does not draw the line"
 
 
 def test_the_install_footer_says_paid_once() -> None:
@@ -115,7 +229,8 @@ def test_the_install_footer_says_paid_once() -> None:
     assert "£399 per deployment, one price" not in page.replace("&pound;", "£")
 
 
-def test_the_terms_say_the_call_happens_once() -> None:
+def test_the_terms_say_both_calls_and_that_the_product_works_offline() -> None:
     page = _flat(LANDING / "terms.html")
-    assert "one call to a vendor server" in page
-    assert "After activation it makes no further call." in page
+    assert "two kinds of outbound call and no others" in page
+    assert "version check at most once a day" in page
+    assert "works with no internet connection" in page

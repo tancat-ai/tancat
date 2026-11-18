@@ -248,13 +248,13 @@ label,group,size,color
 ./docs/user/assets/fonts.css,Other,32,#AEB6BF
 ./docs/user/getting-started/configure-llm.md,Documentation,139,#F7DC6F
 ./docs/user/getting-started/first-run.md,Documentation,111,#F7DC6F
-./docs/user/getting-started/install.md,Documentation,130,#F7DC6F
+./docs/user/getting-started/install.md,Documentation,131,#F7DC6F
 ./docs/user/getting-started/what-is-tancat.md,Documentation,67,#F7DC6F
 ./docs/user/guides/evidence.md,Documentation,115,#F7DC6F
 ./docs/user/guides/pipeline.md,Documentation,98,#F7DC6F
 ./docs/user/guides/skips.md,Documentation,90,#F7DC6F
 ./docs/user/index.md,Documentation,34,#F7DC6F
-./docs/user/reference/licensing.md,Documentation,96,#F7DC6F
+./docs/user/reference/licensing.md,Documentation,97,#F7DC6F
 ./docs/walkthrough.md,Documentation,2040,#F7DC6F
 ./fix.sh,Configuration,13,#BB8FCE
 ./fixtures/golden_package/package_manifest.json,Other,10,#AEB6BF
@@ -456,7 +456,7 @@ label,group,size,color
 ./landing/install.html,Other,153,#AEB6BF
 ./landing/privacy.html,Other,103,#AEB6BF
 ./landing/tailwind.css,Other,1,#AEB6BF
-./landing/tancat-pro-install-and-licence.pdf,Other,543,#AEB6BF
+./landing/tancat-pro-install-and-licence.pdf,Other,536,#AEB6BF
 ./landing/terms.html,Other,121,#AEB6BF
 ./launch_cli.sh,Configuration,41,#BB8FCE
 ./launch_dev.sh,Configuration,85,#BB8FCE
@@ -665,7 +665,7 @@ label,group,size,color
 ./notebook_upload.md,Documentation,13862,#F7DC6F
 ./notebooks/debug_pipeline.ipynb,Other,1333,#AEB6BF
 ./overrides/404.html,Other,21,#AEB6BF
-./pyproject.toml,Configuration,213,#BB8FCE
+./pyproject.toml,Configuration,216,#BB8FCE
 ./pytest.ini,Configuration,33,#BB8FCE
 ./scripts/MAINTENANCE.md,Documentation,87,#F7DC6F
 ./scripts/README.md,Documentation,361,#F7DC6F
@@ -875,7 +875,7 @@ label,group,size,color
 ./src/cli/evidence_generator.py,Other,538,#AEB6BF
 ./src/cli/headless.py,Other,554,#AEB6BF
 ./src/cli/input_parser.py,Other,586,#AEB6BF
-./src/cli/main.py,Other,845,#AEB6BF
+./src/cli/main.py,Other,894,#AEB6BF
 ./src/cli/menu_renderer.py,Other,883,#AEB6BF
 ./src/cli/pipeline_runner.py,Other,1463,#AEB6BF
 ./src/cli/report_generator.py,Other,450,#AEB6BF
@@ -1017,8 +1017,9 @@ label,group,size,color
 ./src/user_story_parser.py,intelligence,311,#45B7D1
 ./src/verification_strength.py,Other,228,#AEB6BF
 ./src/verify_baseline.py,Other,276,#AEB6BF
+./src/version_check.py,Other,360,#AEB6BF
 ./src/vision_enricher.py,intelligence,307,#45B7D1
-./streamlit_app.py,interface,988,#FF6B6B
+./streamlit_app.py,interface,997,#FF6B6B
 ./tests/__init__.py,Other,1,#AEB6BF
 ./tests/adversarial/__init__.py,Other,0,#AEB6BF
 ./tests/adversarial/test_overlay_and_error_pages.py,Other,146,#AEB6BF
@@ -1167,7 +1168,7 @@ label,group,size,color
 ./tests/test_license_loop_e2e.py,Other,130,#AEB6BF
 ./tests/test_licensing_activation.py,Other,363,#AEB6BF
 ./tests/test_licensing_cli.py,Other,123,#AEB6BF
-./tests/test_licensing_outbound_wording.py,Other,121,#AEB6BF
+./tests/test_licensing_outbound_wording.py,Other,191,#AEB6BF
 ./tests/test_llm_cache.py,Other,190,#AEB6BF
 ./tests/test_llm_client.py,Other,494,#AEB6BF
 ./tests/test_llm_errors.py,Other,26,#AEB6BF
@@ -1293,7 +1294,7 @@ label,group,size,color
 ./tests/test_t1239_outcomes.py,Other,605,#AEB6BF
 ./tests/test_t1251_dialog_vs_banner.py,Other,307,#AEB6BF
 ./tests/test_terminal_adapter_injection.py,Other,27,#AEB6BF
-./tests/test_terms_and_dpa.py,Other,308,#AEB6BF
+./tests/test_terms_and_dpa.py,Other,326,#AEB6BF
 ./tests/test_test_plan.py,Other,142,#AEB6BF
 ./tests/test_test_structure_assembler.py,Other,144,#AEB6BF
 ./tests/test_test_table.py,Other,495,#AEB6BF
@@ -1307,6 +1308,7 @@ label,group,size,color
 ./tests/test_ui_run_comparison.py,Other,83,#AEB6BF
 ./tests/test_ui_saved_packages.py,Other,58,#AEB6BF
 ./tests/test_ui_sidebar.py,Other,508,#AEB6BF
+./tests/test_update_check.py,Other,347,#AEB6BF
 ./tests/test_url_guard.py,Other,287,#AEB6BF
 ./tests/test_url_inference.py,Other,139,#AEB6BF
 ./tests/test_url_resolver.py,Other,308,#AEB6BF

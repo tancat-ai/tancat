@@ -129,6 +129,15 @@ pom_mode = config.get("pom_mode", False)
 
 default_provider_url, default_model = get_provider_defaults(provider)
 
+# j-0306: the one-line update notice, from the local cache only (never a network
+# call here). It appears once per new version per day and never when unknown or
+# when the check is off.
+from src import version_check  # noqa: E402
+
+_update_notice = version_check.notice()
+if _update_notice:
+    st.sidebar.info(_update_notice)
+
 # B-041: a base URL / model persisted under a DIFFERENT provider (e.g.
 # ollama's http://localhost:11434 left over from an earlier session) must
 # never leak into the newly selected provider's fields. On a provider switch,

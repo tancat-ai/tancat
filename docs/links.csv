@@ -1753,6 +1753,8 @@ source,target,type
 ./src/usage_meter.py,./src/licensing/tiers.py,import
 ./src/usage_meter.py,./src/storage.py,import
 ./src/verification_strength.py,./src/pipeline_models.py,import
+./src/version_check.py,./src/secure_config.py,import
+./src/version_check.py,./src/settings_store.py,import
 ./src/vision_enricher.py,./src/llm_client.py,import
 ./streamlit_app.py,./src/export_service.py,import
 ./streamlit_app.py,./src/gantt_utils.py,import

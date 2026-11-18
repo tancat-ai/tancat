@@ -613,6 +613,7 @@ Usage:
   tancat check-llm [options] Probe the configured LLM endpoint.
   tancat licence status      Show the licence and its update window.
   tancat licence activate K  Activate a Lemon Squeezy key on this machine (one call).
+  tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
 
@@ -789,6 +790,43 @@ def _startup_backstop() -> int | None:
     return 3
 
 
+def _update_command(argv: list[str]) -> int:
+    """``tancat update [--check]`` - the manual check, and the gated upgrade.
+
+    ``--check`` asks the feed on demand (bypassing the daily cache) and prints the
+    answer plainly. Without it, the upgrade runs through the same 12-month window
+    as everything else: past the window it refuses with the message naming the
+    version that keeps working, and inside it prints the exact command rather than
+    shelling out from inside the process.
+    """
+    from src import version_check
+    from src.licensing.activation import upgrade_check
+
+    if "--check" in argv:
+        result = version_check.check(force=True)
+        if result.source == "off":
+            print("The update check is off (setting: update_check). Turn it on to check for a new version.")
+            return 0
+        if not result.latest:
+            print(f"Could not reach the update feed, or it does not list this package. You have {result.current}.")
+            return 0
+        if result.newer:
+            print(f"TanCat {result.latest} is available; you have {result.current}.")
+            print(f"Run: tancat update   (then: {version_check.upgrade_command()})")
+        else:
+            print(f"You have the latest version, {result.current}.")
+        return 0
+
+    decision = upgrade_check(installed_version=version_check.current_version())
+    if not decision.allowed:
+        print(f"ERROR: {decision.message}", file=sys.stderr)
+        return 3
+    print(f"Upgrade TanCat {version_check.current_version()} with:")
+    print(f"  {version_check.upgrade_command()}")
+    print("Then run 'tancat --version' to confirm.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Product CLI entry point.
 
@@ -800,6 +838,8 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] == "licence":
         return _licence_command(args[1:])
+    if args and args[0] == "update":
+        return _update_command(args[1:])
 
     backstop = _startup_backstop()
     if backstop is not None:
@@ -813,6 +853,15 @@ def main(argv: list[str] | None = None) -> int:
         touch_last_seen()
     except OSError:  # a read-only install still runs; the timestamp is a convenience
         pass
+
+    # j-0306: the daily version check runs off the main thread (never a wait), and
+    # the notice prints only from the cache, once per new version per day.
+    from src import version_check
+
+    version_check.refresh_in_background()
+    update_line = version_check.notice()
+    if update_line:
+        print(update_line)
 
     if not args:
         return _run_interactive()

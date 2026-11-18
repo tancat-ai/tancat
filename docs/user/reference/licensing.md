@@ -53,9 +53,10 @@ converts to Apache-2.0 four years after each version's release.
 
 Updates are released as installable Python packages on the
 [releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
-way you upgrade any Python tool. You choose when to install one. TanCat makes **one call to a vendor
-server** - the activation request you trigger by pasting a licence key - and **no automatic
-update check**. After activation it makes no further call.
+way you upgrade any Python tool. You choose when to install one. TanCat makes **two kinds of call and no others**: the activation request you trigger by
+pasting a licence key, and a **version check at most once a day** if you leave it on. The version
+check carries nothing about you, and settings turns it off. No automatic upgrade - you choose when
+to install one. Everything else works offline.
 
 ## Install a licence key
 

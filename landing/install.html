@@ -114,7 +114,7 @@ bash launch_ui.sh</code></pre>
 
   <section class="mt-10">
     <h2 class="text-lg font-bold text-white">Where your data goes</h2>
-    <p class="text-slate-400 text-xs mt-1">Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The runtime makes outbound calls only to <strong class="text-slate-200">your</strong> configured LLM endpoint, <strong class="text-slate-200">your</strong> target site, and <strong class="text-slate-200">once</strong> to our licensing service when you activate a key &mdash; no telemetry and no update check. Cloud OpenAI and OpenRouter are supported if you choose them. After that one activation call the licensing path makes no further outbound traffic. Verified by an audit that runs in CI:
+    <p class="text-slate-400 text-xs mt-1">Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The runtime makes outbound calls only to <strong class="text-slate-200">your</strong> configured LLM endpoint, <strong class="text-slate-200">your</strong> target site, <strong class="text-slate-200">once</strong> to our licensing service when you activate a key, and at most <strong class="text-slate-200">one version check a day</strong> to pypi.org if you leave the update check on (it sends nothing about you, and settings turns it off) &mdash; no telemetry. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI:
       <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">docs/security/egress-audit.md</a>.</p>
   </section>
 
@@ -125,7 +125,7 @@ bash launch_ui.sh</code></pre>
     <p class="text-slate-400 text-xs mt-1">Updates released after that are not included and can be bought separately if you want them.</p>
     <p class="text-slate-400 text-xs mt-1"><strong class="text-slate-200">Nothing renews automatically.</strong> You will not be charged again unless you choose to buy.</p>
     <p class="text-slate-400 text-xs mt-1">Security fixes and bug fixes for the version you hold are provided at no charge.</p>
-    <p class="text-slate-400 text-xs mt-2">Updates are released as installable Python packages on the <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/releases" rel="noopener noreferrer" target="_blank">releases page</a>, and you upgrade the way you upgrade any Python tool. You choose when to install one. The product makes <strong class="text-slate-200">one call to a vendor server</strong> - the activation request you trigger when you paste a licence key - and has <strong class="text-slate-200">no automatic update check</strong>.</p>
+    <p class="text-slate-400 text-xs mt-2">Updates are released as installable Python packages on the <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/releases" rel="noopener noreferrer" target="_blank">releases page</a>, and you upgrade the way you upgrade any Python tool. You choose when to install one. The product makes <strong class="text-slate-200">one call to a vendor server</strong> - the activation request you trigger when you paste a licence key - and has <strong class="text-slate-200">no automatic upgrade</strong> - you choose when to install one.</p>
   </section>
 
   <section class="mt-10">
