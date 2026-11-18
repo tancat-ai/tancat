@@ -20,7 +20,7 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
-| Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence, key issued by us |
+| Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence, key or signed licence file issued by us |
 | Price | Free | £399 per deployment |
 | Support | - | Email support and setup help - direct from the developer |
 | Updates | - | All updates released within 12 months of purchase; later updates optional and paid |
@@ -35,6 +35,17 @@ The two counters are shown live in the UI sidebar.
 the evidence-export counter and storage used.](../assets/streamlit-license-usage.png)
 
 *The License & Usage panel. The counters reset every 30 days.*
+
+## Already hold a store key?
+
+Nothing changes for you. A key bought from the store keeps working exactly as it
+does today: you activate it once, and after that the product makes no further call.
+If we send you a **signed licence file**, save it where `tancat licence status`
+tells you to put it (the settings directory) and it is used in preference to the
+key. A signed licence file is verified **offline** against a public key compiled
+into the build - no call to us and no call to any store, so a store closing cannot
+break a licence you already hold. You can keep your key file as a backup; it is
+simply no longer the first source.
 
 ## Updates
 

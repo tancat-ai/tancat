@@ -612,7 +612,7 @@ Usage:
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
   tancat licence status      Show the licence and its update window.
-  tancat licence activate K  Activate a Lemon Squeezy key on this machine (one call).
+  tancat licence activate K  Activate a store key on this machine (one call, legacy path).
   tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
@@ -736,36 +736,50 @@ def _licence_command(argv: list[str]) -> int:
     """``tancat licence status|activate`` - the only place a key is pasted.
 
     ``status`` reads the local licence file and says what the window is;
-    ``activate`` makes the single call to Lemon Squeezy (j-0304). Neither is
+    ``activate`` makes the single call to the store (j-0304, the legacy path). Neither is
     needed on a Free install.
     """
     import getpass
 
-    from src.licensing import activation
+    from src.licensing import activation, entitlement
 
     action = argv[0] if argv else "status"
-    licence = activation.read_licence()
     if action == "status":
-        if not licence:
+        state = entitlement.resolve()
+        if state.problem:
+            print(f"Licence file: could not be used - {state.problem}")
+        if state.source == "none":
             print("No licence on this machine: running as Free Community.")
-            print("Activate with: tancat licence activate <key from your receipt>")
-            return 0
-        decision = activation.entitlement(licence)
-        print(f"Licence key:  {licence.get('key', '(not stored)')[:12]}...")
-        print(f"Purchased:    {licence.get('key_created_at') or '(not recorded)'}")
-        print(f"Window ends:  {decision.window_end.isoformat() if decision.window_end else '(unknown)'}")
-        print(
-            f"This build:   {activation.RELEASE_DATE.isoformat()} - {'inside' if decision.allowed else 'AFTER'} the window"
-        )
-        if not decision.allowed:
+            print("A signed licence file goes here:", entitlement.default_signed_path())
+            print("Or activate a store key with: tancat licence activate <key from your receipt>")
             print()
-            print(activation.startup_check(licence).message)
+            print(entitlement.MIGRATION_PARAGRAPH)
+            return 0
+        if state.licence is not None:
+            print(f"Source:       signed licence file ({state.path})")
+            print(f"Licence id:   {state.licence.id}")
+            print(f"Buyer:        {state.licence.buyer_ref}")
+            print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
+        else:
+            print(f"Source:       store key ({state.path})")
+        print(f"Tier:         {state.tier}")
+        print(f"Window ends:  {state.window_end.isoformat() if state.window_end else '(unknown)'}")
+        build = activation.RELEASE_DATE
+        print(f"This build:   {build.isoformat()} - {'inside' if state.allows_build(build) else 'AFTER'} the window")
+        if not state.allows_build(build):
+            print()
+            print(entitlement.startup_check().message)
+        if state.source == "legacy":
+            print()
+            print(entitlement.MIGRATION_PARAGRAPH)
         return 0
 
     if action == "activate":
         key = argv[1] if len(argv) > 1 else ""
         if not key:
-            key = getpass.getpass("Paste your Lemon Squeezy licence key: ").strip()
+            from src.licensing.merchant import MERCHANT_OF_RECORD as _mor
+
+            key = getpass.getpass(f"Paste your {_mor} licence key: ").strip()
         result = activation.activate(key, instance_name=str(Path.cwd()))
         print(result.message)
         return 0 if result.ok else 2
@@ -781,7 +795,7 @@ def _startup_backstop() -> int | None:
     message names the window end, the version that keeps working and how to
     renew. A Free install (no licence) is never refused.
     """
-    from src.licensing.activation import startup_check
+    from src.licensing.entitlement import startup_check
 
     decision = startup_check()
     if decision.allowed:
@@ -800,7 +814,7 @@ def _update_command(argv: list[str]) -> int:
     shelling out from inside the process.
     """
     from src import version_check
-    from src.licensing.activation import upgrade_check
+    from src.licensing.entitlement import upgrade_check
 
     if "--check" in argv:
         result = version_check.check(force=True)

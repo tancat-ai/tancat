@@ -1,15 +1,15 @@
-"""Lemon Squeezy activation, the licence file, and the 12-month update window.
+"""Store-key activation (the legacy path), the licence file, and the 12-month window.
 
 The owner approved this design on 2026-11-13 (option A). One product, one key:
 
-- The Lemon Squeezy key IS the licence. The store keeps no expiry on it - the
+- The store key IS the licence on this path. The store keeps no expiry on it - the
   licence is perpetual for the version received - so ``expires_at`` is null and
   is never used to drive anything.
 - On first run the product activates the key **once** against
   ``POST /v1/licenses/activate`` (form-encoded), and saves the result. After that
   it makes no further call, ever. There is no periodic check, no phone-home.
 - The response must belong to THIS store and product: the ids below are
-  hard-coded and a key from anywhere else is refused. Lemon Squeezy's own guide
+  hard-coded and a key from anywhere else is refused. The store's own guide
   says that without this check a key from another product unlocks ours.
 - The update window is **purchase date + 12 months**, where the purchase date is
   the key's ``created_at`` from the activation response. The package carries its
@@ -37,9 +37,11 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from src.licensing.merchant import MERCHANT_OF_RECORD
+
 ACTIVATE_URL = "https://api.lemonsqueezy.com/v1/licenses/activate"
 
-#: The Lemon Squeezy ids this build accepts keys for. Empty means "not set in
+#: The store ids this build accepts keys for. Empty means "not set in
 #: this build", and activation then refuses rather than accepting anything: a
 #: fail-closed default, so a build shipped before the ids are filled cannot be
 #: unlocked by a key from someone else's store.
@@ -133,7 +135,7 @@ def write_licence(data: dict[str, Any], path: Path | None = None) -> Path:
 
 
 def _parse_date(value: Any) -> date | None:
-    """Parse an ISO timestamp or date from Lemon Squeezy, or ``None``."""
+    """Parse an ISO timestamp or date from the store's response, or ``None``."""
     text = str(value or "").strip()
     if not text:
         return None
@@ -237,7 +239,7 @@ def _refusal(status: int, body: dict[str, Any], error_text: str) -> str:
     status_text = str(key.get("status") or "").lower()
     if status == 404 or body.get("activated") is False and not key:
         return (
-            "That key was not recognised. Check it against the receipt email from Lemon Squeezy - "
+            f"That key was not recognised. Check it against the receipt email from {MERCHANT_OF_RECORD} - "
             "the key is long and easy to mistype. If it still fails, email hello@tancat.dev with the "
             "order number."
         )
@@ -257,16 +259,16 @@ def _refusal(status: int, body: dict[str, Any], error_text: str) -> str:
     if limit and usage >= limit:
         return (
             "This key has already been activated the maximum number of times. Deactivate the old "
-            "deployment in your Lemon Squeezy account, or email hello@tancat.dev and we will reset it."
+            f"deployment in your {MERCHANT_OF_RECORD} account, or email hello@tancat.dev and we will reset it."
         )
     if status == 0 or status >= 500:
         detail = f" ({error_text})" if error_text else ""
         return (
-            "Activation needs one connection to Lemon Squeezy. Your machine could not reach it just "
+            f"Activation needs one connection to {MERCHANT_OF_RECORD}. Your machine could not reach it just "
             f"now{detail}. Your existing licence (if any) still works offline; try again in a minute."
         )
     return (
-        "Lemon Squeezy did not activate that key. Check it against the receipt email, or email "
+        f"{MERCHANT_OF_RECORD} did not activate that key. Check it against the receipt email, or email "
         "hello@tancat.dev with the order number."
     )
 
@@ -355,7 +357,7 @@ def activate(
     if created is None:
         return Activation(
             False,
-            "Lemon Squeezy activated the key but did not return its purchase date, and the update "
+            f"{MERCHANT_OF_RECORD} activated the key but did not return its purchase date, and the update "
             "window is measured from that date. Email hello@tancat.dev with the order number.",
         )
 

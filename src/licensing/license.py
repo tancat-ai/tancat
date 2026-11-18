@@ -357,8 +357,37 @@ def save_license_key(token: str) -> LicenseResult:
     return result
 
 
+def _signed_licence_status() -> LicenseResult | None:
+    """The signed licence file, when one is present and verifies (j-0309).
+
+    A signed file is a licence we issued, so it is the first source: its tier is
+    the effective tier and it needs no token. Imported lazily because the
+    activation/entitlement modules import this one for the trust root.
+    """
+    try:
+        from src.licensing.entitlement import resolve
+    except Exception:  # pragma: no cover - defensive: a broken path must not hide a token
+        return None
+
+    state = resolve()
+    if state.source != "signed" or state.licence is None:
+        return None
+    return LicenseResult(
+        status=LicenseStatus.VALID,
+        tier=state.tier,
+        claims=frozenset(tier_claims(state.tier)),
+        deployment_id=state.licence.id,
+        expires_at="",
+        reason="Signed licence file verified offline.",
+        data=state.licence.to_payload(),
+    )
+
+
 def license_status(now: int | None = None) -> LicenseResult:
-    """The effective license state of this deployment (env/file → verify)."""
+    """The effective license state: a signed file first, then the token."""
+    signed = _signed_licence_status()
+    if signed is not None:
+        return signed
     return verify_license(load_license(), now=now)
 
 
