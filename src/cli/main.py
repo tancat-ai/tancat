@@ -750,7 +750,7 @@ def _licence_command(argv: list[str]) -> int:
             print(f"Licence file: could not be used - {state.problem}")
         if state.source == "none":
             print("No licence on this machine: running as Free Community.")
-            print("A signed licence file goes here:", entitlement.default_signed_path())
+            print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
             print("Or activate a store key with: tancat licence activate <key from your receipt>")
             print()
             print(entitlement.MIGRATION_PARAGRAPH)
@@ -762,6 +762,9 @@ def _licence_command(argv: list[str]) -> int:
             print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
         else:
             print(f"Source:       store key ({state.path})")
+            # A key holder is the person the migration paragraph is written for, so
+            # the path it mentions has to be on screen for them too (t-1461).
+            print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
         print(f"Tier:         {state.tier}")
         print(f"Window ends:  {state.window_end.isoformat() if state.window_end else '(unknown)'}")
         build = activation.RELEASE_DATE

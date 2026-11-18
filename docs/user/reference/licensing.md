@@ -40,8 +40,8 @@ the evidence-export counter and storage used.](../assets/streamlit-license-usage
 
 Nothing changes for you. A key bought from the store keeps working exactly as it
 does today: you activate it once, and after that the product makes no further call.
-If we send you a **signed licence file**, save it where `tancat licence status`
-tells you to put it (the settings directory) and it is used in preference to the
+If we send you a **signed licence file**, save it at the path `tancat licence status`
+shows on its 'Signed licence file' line, and it is used in preference to the
 key. A signed licence file is verified **offline** against a public key compiled
 into the build - no call to us and no call to any store, so a store closing cannot
 break a licence you already hold. You can keep your key file as a backup; it is

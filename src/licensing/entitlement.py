@@ -46,10 +46,10 @@ __all__ = [
 #: ``tancat licence status`` and reproduced in the user docs.
 MIGRATION_PARAGRAPH = (
     f"If you already hold a {MERCHANT_OF_RECORD} key, nothing changes: your key keeps working exactly "
-    "as it does today, and activation still happens once. When you receive a signed licence file from "
-    "us, save it where the product looks for it (the path `tancat licence status` prints) and it is "
-    "used in preference to the key - verified offline, with no call to anyone. You can keep the key "
-    "file as a backup; it is simply no longer the first source."
+    "as it does today, and activation still happens once. When we send you a signed licence file, save "
+    "it at the path `tancat licence status` shows on its 'Signed licence file' line, and it is used in "
+    "preference to the key - verified offline, with no call to anyone. You can keep the key file as a "
+    "backup; it is simply no longer the first source."
 )
 
 #: Where a signed licence file is looked for, after ``AITEST_LICENCE_FILE``.

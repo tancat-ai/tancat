@@ -121,3 +121,84 @@ def test_a_start_records_last_seen(licence_file: Path, monkeypatch: pytest.Monke
     assert cli_main.main(["--help"]) == 0
     second = json.loads(licence_file.read_text(encoding="utf-8"))["last_seen_at"]
     assert second >= first
+
+
+# ---------------------------------------------------------------------------
+# j-0309 / t-1461: a key holder must be shown where the signed file goes
+# ---------------------------------------------------------------------------
+
+
+def test_status_shows_a_key_holder_the_signed_file_path(
+    licence_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The migration paragraph names a path; a key holder has to see it."""
+    from src.licensing import entitlement
+
+    A.write_licence({"key": ZERO_KEY, "key_created_at": "2026-01-01", "tier": "pro"}, licence_file)
+    accepted = tmp_path / "licence.signed.json"
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(accepted))
+    monkeypatch.setattr(entitlement, "default_signed_path", lambda: accepted)
+
+    code = cli_main.main(["licence", "status"])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Source:       store key" in out
+    assert "Signed licence file:" in out, "a key holder is not shown where a signed file goes"
+    assert str(accepted) in out
+    assert "(not present)" in out, "the line must say the signed file is not there yet"
+    assert entitlement.MIGRATION_PARAGRAPH.split(".")[0] in out or "nothing changes" in out
+
+
+def test_status_with_a_signed_file_names_that_source_and_not_the_key(
+    licence_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The two sources must not be confused in the one place a buyer looks."""
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    from src.licensing import signed_file
+
+    private = ed25519.Ed25519PrivateKey.generate()
+    raw = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    )
+    public = base64.b64encode(
+        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    ).decode()
+    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+
+    accepted = tmp_path / "licence.signed.json"
+    accepted.write_text(
+        signed_file.signed_file_text(
+            {
+                "id": "TC-2026-000321",
+                "product": "tancat",
+                "buyer_ref": "order 321 / buyer@example.com",
+                "purchased_at": "2026-11-01",
+                "window_end": "2027-11-01",
+                "tier": "pro",
+            },
+            raw,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(accepted))
+    A.write_licence({"key": ZERO_KEY, "key_created_at": "2020-01-01", "tier": "pro"}, licence_file)
+
+    code = cli_main.main(["licence", "status"])
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Source:       signed licence file" in out
+    assert "TC-2026-000321" in out
+    assert "store key" not in out, "a signed file is in force, so the key must not be presented as the source"
+    assert "(not present)" not in out
