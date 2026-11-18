@@ -125,7 +125,7 @@ label,group,size,color
 ./docs/reviews/STATE_OF_NATION_2026-05-17.md,Documentation,296,#F7DC6F
 ./docs/reviews/skip review.md,Documentation,34,#F7DC6F
 ./docs/security/egress-audit.md,Documentation,111,#F7DC6F
-./docs/security/license-key-ops.md,Documentation,79,#F7DC6F
+./docs/security/license-key-ops.md,Documentation,103,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session1_observed_trail.md,Documentation,99,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session2_plumbing.md,Documentation,90,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session3_core_fix.md,Documentation,107,#F7DC6F
@@ -254,7 +254,7 @@ label,group,size,color
 ./docs/user/guides/pipeline.md,Documentation,98,#F7DC6F
 ./docs/user/guides/skips.md,Documentation,90,#F7DC6F
 ./docs/user/index.md,Documentation,34,#F7DC6F
-./docs/user/reference/licensing.md,Documentation,97,#F7DC6F
+./docs/user/reference/licensing.md,Documentation,108,#F7DC6F
 ./docs/walkthrough.md,Documentation,2040,#F7DC6F
 ./fix.sh,Configuration,13,#BB8FCE
 ./fixtures/golden_package/package_manifest.json,Other,10,#AEB6BF
@@ -816,6 +816,7 @@ label,group,size,color
 ./scripts/license_gen.py,Other,162,#AEB6BF
 ./scripts/maintenance/check_landing_placeholders.py,Other,92,#AEB6BF
 ./scripts/maintenance/cli_e2e_validation.py,Other,199,#AEB6BF
+./scripts/maintenance/issue_licence.py,Other,155,#AEB6BF
 ./scripts/maintenance/kanban.py,Other,982,#AEB6BF
 ./scripts/maintenance/landing_assets_guard.py,Other,186,#AEB6BF
 ./scripts/maintenance/licence_record.py,Other,541,#AEB6BF
@@ -875,7 +876,7 @@ label,group,size,color
 ./src/cli/evidence_generator.py,Other,538,#AEB6BF
 ./src/cli/headless.py,Other,554,#AEB6BF
 ./src/cli/input_parser.py,Other,586,#AEB6BF
-./src/cli/main.py,Other,894,#AEB6BF
+./src/cli/main.py,Other,908,#AEB6BF
 ./src/cli/menu_renderer.py,Other,883,#AEB6BF
 ./src/cli/pipeline_runner.py,Other,1463,#AEB6BF
 ./src/cli/report_generator.py,Other,450,#AEB6BF
@@ -927,9 +928,12 @@ label,group,size,color
 ./src/learning_impact.py,Other,581,#AEB6BF
 ./src/learning_metrics.py,Other,396,#AEB6BF
 ./src/licensing/__init__.py,Other,60,#AEB6BF
-./src/licensing/activation.py,Other,416,#AEB6BF
-./src/licensing/license.py,Other,383,#AEB6BF
+./src/licensing/activation.py,Other,418,#AEB6BF
+./src/licensing/entitlement.py,Other,167,#AEB6BF
+./src/licensing/license.py,Other,412,#AEB6BF
+./src/licensing/merchant.py,Other,20,#AEB6BF
 ./src/licensing/pricing.py,Other,45,#AEB6BF
+./src/licensing/signed_file.py,Other,237,#AEB6BF
 ./src/licensing/tiers.py,Other,194,#AEB6BF
 ./src/link_scoping.py,Other,221,#AEB6BF
 ./src/llm_cache.py,Other,265,#AEB6BF
@@ -1168,7 +1172,7 @@ label,group,size,color
 ./tests/test_license_loop_e2e.py,Other,130,#AEB6BF
 ./tests/test_licensing_activation.py,Other,363,#AEB6BF
 ./tests/test_licensing_cli.py,Other,123,#AEB6BF
-./tests/test_licensing_outbound_wording.py,Other,191,#AEB6BF
+./tests/test_licensing_outbound_wording.py,Other,236,#AEB6BF
 ./tests/test_llm_cache.py,Other,190,#AEB6BF
 ./tests/test_llm_client.py,Other,494,#AEB6BF
 ./tests/test_llm_errors.py,Other,26,#AEB6BF
@@ -1257,6 +1261,7 @@ label,group,size,color
 ./tests/test_semantic_candidate_ranker.py,Other,307,#AEB6BF
 ./tests/test_settings_store.py,Other,242,#AEB6BF
 ./tests/test_shipped_claims.py,Other,485,#AEB6BF
+./tests/test_signed_licence_file.py,Other,474,#AEB6BF
 ./tests/test_skeleton_parser.py,Other,238,#AEB6BF
 ./tests/test_skeleton_prompt_template.py,Other,157,#AEB6BF
 ./tests/test_skeleton_validator.py,Other,133,#AEB6BF

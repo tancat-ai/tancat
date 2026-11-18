@@ -57,7 +57,31 @@ There is no CRL/OCSP possibility in an air-gapped design. Revocation is achieved
 - **B-051** — free-tier metering is local and resettable; document honestly.
 - Spec: `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4 (license design contract).
 
-## 8. Key ceremony record - the signing pair in service
+## 8a. Key ceremony 2026-11-18 - the signed-licence pair (current)
+
+The trust root now signs **licence files** (``src/licensing/signed_file.py``), not only the older token
+format. The 2026-09-28 pair recorded below still verifies the token path's history but is **retired as
+the shipped root**; the constant now holds the pair minted on 2026-11-18.
+
+- **Generated:** 2026-11-18 by the owner, outside the repository.
+- **Private half:** `C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key` (PKCS8 PEM) on this
+  machine, with the owner's note beside it in the same directory. **The product and the repository carry
+  only the public half**; the issuing script (`scripts/maintenance/issue_licence.py`) refuses to read a
+  key from inside the repo and refuses to write a buyer's file there.
+- **Public half (the vendored trust root, `VENDORED_PUBLIC_KEY_B64`):**
+
+  ```
+  8E9jcDty0vLC8W6jzovJE9m/aHTFcLYtOEno/00b/S4=
+  ```
+
+- **Fingerprint:** `1cae241af435d02f` - the first 16 hex characters of the SHA-256 of the raw 32-byte
+  public key.
+- **Acceptance test passed (2026-11-18):** a `pro` licence file with the 12-month window
+  (2026-11-18 -> 2027-11-18) was signed with the private half and verified against the vendored
+  constant - `valid`; a file signed with a throwaway key was `invalid`. The test suite re-runs the
+  acceptance check on this machine and skips it elsewhere.
+
+## 8. Key ceremony record 2026-09-28 - the token pair (retired as the shipped root)
 
 Recorded 2026-09-29.
 

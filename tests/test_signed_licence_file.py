@@ -397,3 +397,76 @@ def test_the_issuing_script_writes_a_file_that_verifies(
     assert result.licence is not None
     assert result.licence.window_end == date(2027, 11, 16)
     assert issue_licence.public_key_b64(private) == public
+
+
+# ---------------------------------------------------------------------------
+# The trust root is a real key, not a placeholder
+# ---------------------------------------------------------------------------
+
+#: Keys that must never ship as the trust root: a zero key, a repeated byte, and
+#: the 2026-09-28 pair that the 2026-11-18 ceremony superseded.
+RETIRED_OR_PLACEHOLDER_KEYS = {
+    "2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8=",  # ceremony 2026-09-28, retired
+}
+
+
+def test_the_vendored_trust_root_is_a_real_key() -> None:
+    """A placeholder (all zeros, a repeated byte, a retired key) must fail here."""
+    from src.licensing.license import VENDORED_PUBLIC_KEY_B64, vendor_public_key
+
+    raw = base64.b64decode(VENDORED_PUBLIC_KEY_B64)
+    assert len(raw) == 32, f"the trust root must be 32 raw bytes, not {len(raw)}"
+    assert raw != b"\x00" * 32, "the trust root is all zeros - a placeholder"
+    assert len(set(raw)) > 1, "the trust root is a single repeated byte - a placeholder"
+    assert VENDORED_PUBLIC_KEY_B64 not in RETIRED_OR_PLACEHOLDER_KEYS, "a retired key is shipping as the trust root"
+    assert vendor_public_key() == VENDORED_PUBLIC_KEY_B64
+
+
+def test_a_file_signed_with_the_owner_key_verifies_against_the_vendored_root() -> None:
+    """The acceptance test, if the owner's key is present on this machine.
+
+    Read-only: the key is loaded in memory and never written anywhere. Skipped on a
+    machine that does not hold it - which is the normal case for a contributor.
+    """
+    key_path = Path("C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key")
+    if not key_path.exists():
+        pytest.skip("the owner's signing key is not on this machine")
+
+    from cryptography.hazmat.primitives import serialization
+
+    private = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+    assert isinstance(private, ed25519.Ed25519PrivateKey)
+    raw = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    )
+
+    result = verify_signed_file(signed_file_text(_payload(), raw))  # no public_key: the vendored root
+    assert result.valid, result.reason
+    assert result.licence is not None and result.licence.tier == "pro"
+
+
+def test_the_issuing_script_accepts_the_pem_key_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The owner's key is a PKCS8 PEM, so the script must read that form too."""
+    from cryptography.hazmat.primitives import serialization
+
+    private, public = _keypair()
+    key = ed25519.Ed25519PrivateKey.from_private_bytes(private)
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    key_file = tmp_path / "signing.pem"
+    key_file.write_bytes(pem)
+    out = tmp_path / "TC-PEM.json"
+
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts" / "maintenance"))
+    try:
+        import issue_licence
+    finally:
+        sys.path.remove(str(ROOT / "scripts" / "maintenance"))
+
+    monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(key_file))
+    monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
+    assert issue_licence.main(["--id", "TC-2026-000777", "--buyer", "x", "--out", str(out)]) == 0
+
+    result = verify_signed_file(out.read_text(encoding="utf-8"), public)
+    assert result.valid, result.reason

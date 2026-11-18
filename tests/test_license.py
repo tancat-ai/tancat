@@ -241,12 +241,12 @@ def test_headline_smoke() -> None:
         assert h and len(h) > 5
 
 
-# -- trust-root rotation (key ceremony 2026-09-28) ----------------------------
+# -- trust-root rotation (key ceremonies 2026-09-28 and 2026-11-18) -----------
 
 # The public half of the pair minted for the product. The private half is held
 # off-machine by the owner and never enters the repo. Pinned so a stray revert
 # cannot restore a key whose signing half nobody holds.
-ROTATED_PUBLIC_KEY_B64 = "2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8="
+ROTATED_PUBLIC_KEY_B64 = "8E9jcDty0vLC8W6jzovJE9m/aHTFcLYtOEno/00b/S4="
 
 
 def test_vendored_trust_root_is_the_rotated_public_key() -> None:

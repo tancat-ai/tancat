@@ -12,9 +12,9 @@ Usage::
         --id TC-2026-000123 --buyer "order 4821 / buyer@example.com" \
         --purchased 2026-11-17 --out ~/licences/TC-2026-000123.json
 
-The key is 32 raw ed25519 bytes, base64-encoded, in the environment
-(``TANCAT_LICENCE_SIGNING_KEY``) or in a file named by
-``TANCAT_LICENCE_SIGNING_KEY_FILE``. The window ends ``--months`` after the
+The key is either 32 raw ed25519 bytes, base64-encoded (in the environment
+``TANCAT_LICENCE_SIGNING_KEY``, or in a file), or a PKCS8 PEM file named by
+``TANCAT_LICENCE_SIGNING_KEY_FILE`` - the form ``openssl genpkey`` writes. The window ends ``--months`` after the
 purchase date (12 by default) and is written into the signed payload, so the
 product never derives it from a store's record.
 
@@ -73,7 +73,23 @@ def load_signing_key() -> bytes:
             "No signing key: set TANCAT_LICENCE_SIGNING_KEY (base64) or TANCAT_LICENCE_SIGNING_KEY_FILE."
         )
 
-    raw = base64.b64decode(encoded)
+    # Two accepted forms: the raw 32-byte key base64-encoded (compact, easy in an
+    # environment variable), or a PKCS8 PEM file, which is what `openssl genpkey`
+    # writes and what the owner holds.
+    if "BEGIN PRIVATE KEY" in encoded:
+        from cryptography.hazmat.primitives import serialization
+
+        key = serialization.load_pem_private_key(encoded.encode("utf-8"), password=None)
+        if not isinstance(key, ed25519.Ed25519PrivateKey):
+            raise SigningKeyLocationError("That PEM file is not an ed25519 private key.")
+        return key.private_bytes(
+            serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+        )
+
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        raise SigningKeyLocationError(f"The signing key is not base64: {exc}") from exc
     if len(raw) != 32:
         raise SigningKeyLocationError(f"The signing key must be 32 raw ed25519 bytes, not {len(raw)}.")
     return raw
