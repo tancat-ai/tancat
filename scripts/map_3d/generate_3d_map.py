@@ -11,7 +11,9 @@ import ast
 import csv
 import json
 import os
+import sys
 from collections import Counter
+from pathlib import Path
 
 ###############################################################################
 # 1. LAYER MAP — all .py files → group
@@ -136,112 +138,15 @@ LAYER_MAP = {
 }
 
 ###############################################################################
-# 2. ALL PROJECT FILES — scan for real files
+# 2. ALL PROJECT FILES — only what git tracks
 ###############################################################################
-ALL_FILES = set()
-SKIP_DIRS = {
-    ".venv",
-    "__pycache__",
-    "node_modules",
-    ".git",
-    "screenshots",
-    "htmlcov",
-    "pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-    "playwright",
-    "test-results",
-    "playwright-report",
-    "blob-report",
-    "scratch",
-    ".uv-cache",
-    ".pytest_cache",
-    ".tmp",
-    ".streamlit",
-    ".cache",
-    "cline-mcp-memory-bank",
-    "memory-bank",
-    "evidence",
-    # Generated graph artifacts — thousands of hashed AST-cache nodes that
-    # drown the real architecture in the 3D map (2026-08-13).
-    "graphify-out",
-}
-for root, dirs, files in os.walk("."):
-    dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
-    for f in files:
-        full = os.path.join(root, f)
-        rel = full.replace("\\", "/")
-        if f.startswith("."):
-            continue
-        skip_ext = (
-            ".pyc",
-            ".pyo",
-            ".so",
-            ".dll",
-            ".exe",
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".gif",
-            ".svg",
-            ".woff",
-            ".ttf",
-            ".woff2",
-            ".map",
-            ".lock",
-            ".tag",
-            ".met",
-            ".wheel",
-        )
-        if f.endswith(skip_ext):
-            continue
-        ALL_FILES.add(rel)
+# The selection rule lives in index_selection.py so the test that checks these files
+# asks the same question the generator answered (t-1446). See that module for why the
+# walk was replaced by git ls-files.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from index_selection import select_indexed_files  # noqa: E402
 
-ROOT_CONFIG_FILES = [
-    ".clinerules",
-    ".clineignore",
-    ".dockerignore",
-    ".gitignore",
-    ".env.example",
-    ".python-version",
-    "pyproject.toml",
-    "pytest.ini",
-    "requirements.txt",
-    "Dockerfile",
-    "docker-compose.yml",
-    "LICENSE",
-    "fix.sh",
-    "launch_ui.sh",
-    "launch_dev.sh",
-]
-for f in ROOT_CONFIG_FILES:
-    if os.path.exists(f):
-        ALL_FILES.add("./" + f)
-
-for subdir in ["cli", "src", "tests", "docs", "docs/plans", "scripts"]:
-    if os.path.isdir(subdir):
-        for f in os.listdir(subdir):
-            full = "./" + subdir + "/" + f
-            if f.endswith(".py") or f.endswith(".md"):
-                ALL_FILES.add(full)
-        for root2, _dirs2, files2 in os.walk(subdir):
-            for f in files2:
-                if f.endswith(".py") or f.endswith(".md"):
-                    full = "./" + os.path.join(root2, f).replace("\\", "/")
-                    ALL_FILES.add(full)
-
-# Filters
-ALL_FILES = {f for f in ALL_FILES if not f.endswith((".xml", ".lock"))}
-ALL_FILES = {f for f in ALL_FILES if "mock_insurance_site" not in f and "cart.html" not in f}
-ALL_FILES = {f for f in ALL_FILES if "cline-mcp-memory-bank" not in f}
-ALL_FILES = {f for f in ALL_FILES if not f.endswith((".txt", ".log", ".err")) or f in (".env.example",)}
-ALL_FILES = {
-    f
-    for f in ALL_FILES
-    if f not in ("3d_map_data.json", "nodes.csv", "links.csv")
-    and f not in ("./3d_map_data.json", "./nodes.csv", "./links.csv")
-    and f not in ("docs/3d_map_data.json", "docs/nodes.csv", "docs/links.csv")
-}
+ALL_FILES = set(select_indexed_files(Path.cwd()))
 
 ###############################################################################
 # 3. SMART DOC LINKS
