@@ -28,40 +28,72 @@ FALSE_CLAIMS = (
     "no vendor server call",
 )
 
-#: A sentence that mentions an update/version check and negates it. The rule is
-#: positional: a negation cue BEFORE the word "check" denies the check; a cue
-#: after it ("the version check sends nothing about you") does not.
-CHECK_WORD = re.compile(r"check(s|ing)?(?![a-z])", re.IGNORECASE)
+#: The check phrase, in every form a denial uses: noun, plural and verb.
+CHECK_WORD = re.compile(r"check(ed|s|ing)?(?![a-z])", re.IGNORECASE)
 CHECK_TOPIC = re.compile(r"(update|version)s?(?![a-z])", re.IGNORECASE)
-NEGATION = re.compile(r"(^|[^a-z])(no|never|not|none|without|free of|zero)([^a-z]|$)", re.IGNORECASE)
+
+#: Negations and DISABLING verbs. "are never performed", "is disabled", "avoids",
+#: "free of" and "switched off" are all denials a positional-before rule missed.
+DENIAL_CUES = re.compile(
+    r"(?<![a-z])(no|never|not|none|without|free of|zero|disabled|disable|avoids?|avoided|"
+    r"omits?|omitted|skips?|suppressed|removed)(?![a-z])",
+    re.IGNORECASE,
+)
+SWITCHED_OFF = re.compile(r"(switched|turned) off(?![a-z])", re.IGNORECASE)
+
+#: Benign shapes that contain a cue word but say the OPPOSITE. Each is here for a
+#: reason, and the test below asserts every one still passes:
+#:  - "two kinds of call and no others ... a version check": "no others" counts the
+#:    KINDS of call; it does not deny the check;
+#:  - "the version check sends nothing about you": that is what the check sends,
+#:    not whether it happens;
+#:  - "can be turned off in settings": the CUSTOMER may switch it off; the product
+#:    still checks unless told not to.
+BENIGN = (
+    "no others",
+    "two kinds of call",
+    "sends nothing about you",
+    "nothing about you is sent",
+    "carries nothing about you",
+    "can be turned off",
+    "turned off in settings",
+    "settings turns it off",
+    "turn the update check off",
+    "if you leave the update check on",
+)
+
+#: How far either side of the check phrase a cue counts. A short window, not the
+#: whole clause: "no others: ... a version check" is far enough away to be a list,
+#: while "checks are never performed" is inside it.
+WINDOW_CHARS = 60
+
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 def denies_a_check(sentence: str) -> bool:
     """True when *sentence* mentions an update/version check and denies one.
 
-    Deliberately a rule, not a phrase list: the review found a phrasing the list
-    did not hold ("no runtime update check as part of its normal operation"), and
-    any list will keep missing the next one.
+    A RULE, not a phrase list. A denial counts when a negation or a disabling verb
+    sits within ``WINDOW_CHARS`` on EITHER side of the check phrase - the earlier
+    version looked only backwards, so "Update checks are never performed" and "The
+    version check is disabled" slipped through. The vocabulary carries the passive
+    and disabling forms ("are never performed", "is disabled", "avoids", "free of",
+    "switched off") and "checked" as a verb.
+
+    Residual risk: any rule over English has gaps. These are the shapes we know
+    about; a reviewer who finds a new one adds it as a test here, and the rule grows
+    rather than being re-listed.
     """
     if not CHECK_TOPIC.search(sentence):
         return False
-    match = CHECK_WORD.search(sentence)
+    low = sentence.lower()
+    if any(marker in low for marker in BENIGN):
+        return False
+    match = CHECK_WORD.search(low)
     if match is None:
         return False
-    # Only the clause the word "check" sits in counts: "two kinds of call and no
-    # others: ... a version check" is a list of calls, not a denial of one.
-    window = sentence[: match.start()]
-    clause = max(
-        window.rfind(":"),
-        window.rfind(";"),
-        window.rfind(" - "),
-        window.rfind(" — "),
-        window.rfind(" – "),
-    )
-    if clause != -1:
-        window = window[clause + 1 :]
-    return bool(NEGATION.search(window))
+    window = low[max(0, match.start() - WINDOW_CHARS) : match.end() + WINDOW_CHARS]
+    return bool(DENIAL_CUES.search(window) or SWITCHED_OFF.search(window))
 
 
 #: The order PDF ships with every purchase, and its source is docs/implementation.
@@ -127,20 +159,33 @@ def test_no_document_denies_an_update_check() -> None:
     assert offenders == {}, f"document(s) that deny an update check while one exists: {offenders}"
 
 
-def test_the_denial_rule_catches_three_phrasings_one_of_them_unlisted() -> None:
-    """Proof the rule, not a list: the third framing was never written down."""
+def test_the_denial_rule_catches_the_four_that_slipped_and_three_more() -> None:
+    """Proof the rule, not a list. The first four are the review's slipped shapes."""
     denied = [
-        "The product makes no runtime update check as part of its normal operation.",
-        "TanCat does not check for updates at runtime.",  # never on any list
-        "It works without any version check.",
-    ]
-    allowed = [
-        "It makes at most one version check a day.",
-        "The version check sends nothing about you.",
-        "Turn the update check off in settings.",
+        "Update checks are never performed.",
+        "The version check is disabled.",
+        "TanCat avoids any update check.",
+        "Updates are never checked.",
+        # Three more of the same family, none of them on any list.
+        "The product performs no update checks.",
+        "TanCat never performs an update check.",
+        "Update checking is switched off by the application.",
     ]
     for sentence in denied:
         assert denies_a_check(sentence), sentence
+
+
+def test_the_denial_rule_still_passes_the_three_known_good_shapes() -> None:
+    """Why each passes: the cue word is about something else, or the customer acts."""
+    allowed = [
+        # "no others" counts the kinds of call, not the check.
+        "TanCat makes two kinds of call and no others: the activation request, and a version check at most once a day.",
+        # This is what the check sends, not whether it happens.
+        "The version check sends nothing about you.",
+        # The customer may switch it off; the product still checks unless told not to.
+        "It can be turned off in settings.",
+        "It makes at most one version check a day.",
+    ]
     for sentence in allowed:
         assert not denies_a_check(sentence), sentence
 
