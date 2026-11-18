@@ -59,7 +59,9 @@ FEED_URL = "https://pypi.org/pypi/tancat/json"
 #: refused: while the name is unregistered, anyone could publish under it and our
 #: notice would point customers at their package.
 FEED_PROJECT_NAME = "tancat"
-IDENTITY_MARKERS: tuple[str, ...] = ("tancat.dev", "github.com/tancat-ai/tancat")
+SITE_HOST = "tancat.dev"
+GITHUB_HOST = "github.com"
+REPO_PATH = "/tancat-ai/tancat"
 
 #: The call must never hold anything up.
 TIMEOUT_S = 2.0
@@ -150,29 +152,52 @@ def write_cache(data: dict[str, Any], path: Path | None = None) -> None:
         pass
 
 
-def _identity_strings(info: dict[str, Any]) -> list[str]:
-    """Every field the feed publishes that can point at the project's home."""
-    values: list[str] = []
-    for key in ("name", "home_page", "author", "author_email", "maintainer", "maintainer_email"):
-        value = info.get(key)
-        if isinstance(value, str):
-            values.append(value)
-    urls = info.get("project_urls")
-    if isinstance(urls, dict):
-        for key, value in urls.items():
-            if isinstance(key, str):
-                values.append(key)
-            if isinstance(value, str):
-                values.append(value)
-    return values
+def _published_urls(info: dict[str, Any]) -> list[str]:
+    """The project's OWN urls: ``home_page`` and ``project_urls`` VALUES.
+
+    Values only, and parsed as URLs - a key name is not a URL, and a path or a
+    query string that merely contains our domain proves nothing.
+    """
+    urls: list[str] = []
+    home = info.get("home_page")
+    if isinstance(home, str) and home.strip():
+        urls.append(home.strip())
+    project_urls = info.get("project_urls")
+    if isinstance(project_urls, dict):
+        for value in project_urls.values():
+            if isinstance(value, str) and value.strip():
+                urls.append(value.strip())
+    return urls
+
+
+def _is_our_hostname(url: str) -> bool:
+    """True only for a real tancat.dev host (or subdomain) or our GitHub repo path.
+
+    The hostname is parsed, never substring-matched: ``tancat.dev.evil.com`` and
+    ``evil.com/tancat.dev`` both contain our domain as text and both are refused.
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url if "//" in url else f"https://{url}")
+    except ValueError:
+        return False
+    host = (parts.hostname or "").lower()
+    if host == SITE_HOST or host.endswith(f".{SITE_HOST}"):
+        return True
+    path = parts.path.lower().rstrip("/")
+    return host == GITHUB_HOST and (path == REPO_PATH or path.startswith(REPO_PATH + "/"))
 
 
 def identity_matches(payload: dict[str, Any]) -> bool:
     """True only when the feed describes THIS project.
 
-    ``info.name`` must match exactly, and one URL or author field must carry our
-    repository or domain. A feed we do not own is refused - see the module
-    docstring: it is an attack surface, not a version.
+    ``info.name`` must match exactly, and at least one published URL must have
+    OUR hostname: ``tancat.dev`` (or a subdomain of it), or
+    ``github.com/tancat-ai/tancat``. A feed we do not own is refused - see the
+    module docstring: it is an attack surface, not a version. Spoofing a domain as
+    text (``tancat.dev.evil.com``, ``evil.com/tancat.dev``) is refused too, because
+    the hostname is parsed rather than searched for.
     """
     info = payload.get("info")
     if not isinstance(info, dict):
@@ -180,8 +205,7 @@ def identity_matches(payload: dict[str, Any]) -> bool:
     name = info.get("name")
     if not isinstance(name, str) or name.strip().lower() != FEED_PROJECT_NAME:
         return False
-    haystack = " ".join(_identity_strings(info)).lower()
-    return any(marker in haystack for marker in IDENTITY_MARKERS)
+    return any(_is_our_hostname(url) for url in _published_urls(info))
 
 
 def _fetch(url: str, timeout: float = TIMEOUT_S) -> str | None:
@@ -315,7 +339,9 @@ __all__ = [
     "DEFAULT_UPDATE_CHECK",
     "FEED_PROJECT_NAME",
     "FEED_URL",
-    "IDENTITY_MARKERS",
+    "GITHUB_HOST",
+    "REPO_PATH",
+    "SITE_HOST",
     "identity_matches",
     "NOTICE",
     "TIMEOUT_S",

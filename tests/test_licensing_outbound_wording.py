@@ -26,11 +26,43 @@ FALSE_CLAIMS = (
     "makes no call to a vendor server",
     "no call to a vendor server",
     "no vendor server call",
-    # j-0306: the version check exists, so a document that rules out update checks
-    # is false too.
-    "no automatic update check",
-    "no update check",
 )
+
+#: A sentence that mentions an update/version check and negates it. The rule is
+#: positional: a negation cue BEFORE the word "check" denies the check; a cue
+#: after it ("the version check sends nothing about you") does not.
+CHECK_WORD = re.compile(r"check(s|ing)?(?![a-z])", re.IGNORECASE)
+CHECK_TOPIC = re.compile(r"(update|version)s?(?![a-z])", re.IGNORECASE)
+NEGATION = re.compile(r"(^|[^a-z])(no|never|not|none|without|free of|zero)([^a-z]|$)", re.IGNORECASE)
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def denies_a_check(sentence: str) -> bool:
+    """True when *sentence* mentions an update/version check and denies one.
+
+    Deliberately a rule, not a phrase list: the review found a phrasing the list
+    did not hold ("no runtime update check as part of its normal operation"), and
+    any list will keep missing the next one.
+    """
+    if not CHECK_TOPIC.search(sentence):
+        return False
+    match = CHECK_WORD.search(sentence)
+    if match is None:
+        return False
+    # Only the clause the word "check" sits in counts: "two kinds of call and no
+    # others: ... a version check" is a list of calls, not a denial of one.
+    window = sentence[: match.start()]
+    clause = max(
+        window.rfind(":"),
+        window.rfind(";"),
+        window.rfind(" - "),
+        window.rfind(" — "),
+        window.rfind(" – "),
+    )
+    if clause != -1:
+        window = window[clause + 1 :]
+    return bool(NEGATION.search(window))
+
 
 #: The order PDF ships with every purchase, and its source is docs/implementation.
 ORDER_PDF = LANDING / "tancat-pro-install-and-licence.pdf"
@@ -83,6 +115,34 @@ def _scanned_documents() -> list[tuple[str, str]]:
     for path in _user_docs():
         docs.append((str(path.relative_to(REPO_ROOT)), _flat(path)))
     return docs
+
+
+def test_no_document_denies_an_update_check() -> None:
+    """Every sentence on every buyer document, through the rule."""
+    offenders: dict[str, list[str]] = {}
+    for name, text in _scanned_documents():
+        bad = [sentence for sentence in SENTENCE_END.split(text) if denies_a_check(sentence)]
+        if bad:
+            offenders[name] = bad[:3]
+    assert offenders == {}, f"document(s) that deny an update check while one exists: {offenders}"
+
+
+def test_the_denial_rule_catches_three_phrasings_one_of_them_unlisted() -> None:
+    """Proof the rule, not a list: the third framing was never written down."""
+    denied = [
+        "The product makes no runtime update check as part of its normal operation.",
+        "TanCat does not check for updates at runtime.",  # never on any list
+        "It works without any version check.",
+    ]
+    allowed = [
+        "It makes at most one version check a day.",
+        "The version check sends nothing about you.",
+        "Turn the update check off in settings.",
+    ]
+    for sentence in denied:
+        assert denies_a_check(sentence), sentence
+    for sentence in allowed:
+        assert not denies_a_check(sentence), sentence
 
 
 def test_no_page_claims_no_outbound_traffic() -> None:

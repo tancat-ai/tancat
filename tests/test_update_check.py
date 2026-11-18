@@ -226,18 +226,36 @@ def test_a_feed_whose_author_and_urls_are_not_ours_is_ignored(monkeypatch: pytes
     assert V._fetch(V.FEED_URL) is None, "a feed that is not ours was trusted"
 
 
-def test_identity_matches_requires_the_exact_name_and_our_marker() -> None:
+def test_identity_matches_requires_the_exact_name_and_a_real_hostname() -> None:
     assert V.identity_matches(_feed())
     assert not V.identity_matches(_feed(name="tancat-pro"))
     assert not V.identity_matches(_feed(name="tancat", home_page="", project_urls={}, author="Anon"))
 
     # A repository URL is enough on its own.
     assert V.identity_matches(_feed(home_page="", project_urls={"Source": "https://github.com/tancat-ai/tancat"}))
-    # As is the domain in an author field.
-    assert V.identity_matches(_feed(home_page="", project_urls={}, author="hello@tancat.dev"))
+    # A subdomain of our site is ours.
+    assert V.identity_matches(_feed(home_page="https://www.tancat.dev", project_urls={}))
+    # An author field is NOT a URL and no longer counts on its own.
+    assert not V.identity_matches(_feed(home_page="", project_urls={}, author="hello@tancat.dev"))
     # An empty or malformed payload is no answer.
     assert not V.identity_matches({})
     assert not V.identity_matches({"info": "nope"})
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://tancat.dev.evil.com",  # our domain as a prefix of someone else's host
+        "https://evil.com/tancat.dev",  # our domain in the path
+        "https://evil.com/?next=tancat.dev",  # our domain in a query string
+        "https://github.com.evil.com/tancat-ai/tancat",  # the repo spoofed the same way
+        "https://evil.com/github.com/tancat-ai/tancat",
+    ],
+)
+def test_a_spoofed_hostname_is_refused(url: str) -> None:
+    """Parsed, not substring-matched: text that contains our domain proves nothing."""
+    assert not V.identity_matches(_feed(home_page=url, project_urls={})), url
+    assert not V.identity_matches(_feed(home_page="", project_urls={"Homepage": url})), url
 
 
 # -- the packaging metadata must satisfy the identity gate --------------------
@@ -259,9 +277,8 @@ def test_the_real_pyproject_publishes_the_identity_the_check_requires() -> None:
     assert urls.get("Repository") == "https://github.com/tancat-ai/tancat"
     assert urls.get("Homepage") == "https://tancat.dev"
 
-    published = " ".join(str(value) for value in urls.values()).lower()
-    for marker in V.IDENTITY_MARKERS:
-        assert marker in published, f"the packaging metadata does not carry the marker {marker!r}"
+    assert V._is_our_hostname(urls["Repository"]), "the repository URL is not recognised as ours"
+    assert V._is_our_hostname(urls["Homepage"]), "the homepage URL is not recognised as ours"
 
     # And the whole thing passes the gate as published.
     feed = {
@@ -273,3 +290,58 @@ def test_the_real_pyproject_publishes_the_identity_the_check_requires() -> None:
         }
     }
     assert V.identity_matches(feed), "our own published metadata would fail our own check"
+
+
+# -- j-0306 review: two branches nothing covered -----------------------------
+
+
+def test_the_manual_check_with_the_setting_off_makes_no_call(
+    _isolated: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Off means off, even for the command a person typed themselves."""
+    monkeypatch.setattr(V, "enabled", lambda: False)
+    calls: list[str] = []
+
+    def fetch(url: str, timeout: float = V.TIMEOUT_S) -> str | None:
+        calls.append(url)
+        return "1.5.0"
+
+    monkeypatch.setattr(V, "_fetch", fetch)
+
+    assert cli_main.main(["update", "--check"]) == 0
+    out = capsys.readouterr().out
+    assert "update check is off" in out
+    assert "1.5.0" not in out
+    assert calls == []
+
+
+def test_the_background_refresh_returns_before_the_fetch_completes(
+    _isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No command may wait on the network, so the refresh must not block."""
+    import threading
+    import time
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_fetch(url: str, timeout: float = V.TIMEOUT_S) -> str | None:
+        started.set()
+        release.wait(timeout=5)
+        return "1.5.0"
+
+    monkeypatch.setattr(V, "_fetch", slow_fetch)
+
+    began = time.monotonic()
+    V.refresh_in_background(_isolated)
+    elapsed = time.monotonic() - began
+
+    assert elapsed < 1.0, f"refresh_in_background blocked for {elapsed:.2f}s"
+    assert started.wait(timeout=2), "the background check never started"
+    release.set()
+
+    for _ in range(50):
+        if V.read_cache(_isolated).get("latest_version"):
+            break
+        time.sleep(0.05)
+    assert V.read_cache(_isolated).get("latest_version") == "1.5.0", "the background result was not recorded"
