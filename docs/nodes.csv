@@ -125,7 +125,7 @@ label,group,size,color
 ./docs/reviews/STATE_OF_NATION_2026-05-17.md,Documentation,296,#F7DC6F
 ./docs/reviews/skip review.md,Documentation,34,#F7DC6F
 ./docs/security/egress-audit.md,Documentation,111,#F7DC6F
-./docs/security/license-key-ops.md,Documentation,103,#F7DC6F
+./docs/security/license-key-ops.md,Documentation,149,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session1_observed_trail.md,Documentation,99,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session2_plumbing.md,Documentation,90,#F7DC6F
 ./docs/sessions/2026-07-23_ai052_session3_core_fix.md,Documentation,107,#F7DC6F
@@ -456,7 +456,7 @@ label,group,size,color
 ./landing/install.html,Other,147,#AEB6BF
 ./landing/privacy.html,Other,102,#AEB6BF
 ./landing/tailwind.css,Other,1,#AEB6BF
-./landing/tancat-pro-install-and-licence.pdf,Other,534,#AEB6BF
+./landing/tancat-pro-install-and-licence.pdf,Other,531,#AEB6BF
 ./landing/terms.html,Other,121,#AEB6BF
 ./launch_cli.sh,Configuration,41,#BB8FCE
 ./launch_dev.sh,Configuration,85,#BB8FCE
@@ -549,9 +549,9 @@ label,group,size,color
 ./markdown_docs/src/journey_subprocess.py.md,Documentation,13,#F7DC6F
 ./markdown_docs/src/learning_impact.py.md,Documentation,67,#F7DC6F
 ./markdown_docs/src/learning_metrics.py.md,Documentation,51,#F7DC6F
-./markdown_docs/src/licensing/__init__.py.md,Documentation,31,#F7DC6F
-./markdown_docs/src/licensing/license.py.md,Documentation,89,#F7DC6F
-./markdown_docs/src/licensing/tiers.py.md,Documentation,60,#F7DC6F
+./markdown_docs/src/licensing/__init__.py.md,Documentation,25,#F7DC6F
+./markdown_docs/src/licensing/license.py.md,Documentation,68,#F7DC6F
+./markdown_docs/src/licensing/tiers.py.md,Documentation,63,#F7DC6F
 ./markdown_docs/src/link_scoping.py.md,Documentation,59,#F7DC6F
 ./markdown_docs/src/llm_cache.py.md,Documentation,81,#F7DC6F
 ./markdown_docs/src/llm_client.py.md,Documentation,135,#F7DC6F
@@ -873,9 +873,9 @@ label,group,size,color
 ./src/cli/color.py,Other,62,#AEB6BF
 ./src/cli/config.py,Other,25,#AEB6BF
 ./src/cli/evidence_generator.py,Other,538,#AEB6BF
-./src/cli/headless.py,Other,554,#AEB6BF
+./src/cli/headless.py,Other,577,#AEB6BF
 ./src/cli/input_parser.py,Other,586,#AEB6BF
-./src/cli/main.py,Other,881,#AEB6BF
+./src/cli/main.py,Other,885,#AEB6BF
 ./src/cli/menu_renderer.py,Other,883,#AEB6BF
 ./src/cli/pipeline_runner.py,Other,1463,#AEB6BF
 ./src/cli/report_generator.py,Other,450,#AEB6BF
@@ -927,7 +927,7 @@ label,group,size,color
 ./src/learning_impact.py,Other,581,#AEB6BF
 ./src/learning_metrics.py,Other,396,#AEB6BF
 ./src/licensing/__init__.py,Other,45,#AEB6BF
-./src/licensing/entitlement.py,Other,132,#AEB6BF
+./src/licensing/entitlement.py,Other,172,#AEB6BF
 ./src/licensing/license.py,Other,137,#AEB6BF
 ./src/licensing/merchant.py,Other,27,#AEB6BF
 ./src/licensing/pricing.py,Other,45,#AEB6BF
@@ -1010,7 +1010,7 @@ label,group,size,color
 ./src/ui/ui_run_comparison.py,Other,117,#AEB6BF
 ./src/ui/ui_run_results.py,Other,1375,#AEB6BF
 ./src/ui/ui_saved_packages.py,Other,411,#AEB6BF
-./src/ui/ui_sidebar.py,Other,475,#AEB6BF
+./src/ui/ui_sidebar.py,Other,473,#AEB6BF
 ./src/ui_pipeline.py,interface,515,#FF6B6B
 ./src/url_guard.py,Other,350,#AEB6BF
 ./src/url_inference.py,refinement,49,#FFEAA7
@@ -1300,7 +1300,7 @@ label,group,size,color
 ./tests/test_test_plan.py,Other,142,#AEB6BF
 ./tests/test_test_structure_assembler.py,Other,144,#AEB6BF
 ./tests/test_test_table.py,Other,495,#AEB6BF
-./tests/test_tier_retirement.py,Other,128,#AEB6BF
+./tests/test_tier_retirement.py,Other,126,#AEB6BF
 ./tests/test_uat.py,Other,167,#AEB6BF
 ./tests/test_uat_rag_recording.py,Other,63,#AEB6BF
 ./tests/test_uat_script.py,Other,58,#AEB6BF

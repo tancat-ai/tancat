@@ -777,10 +777,14 @@ def _startup_backstop() -> int | None:
     message names the window end, the version that keeps working and how to
     renew. A Free install (no licence) is never refused.
     """
-    from src.licensing.entitlement import startup_check
+    from src.licensing.entitlement import record_running_version, resolve, startup_check
 
     decision = startup_check()
     if decision.allowed:
+        if resolve().source == "signed":
+            from src import version_check
+
+            record_running_version(version_check.current_version())
         return None
     print(f"ERROR: {decision.message}", file=sys.stderr)
     return 3

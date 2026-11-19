@@ -1030,7 +1030,7 @@
       "label": "./docs/security/license-key-ops.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 103,
+      "size": 149,
       "color": "#F7DC6F"
     },
     {
@@ -3678,7 +3678,7 @@
       "label": "./landing/tancat-pro-install-and-licence.pdf",
       "group": "Other",
       "type": "other",
-      "size": 534,
+      "size": 531,
       "color": "#AEB6BF"
     },
     {
@@ -4422,7 +4422,7 @@
       "label": "./markdown_docs/src/licensing/__init__.py.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 31,
+      "size": 25,
       "color": "#F7DC6F"
     },
     {
@@ -4430,7 +4430,7 @@
       "label": "./markdown_docs/src/licensing/license.py.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 89,
+      "size": 68,
       "color": "#F7DC6F"
     },
     {
@@ -4438,7 +4438,7 @@
       "label": "./markdown_docs/src/licensing/tiers.py.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 60,
+      "size": 63,
       "color": "#F7DC6F"
     },
     {
@@ -7014,7 +7014,7 @@
       "label": "./src/cli/headless.py",
       "group": "Other",
       "type": "src",
-      "size": 554,
+      "size": 577,
       "color": "#AEB6BF"
     },
     {
@@ -7030,7 +7030,7 @@
       "label": "./src/cli/main.py",
       "group": "Other",
       "type": "src",
-      "size": 881,
+      "size": 885,
       "color": "#AEB6BF"
     },
     {
@@ -7446,7 +7446,7 @@
       "label": "./src/licensing/entitlement.py",
       "group": "Other",
       "type": "src",
-      "size": 132,
+      "size": 172,
       "color": "#AEB6BF"
     },
     {
@@ -8110,7 +8110,7 @@
       "label": "./src/ui/ui_sidebar.py",
       "group": "Other",
       "type": "src",
-      "size": 475,
+      "size": 473,
       "color": "#AEB6BF"
     },
     {
@@ -10430,7 +10430,7 @@
       "label": "./tests/test_tier_retirement.py",
       "group": "Other",
       "type": "test",
-      "size": 128,
+      "size": 126,
       "color": "#AEB6BF"
     },
     {
@@ -18982,7 +18982,7 @@
     {
       "id": 1384,
       "source": 874,
-      "target": 929,
+      "target": 928,
       "type": "import"
     },
     {

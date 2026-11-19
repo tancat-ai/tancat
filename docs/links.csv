@@ -1383,7 +1383,7 @@ source,target,type
 ./src/cli/headless.py,./src/ci_ignore.py,import
 ./src/cli/headless.py,./src/cli/session.py,import
 ./src/cli/headless.py,./src/journey_models.py,import
-./src/cli/headless.py,./src/licensing/license.py,import
+./src/cli/headless.py,./src/licensing/entitlement.py,import
 ./src/cli/headless.py,./src/llm_health.py,import
 ./src/cli/headless.py,./src/pipeline_report_service.py,import
 ./src/cli/headless.py,./src/provider_config.py,import

@@ -12,6 +12,41 @@
 - **Vendored public key.** `src/licensing/license.py` ships `VENDORED_PUBLIC_KEY_B64`; it is the trust root for all stock builds and is **not overridable by the customer** (B-050, resolved: the customer-settable trust root was removed). The trust root must not be customer-settable — otherwise a stock build could self-sign its way into paid tier without a fork. Rotation ships with a product release (§5).
 - **The licence file:** JSON with `format`, a `payload` (`id`, `product`, `buyer_ref`, `purchased_at`, `window_end`, `tier`) and a base64 `signature` over the canonical payload. It is the only licence mechanism — there is no token format and no activation call (j-0309).
 
+## 1a. Signing, verifying, recovering - the whole loop
+
+**Sign a licence** (the key stays outside the repository; the script refuses a key or an
+output inside it):
+
+```bash
+TANCAT_LICENCE_SIGNING_KEY_FILE=~/keys/tancat-licence-signing.key   python scripts/maintenance/issue_licence.py   --id TC-2026-000123 --buyer "order 4821 / buyer@example.com"   --purchased 2026-11-18 --out ~/licences/TC-2026-000123.json
+```
+
+**The payload** the file carries - these six fields, and nothing else:
+
+| field | meaning |
+|---|---|
+| `id` | licence id, your own numbering (`TC-2026-000123`) |
+| `product` | always `tancat`; a licence for anything else is refused |
+| `buyer_ref` | the order id, the buyer's email, or both |
+| `purchased_at` | purchase date, `YYYY-MM-DD` |
+| `window_end` | the last day a build released inside the window may run (purchase + 12 months) |
+| `tier` | `pro`, or another key in `src/licensing/tiers.py` |
+
+Plus `format` (`tancat-licence/1`) and `signature` (base64url ed25519 over the canonical
+payload: sorted keys, no whitespace). A changed byte anywhere fails verification.
+
+**Verify it**: `tancat licence status` prints the source, licence id, buyer, tier and
+window end; a refused file prints the path and the reason.
+
+**Recover a key**: restore the private half on a clean machine, sign a test licence, and
+check it against the vendored public key (`tancat licence status`, or the acceptance test
+in `tests/test_signed_licence_file.py`). An untested backup is a hope, not a backup.
+
+**Where the key lives**: outside the repository. Today it is
+`C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key` on the owner's machine, with
+his note beside it. `issue_licence.py` refuses to read a key from inside the repo and
+refuses to write a buyer's licence there.
+
 ## 2. The single-operator risk (why this doc exists)
 
 | Event | Consequence |
@@ -43,13 +78,24 @@ Rotation is a **product release**, not just a key ceremony:
 
 Because the public key is vendored, customers must update the product to trust a new key — **plan an annual or biennial rotation cadence** so it is routine rather than emergency-driven.
 
-## 6. Revocation (offline constraint)
+## 6. What is NOT possible (and why that is accepted)
 
-There is no CRL/OCSP possibility in an air-gapped design. Revocation is achieved **contractually + cryptographically-by-expiry**:
+The licence is a signed file verified offline. Three things a hosted licensing service
+would give you are deliberately absent:
 
-- Issue licenses with **short `expires_at` windows** (annual at most; quarterly for high-risk customers). Non-renewal = revocation.
-- `GRACE_DAYS` (default 7) means a non-renewed deployment keeps running for up to 7 days past expiry — take this into account when a customer relationship ends (issue the final license with an `expires_at` at contract end, not +12 months).
-- If a *signing key* leaks: only rotation (§5) restores security for stock builds. This is why the backup/rotation plan exists before launch, not after.
+- **No revocation.** There is no CRL, no OCSP, no phone-home. A licence you signed stays
+  valid until the end of its update window, and a buyer can keep running the version they
+  hold for ever. Refunds are handled commercially, not by switching a licence off.
+- **No grace period.** There is no `expires_at` and no `GRACE_DAYS`. The only date in a
+  licence is `window_end`: the last day a **build** released inside the purchase window
+  may run. The version the buyer holds never stops working.
+- **No token, no activation call.** There is one mechanism. The older
+  `payload.signature` token format, its env vars (`AITEST_LICENSE_KEY`,
+  `AITEST_LICENSE_FILE`), `scripts/license_gen.py` and the UI paste box were deleted
+  (t-1468); `src/licensing/signed_file.py` is the only thing that reads a licence.
+
+If a **signing key** leaks, only rotation (§5) restores security for stock builds - which
+is why the backup and rotation plan exists before launch, not after.
 
 ## 7. Related items
 
@@ -59,9 +105,9 @@ There is no CRL/OCSP possibility in an air-gapped design. Revocation is achieved
 
 ## 8a. Key ceremony 2026-11-18 - the signed-licence pair (current)
 
-The trust root now signs **licence files** (``src/licensing/signed_file.py``), not only the older token
-format. The 2026-09-28 pair recorded below still verifies the token path's history but is **retired as
-the shipped root**; the constant now holds the pair minted on 2026-11-18.
+The trust root signs **licence files** (``src/licensing/signed_file.py``) - the only licence mechanism
+(t-1468). The 2026-09-28 pair signed the retired token format and is **retired as the shipped root**;
+the constant now holds the pair minted on 2026-11-18.
 
 - **Generated:** 2026-11-18 by the owner, outside the repository.
 - **Private half:** `C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key` (PKCS8 PEM) on this
@@ -81,7 +127,7 @@ the shipped root**; the constant now holds the pair minted on 2026-11-18.
   constant - `valid`; a file signed with a throwaway key was `invalid`. The test suite re-runs the
   acceptance check on this machine and skips it elsewhere.
 
-## 8. Key ceremony record 2026-09-28 - the token pair (retired as the shipped root)
+## 8. Key ceremony record 2026-09-28 - the retired pair (historical)
 
 Recorded 2026-09-29.
 

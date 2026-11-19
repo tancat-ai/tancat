@@ -12,6 +12,7 @@ licence file and the settings directory.
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -22,7 +23,10 @@ from src.licensing.window import RELEASE_DATE, RENEWAL_COPY, WindowDecision
 
 __all__ = [
     "LicenceState",
+    "default_last_run_path",
     "default_signed_path",
+    "last_running_version",
+    "record_running_version",
     "load_signed_licence",
     "resolve",
     "startup_check",
@@ -32,12 +36,45 @@ __all__ = [
 #: Where a signed licence file is looked for, after ``AITEST_LICENCE_FILE``.
 SIGNED_FILENAME = "licence.signed.json"
 
+#: The version that last started inside its window. Written on a good start and read
+#: by a refusal, so the message can name a version that actually works (t-1470).
+LAST_RUN_FILENAME = "last_run.json"
+
 
 def default_signed_path() -> Path:
     """The settings-dir path for a signed licence file."""
     from src.secure_config import _config_dir
 
     return Path(_config_dir()) / SIGNED_FILENAME
+
+
+def default_last_run_path() -> Path:
+    """The settings-dir record of the last version that started."""
+    from src.secure_config import _config_dir
+
+    return Path(_config_dir()) / LAST_RUN_FILENAME
+
+
+def record_running_version(version: str, path: Path | None = None) -> None:
+    """Remember *version* as the one that started (best effort, never raises)."""
+    if not version:
+        return
+    target = path or default_last_run_path()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"version": version}), encoding="utf-8")
+    except OSError:  # a read-only install still runs; the record is a courtesy
+        pass
+
+
+def last_running_version(path: Path | None = None) -> str:
+    """The last version this machine started, or "" when none is recorded."""
+    target = path or default_last_run_path()
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return ""
+    return str(data.get("version") or "") if isinstance(data, dict) else ""
 
 
 def _date(value: object) -> date | None:
@@ -121,6 +158,9 @@ def startup_check(*, build_date: date | None = None, installed_version: str = ""
     """
     build = build_date or RELEASE_DATE
     state = resolve()
+    if not installed_version:
+        # The refusal must name a version that works, as the upgrade path does.
+        installed_version = last_running_version()
     if state.source == "none" or state.allows_build(build):
         message = "No licence file: running as Free Community." if state.source == "none" else ""
         return WindowDecision(True, message, state.window_end)

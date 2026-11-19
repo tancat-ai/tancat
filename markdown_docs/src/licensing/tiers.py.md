@@ -58,3 +58,6 @@ contain the feature — the "requires X tier" message source.
 
 ### Internal utilities
 - `_tiers()` — the hardcoded default table the override layer merges with.
+
+A licence naming an unknown tier is **refused** by `signed_file.py` rather than
+demoted; the retired keys stay in the table so an older signed licence still reports its claims.
