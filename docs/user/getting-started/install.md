@@ -114,7 +114,7 @@ way you upgrade any Python tool. You choose when to install one.
 
 TanCat makes **exactly one automatic call, and no others** - a version check at most once a day if
 you leave it on (nothing about you is sent; settings turns it off). Licensing never touches the
-network: your licence file is verified offline. No automatic upgrade - you choose when to install
+network: your signed licence file is verified offline. No automatic upgrade - you choose when to install
 one.
 
 From a source checkout:

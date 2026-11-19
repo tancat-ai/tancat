@@ -534,7 +534,7 @@
       "label": "./docs/implementation/tancat-pro-install-and-licence.html",
       "group": "Other",
       "type": "other",
-      "size": 71,
+      "size": 74,
       "color": "#AEB6BF"
     },
     {
@@ -3654,7 +3654,7 @@
       "label": "./landing/install.html",
       "group": "Other",
       "type": "other",
-      "size": 152,
+      "size": 147,
       "color": "#AEB6BF"
     },
     {
@@ -3678,7 +3678,7 @@
       "label": "./landing/tancat-pro-install-and-licence.pdf",
       "group": "Other",
       "type": "other",
-      "size": 540,
+      "size": 534,
       "color": "#AEB6BF"
     },
     {
@@ -7038,7 +7038,7 @@
       "label": "./src/cli/main.py",
       "group": "Other",
       "type": "src",
-      "size": 877,
+      "size": 881,
       "color": "#AEB6BF"
     },
     {
@@ -7454,7 +7454,7 @@
       "label": "./src/licensing/entitlement.py",
       "group": "Other",
       "type": "src",
-      "size": 130,
+      "size": 132,
       "color": "#AEB6BF"
     },
     {
@@ -9390,7 +9390,7 @@
       "label": "./tests/test_licensing_cli.py",
       "group": "Other",
       "type": "test",
-      "size": 167,
+      "size": 187,
       "color": "#AEB6BF"
     },
     {
@@ -9398,7 +9398,7 @@
       "label": "./tests/test_licensing_outbound_wording.py",
       "group": "Other",
       "type": "test",
-      "size": 248,
+      "size": 402,
       "color": "#AEB6BF"
     },
     {

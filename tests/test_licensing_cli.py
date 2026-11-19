@@ -165,3 +165,23 @@ def test_the_upgrade_inside_the_window_prints_the_command(
     assert cli_main.main(["update"]) == 0
     out = capsys.readouterr().out
     assert "Upgrade TanCat" in out
+
+
+def test_status_says_a_refused_file_is_there_and_why(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """'Present, but refused' is not 'not present' - the buyer needs the difference."""
+    accepted = tmp_path / "licence.signed.json"
+    awarded = _write_signed(accepted, purchased="2026-11-01", window_end="2027-11-01")
+    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", awarded)
+    document = accepted.read_text(encoding="utf-8")
+    accepted.write_text(document.replace('"TC-2026-000321"', '"TC-2026-999999"'), encoding="utf-8")
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(accepted))
+
+    assert cli_main.main(["licence", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "present, but refused" in out
+    assert "Refused because:" in out
+    assert "signature does not verify" in out
+    assert "(not present)" not in out
+    assert "Free Community" in out

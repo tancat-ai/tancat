@@ -2,9 +2,9 @@
 <html class="scroll-smooth" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<meta name="description" content="Install TanCat and activate your Pro licence: environment variable, licence-file variable, or the default key file."/>
+<meta name="description" content="Install TanCat and add your Pro licence: a signed licence file you save, confirmed by tancat licence status. Nothing to switch on, no call made."/>
 <meta name="theme-color" content="#070b10"/>
-<title>Install &amp; activate TanCat Pro - TanCat</title>
+<title>Install TanCat Pro and add your licence - TanCat</title>
 <link rel="canonical" href="https://tancat.dev/install.html"/>
 <link rel="icon" href="favicon.ico" sizes="any"/>
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
@@ -14,16 +14,16 @@
 <meta property="og:site_name" content="TanCat"/>
 <meta property="og:locale" content="en_GB"/>
 <meta property="og:url" content="https://tancat.dev/install.html"/>
-<meta property="og:title" content="Install &amp; activate TanCat Pro"/>
-<meta property="og:description" content="Install TanCat and activate your Pro licence: environment variable, licence-file variable, or the default key file."/>
+<meta property="og:title" content="Install TanCat Pro and add your licence"/>
+<meta property="og:description" content="Install TanCat and add your Pro licence: a signed licence file you save, confirmed by tancat licence status. Nothing to switch on, no call made."/>
 <meta property="og:image" content="https://tancat.dev/og-card.png"/>
 <meta property="og:image:type" content="image/png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
 <meta property="og:image:alt" content="TanCat landing page: the AI test generator that runs against your own machines and your own LLM."/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="Install &amp; activate TanCat Pro"/>
-<meta name="twitter:description" content="Install TanCat and activate your Pro licence: environment variable, licence-file variable, or the default key file."/>
+<meta name="twitter:title" content="Install TanCat Pro and add your licence"/>
+<meta name="twitter:description" content="Install TanCat and add your Pro licence: a signed licence file you save, confirmed by tancat licence status. Nothing to switch on, no call made."/>
 <meta name="twitter:image" content="https://tancat.dev/og-card.png"/>
 <link rel="stylesheet" href="tailwind.css">
 <link rel="stylesheet" href="fonts.css"/>
@@ -50,8 +50,8 @@
 
 <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
   <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Pro deployment</span>
-  <h1 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Install &amp; activate your licence</h1>
-  <p class="text-slate-400 text-sm mt-3">One licence covers one deployment. Your key arrives by email when you purchase. This page mirrors the PDF that ships with every order.</p>
+  <h1 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Install and add your licence</h1>
+  <p class="text-slate-400 text-sm mt-3">One licence covers one deployment. You receive a <strong class="text-slate-200">signed licence file</strong>, saved to this machine; the product verifies it offline. There is nothing to switch on and nothing calls out. This page mirrors the PDF that ships with every order.</p>
 
   <section class="mt-10">
     <h2 class="text-lg font-bold text-white">1. Install</h2>
@@ -67,49 +67,44 @@ bash launch_ui.sh</code></pre>
   </section>
 
   <section class="mt-10">
-    <h2 class="text-lg font-bold text-white">2. Activate the licence</h2>
-    <p class="text-slate-400 text-xs mt-1">Give the key to the deployment in <strong class="text-slate-200">any one</strong> of these three ways. The order below is also the order the product reads them in, so the environment variable wins if more than one is set.</p>
+    <h2 class="text-lg font-bold text-white">2. Add the licence file</h2>
+    <p class="text-slate-400 text-xs mt-1">Save the signed licence file we sent you. The product reads it at startup and verifies the signature
+      offline against a public key built into it - no step to perform, and no call to us or to any store.</p>
 
     <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
-      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way A &middot; Environment variable</div>
-      <p class="text-slate-300 text-xs mt-2">Best for CI and containerised runs. The key is passed inline and never written to disk.</p>
-<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>AITEST_LICENSE_KEY="&lt;your key&gt;" bash launch_ui.sh</code></pre>
+      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Where it goes</div>
+      <p class="text-slate-300 text-xs mt-2">Run this and it prints the exact path, whether or not a file is there yet:</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>tancat licence status</code></pre>
+      <p class="text-slate-300 text-xs mt-2">Save the file there as <code class="text-amber-300 font-mono">licence.signed.json</code>.</p>
     </div>
 
     <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
-      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way B &middot; A file you point at</div>
-      <p class="text-slate-300 text-xs mt-2">Keep the key anywhere and name the path. Good when your secret store writes a file.</p>
-<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>cp license.key /etc/tancat/license.key
-AITEST_LICENSE_FILE=/etc/tancat/license.key bash launch_ui.sh</code></pre>
-    </div>
-
-    <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
-      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way C &middot; The default key file</div>
-      <p class="text-slate-300 text-xs mt-2">Save the key at the default location and start the app normally. No environment variable needed.</p>
-<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>mkdir -p ~/.ai-test-gen
-cp license.key ~/.ai-test-gen/license.key
-bash launch_ui.sh</code></pre>
-      <p class="text-slate-500 text-[11px] font-mono mt-2">On Windows, <code class="text-slate-300">~</code> is <code class="text-slate-300">%USERPROFILE%</code>, so the file is <code class="text-slate-300">%USERPROFILE%\.ai-test-gen\license.key</code>.</p>
+      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Or point at it</div>
+      <p class="text-slate-300 text-xs mt-2">Keep the file anywhere and name the path. Best for CI and containerised runs, where a secret store writes the file.</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>AITEST_LICENCE_FILE=/etc/tancat/licence.signed.json bash launch_ui.sh</code></pre>
+      <p class="text-slate-500 text-[11px] font-mono mt-2">On Windows, <code class="text-slate-300">~</code> is <code class="text-slate-300">%USERPROFILE%</code>, so the default file is <code class="text-slate-300">%USERPROFILE%\.ai-test-gen\licence.signed.json</code>.</p>
     </div>
   </section>
 
   <section class="mt-10">
     <h2 class="text-lg font-bold text-white">3. Check it worked</h2>
-    <p class="text-slate-400 text-xs mt-1">Open the UI and look at the <strong class="text-slate-200">License &amp; Usage</strong> panel in the sidebar.</p>
+    <p class="text-slate-400 text-xs mt-1">Run <code class="text-amber-300 font-mono">tancat licence status</code>. A verified file reports its source, id, buyer and window; the sidebar's <strong class="text-slate-200">License &amp; Usage</strong> panel shows the tier.</p>
     <div class="mt-4 border border-emerald-500/40 bg-emerald-500/10 rounded-2xl p-5">
       <div class="text-xs font-mono uppercase tracking-wider text-emerald-400">A licensed deployment reports</div>
-<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>License valid &mdash; pro tier (deployment acme-prod).</code></pre>
-      <p class="text-slate-300 text-xs mt-3">The panel then shows <code class="text-amber-300 font-mono">Runs: &lt;n&gt; (unlimited)</code> and <code class="text-amber-300 font-mono">Evidence exports: &lt;n&gt; (unlimited)</code>. The deployment id in the line is the one your key was issued for.</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>Source:       signed licence file (...\licence.signed.json)
+Tier:         pro
+Window ends:  2027-11-18</code></pre>
+      <p class="text-slate-300 text-xs mt-3">The panel then shows <code class="text-amber-300 font-mono">Runs: &lt;n&gt; (unlimited)</code> and <code class="text-amber-300 font-mono">Evidence exports: &lt;n&gt; (unlimited)</code>.</p>
     </div>
     <div class="mt-4 border border-slate-800 bg-cardbg rounded-2xl p-5">
-      <div class="text-xs font-mono uppercase tracking-wider text-slate-400">If the key is missing or invalid</div>
-      <p class="text-slate-300 text-xs mt-2">The product keeps working on the free tier and says so. It never locks you out of the free core. If you expected Pro and see the free-tier line, check that the key file has no extra blank lines and that nothing else is also setting a licence route.</p>
+      <div class="text-xs font-mono uppercase tracking-wider text-slate-400">If the file is missing or refused</div>
+      <p class="text-slate-300 text-xs mt-2">The status command says which: <em>not present</em>, or <em>present, but refused</em> with the reason (a changed byte fails the signature). The product keeps working on the Free tier either way - it never locks you out.</p>
     </div>
   </section>
 
   <section class="mt-10">
     <h2 class="text-lg font-bold text-white">In CI</h2>
-    <p class="text-slate-400 text-xs mt-1">Add the token as a secret (for example a GitHub Actions secret) and expose it as <code class="text-amber-300 font-mono">AITEST_LICENSE_KEY</code>. Nothing is written to disk and no network call is made to validate it: verification is offline against the trusted public key that ships with the product.</p>
+    <p class="text-slate-400 text-xs mt-1">Store the licence file as a secret (for example a GitHub Actions secret), write it to a path, and point the product at it with <code class="text-amber-300 font-mono">AITEST_LICENCE_FILE</code>. Verification is offline against the public key that ships with the product, so the job needs no network for licensing.</p>
   </section>
 
   <section class="mt-10">
@@ -131,7 +126,7 @@ bash launch_ui.sh</code></pre>
     <h2 class="text-lg font-bold text-white">More</h2>
     <ul class="mt-3 space-y-2 text-sm">
       <li><a class="text-amber-300 hover:underline" href="tancat-pro-install-and-licence.pdf">Download the install &amp; licence PDF</a></li>
-      <li><a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" rel="noopener noreferrer" target="_blank">How licence keys are issued (key operations)</a></li>
+      <li><a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" rel="noopener noreferrer" target="_blank">How the signing key is issued (key operations)</a></li>
       <li><a class="text-amber-300 hover:underline" href="terms.html">Licence terms</a> &middot; <a class="text-amber-300 hover:underline" href="privacy.html">Privacy</a></li>
       <li><a class="text-amber-300 hover:underline" href="mailto:hello@tancat.dev">hello@tancat.dev</a> &mdash; email support and setup help, direct from the developer.</li>
     </ul>

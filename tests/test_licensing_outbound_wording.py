@@ -246,3 +246,156 @@ def test_the_terms_say_one_automatic_call_and_that_licensing_is_offline() -> Non
     assert "version check at most once a day" in page
     assert "licensing never touches the network" in page.lower()
     assert "two kinds of outbound call" not in page
+
+
+# ---------------------------------------------------------------------------
+# t-1466: the dead key flow, as a CLASS of words, and every provider name
+# ---------------------------------------------------------------------------
+
+#: Words and variables that belong to the removed store-key path. A buyer document
+#: may contain none of them - not even in a negation, because the reader sees the
+#: noun and assumes it is a step.
+DEAD_KEY_WORDS = (
+    "activate",
+    "activation",
+    "licence key",
+    "license key",
+    "AITEST_LICENSE_KEY",
+    "AITEST_LICENSE_FILE",
+)
+
+#: The truth every buyer document must state instead.
+SIGNED_FILE_PHRASE = "signed licence"
+
+
+def _buyer_documents() -> list[tuple[str, str]]:
+    """Pages, the implementation source, the shipped PDFs and the user docs."""
+    return _scanned_documents()
+
+
+def test_no_buyer_document_teaches_the_dead_key_flow() -> None:
+    offenders: dict[str, list[str]] = {}
+    for name, text in _buyer_documents():
+        low = text.lower()
+        found = [word for word in DEAD_KEY_WORDS if word.lower() in low]
+        if found:
+            offenders[name] = found
+    assert offenders == {}, f"document(s) still teach the removed key flow: {offenders}"
+
+
+#: The documents that discuss licensing, and so must describe the real flow.
+LICENSING_DOCUMENTS = (
+    LANDING / "terms.html",
+    LANDING / "privacy.html",
+    LANDING / "install.html",
+    LANDING / "index.html",
+    DOCS / "reference" / "licensing.md",
+    DOCS / "getting-started" / "install.md",
+    IMPLEMENTATION / "tancat-pro-install-and-licence.html",
+)
+
+
+def test_every_licensing_document_states_the_signed_file() -> None:
+    """A page that talks about the licence must say what a licence is."""
+    missing = [str(path.relative_to(REPO_ROOT)) for path in LICENSING_DOCUMENTS if "signed" not in _flat(path).lower()]
+    assert missing == [], f"document(s) that do not mention the signed licence file: {missing}"
+    assert "signed" in _pdf_text(ORDER_PDF).lower(), "the shipped PDF does not say the licence is signed"
+
+
+def test_a_planted_key_instruction_is_caught() -> None:
+    """Prove the rule on the real document: plant the old sentence, watch it fail.
+
+    The PDF source is the one a buyer follows step by step, so it is where a stale
+    instruction does the most damage.
+    """
+    target = IMPLEMENTATION / "tancat-pro-install-and-licence.html"
+    original = target.read_text(encoding="utf-8")
+    try:
+        target.write_text(
+            original.replace(
+                "&mdash; nothing is switched on, and no call is made to us or",
+                "by pasting it as AITEST_LICENSE_KEY &mdash; nothing is switched on, and no call is made to us or",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        found = [word for word in DEAD_KEY_WORDS if word.lower() in _flat(target).lower()]
+        assert found, "the plant did not land - the test would pass vacuously"
+        assert "AITEST_LICENSE_KEY" in found
+    finally:
+        target.write_text(original, encoding="utf-8")
+
+
+#: Providers that a buyer document must never name: the store is not chosen yet,
+#: and naming one promises a route that does not exist.
+PROVIDER_NAMES = ("lemon squeezy", "lemonsqueezy", "paddle", "polar", "creem", "fastspring", "gumroad", "stripe")
+
+
+#: Copy in the product that a buyer can read: string literals, not docstrings.
+def _product_copy_strings() -> list[tuple[str, str]]:
+    import ast
+
+    found: list[tuple[str, str]] = []
+    for path in sorted((REPO_ROOT / "src").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        docstrings = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                found.append((path.relative_to(REPO_ROOT).as_posix(), node.value))
+    return found
+
+
+def test_no_buyer_document_names_a_provider() -> None:
+    """No store is signed, so no page may promise one - terms.html included."""
+    offenders: dict[str, list[str]] = {}
+    for name, text in _buyer_documents():
+        low = text.lower()
+        found = [provider for provider in PROVIDER_NAMES if provider in low]
+        if found:
+            offenders[name] = found
+    assert offenders == {}, f"document(s) naming a provider that is not signed: {offenders}"
+
+
+def test_no_product_copy_names_a_provider() -> None:
+    """The same rule over what the CLI and the UI print (docstrings excluded)."""
+    offenders: dict[str, list[str]] = {}
+    for path, value in _product_copy_strings():
+        low = value.lower()
+        found = [provider for provider in PROVIDER_NAMES if provider in low]
+        if found:
+            offenders[path] = found
+    assert offenders == {}, f"product copy names a provider that is not signed: {offenders}"
+
+
+def test_a_planted_provider_name_is_caught() -> None:
+    """Two plants: 'Polar' in privacy.html, 'Creem' in an install-page string."""
+    privacy = LANDING / "privacy.html"
+    install = LANDING / "install.html"
+    original_privacy = privacy.read_text(encoding="utf-8")
+    original_install = install.read_text(encoding="utf-8")
+    try:
+        privacy.write_text(
+            original_privacy.replace("our host (GitHub Pages)", "Polar (our store)", 1), encoding="utf-8"
+        )
+        install.write_text(
+            original_install.replace("Install and add your licence", "Creem checkout", 1), encoding="utf-8"
+        )
+
+        page_offenders = [
+            provider
+            for provider in PROVIDER_NAMES
+            if provider in _flat(privacy).lower() or provider in _flat(install).lower()
+        ]
+        assert "polar" in page_offenders, "the privacy plant did not land"
+        assert "creem" in page_offenders, "the install plant did not land"
+    finally:
+        privacy.write_text(original_privacy, encoding="utf-8")
+        install.write_text(original_install, encoding="utf-8")

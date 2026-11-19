@@ -97,7 +97,9 @@ def resolve() -> LicenceState:
     signed, path, problem = load_signed_licence()
     if signed is not None:
         return LicenceState("signed", signed.tier, signed.window_end, licence=signed, path=path)
-    return LicenceState("none", "free", None, problem=problem)
+    # path is set when a file was found but refused, so the caller can say which
+    # file and why instead of "not present" (t-1466).
+    return LicenceState("none", "free", None, problem=problem, path=path)
 
 
 def _refusal(state: LicenceState, build_date: date, installed_version: str) -> str:

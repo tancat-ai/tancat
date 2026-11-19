@@ -63,7 +63,7 @@ automatic upgrade: you choose when to install one.
 ## Install a licence file
 
 A licence is a **signed file** we issue to you. Save it and the product reads it; there
-is nothing to activate and no call is made.
+is nothing to switch on and no call is made.
 
 1. **`AITEST_LICENCE_FILE`** - a path to your licence file. Best for CI, where you inject
    it from a secret store:
@@ -79,8 +79,8 @@ The file is JSON: its format, a payload (licence id, product, buyer reference, p
 date, window end and tier) and a signature. The product verifies the signature against
 a public key built into it, offline, so nothing about your licence leaves the machine.
 
-If you hold an older **token** (the `AITEST_LICENSE_KEY` form), it still verifies offline
-and is used when no signed file is present.
+If you hold an older token, it still verifies offline and is used when no signed file
+is present; we do not document the token routes because the licence is the signed file.
 
 ## How the licence is checked
 

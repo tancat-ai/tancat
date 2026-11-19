@@ -745,8 +745,12 @@ def _licence_command(argv: list[str]) -> int:
         if state.problem:
             print(f"Licence file: could not be used - {state.problem}")
         if state.source == "none":
-            print("No licence on this machine: running as Free Community.")
-            print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
+            print("No licence in force: running as Free Community.")
+            if state.path is not None:
+                print(f"Signed licence file: {state.path} (present, but refused)")
+                print(f"Refused because: {state.problem}")
+            else:
+                print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
             return 0
         print(f"Source:       signed licence file ({state.path})")
         assert state.licence is not None

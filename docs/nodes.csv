@@ -63,7 +63,7 @@ label,group,size,color
 ./docs/implementation/landing-build/tailwind.config.js,Other,21,#AEB6BF
 ./docs/implementation/landing-build/tailwind.input.css,Other,3,#AEB6BF
 ./docs/implementation/refactor_audit_2026-05-20.md,Documentation,132,#F7DC6F
-./docs/implementation/tancat-pro-install-and-licence.html,Other,71,#AEB6BF
+./docs/implementation/tancat-pro-install-and-licence.html,Other,74,#AEB6BF
 ./docs/launch/lemon-squeezy-checklist.html,Other,186,#AEB6BF
 ./docs/licenses/DEPENDENCIES.md,Documentation,429,#F7DC6F
 ./docs/licenses/DOCUMENT_READER_LICENSES.md,Documentation,133,#F7DC6F
@@ -453,10 +453,10 @@ label,group,size,color
 ./landing/fonts.css,Other,28,#AEB6BF
 ./landing/fonts/OFL-1.1.md,Documentation,96,#F7DC6F
 ./landing/index.html,Other,444,#AEB6BF
-./landing/install.html,Other,152,#AEB6BF
+./landing/install.html,Other,147,#AEB6BF
 ./landing/privacy.html,Other,102,#AEB6BF
 ./landing/tailwind.css,Other,1,#AEB6BF
-./landing/tancat-pro-install-and-licence.pdf,Other,540,#AEB6BF
+./landing/tancat-pro-install-and-licence.pdf,Other,534,#AEB6BF
 ./landing/terms.html,Other,121,#AEB6BF
 ./launch_cli.sh,Configuration,41,#BB8FCE
 ./launch_dev.sh,Configuration,85,#BB8FCE
@@ -876,7 +876,7 @@ label,group,size,color
 ./src/cli/evidence_generator.py,Other,538,#AEB6BF
 ./src/cli/headless.py,Other,554,#AEB6BF
 ./src/cli/input_parser.py,Other,586,#AEB6BF
-./src/cli/main.py,Other,877,#AEB6BF
+./src/cli/main.py,Other,881,#AEB6BF
 ./src/cli/menu_renderer.py,Other,883,#AEB6BF
 ./src/cli/pipeline_runner.py,Other,1463,#AEB6BF
 ./src/cli/report_generator.py,Other,450,#AEB6BF
@@ -928,7 +928,7 @@ label,group,size,color
 ./src/learning_impact.py,Other,581,#AEB6BF
 ./src/learning_metrics.py,Other,396,#AEB6BF
 ./src/licensing/__init__.py,Other,60,#AEB6BF
-./src/licensing/entitlement.py,Other,130,#AEB6BF
+./src/licensing/entitlement.py,Other,132,#AEB6BF
 ./src/licensing/license.py,Other,412,#AEB6BF
 ./src/licensing/merchant.py,Other,27,#AEB6BF
 ./src/licensing/pricing.py,Other,45,#AEB6BF
@@ -1170,8 +1170,8 @@ label,group,size,color
 ./tests/test_licence_record.py,Other,94,#AEB6BF
 ./tests/test_license.py,Other,340,#AEB6BF
 ./tests/test_license_loop_e2e.py,Other,130,#AEB6BF
-./tests/test_licensing_cli.py,Other,167,#AEB6BF
-./tests/test_licensing_outbound_wording.py,Other,248,#AEB6BF
+./tests/test_licensing_cli.py,Other,187,#AEB6BF
+./tests/test_licensing_outbound_wording.py,Other,402,#AEB6BF
 ./tests/test_llm_cache.py,Other,190,#AEB6BF
 ./tests/test_llm_client.py,Other,494,#AEB6BF
 ./tests/test_llm_errors.py,Other,26,#AEB6BF

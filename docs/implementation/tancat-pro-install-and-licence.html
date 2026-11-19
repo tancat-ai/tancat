@@ -49,14 +49,17 @@ cd tancat &amp;&amp; uv sync &amp;&amp; playwright install chromium</pre>
 <pre>bash launch_ui.sh      # Streamlit UI
 bash launch_cli.sh     # interactive CLI</pre>
 
-<h2>4. Activate your licence</h2>
-<p>Your licence key arrives by email when you purchase. Give it to the deployment in <strong>any one</strong> of these three ways:</p>
+<h2>4. Add your licence file</h2>
+<p>Your licence arrives as a <strong>signed file</strong>. Save it where the product reads it and the signature is
+verified offline against a public key built into the product &mdash; nothing is switched on, and no call is made to us or
+to any store.</p>
 <ul>
-  <li><strong>Environment variable</strong> (best for CI): <code>AITEST_LICENSE_KEY=&lt;your key&gt;</code></li>
-  <li><strong>A file you point at</strong>: <code>AITEST_LICENSE_FILE=/path/to/license.key</code></li>
-  <li><strong>The default key file</strong>: save the key as <code>~/.ai-test-gen/license.key</code></li>
+  <li><strong>Where it goes:</strong> run <code>tancat licence status</code> and it prints the path, whether or not a file is
+    there yet. Save the file there as <code>licence.signed.json</code>.</li>
+  <li><strong>Or point at it</strong> (best for CI): <code>AITEST_LICENCE_FILE=/etc/tancat/licence.signed.json</code></li>
+  <li><strong>Confirm it:</strong> <code>tancat licence status</code> reports the source, licence id, buyer and window end.</li>
 </ul>
-<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the key is missing or invalid the product keeps working on the free tier; it never locks you out of the free core.</div>
+<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the file is missing or refused, the product keeps working on the free tier; it never locks you out of the free core.</div>
 
 <h2>5. Where your data goes</h2>
 <p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint, <strong>your</strong> target site, and at most <strong>one version check a day</strong> to pypi.org if you leave the update check on &mdash; no telemetry. Licensing never touches the network: your licence file is verified offline against a public key built into the product. The version check sends nothing about you and settings turns it off. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
