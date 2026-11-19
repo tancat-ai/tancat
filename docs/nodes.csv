@@ -927,7 +927,7 @@ label,group,size,color
 ./src/learning_impact.py,Other,581,#AEB6BF
 ./src/learning_metrics.py,Other,396,#AEB6BF
 ./src/licensing/__init__.py,Other,45,#AEB6BF
-./src/licensing/entitlement.py,Other,172,#AEB6BF
+./src/licensing/entitlement.py,Other,181,#AEB6BF
 ./src/licensing/license.py,Other,137,#AEB6BF
 ./src/licensing/merchant.py,Other,27,#AEB6BF
 ./src/licensing/pricing.py,Other,45,#AEB6BF
@@ -983,7 +983,7 @@ label,group,size,color
 ./src/run_utils.py,utility,79,#98D8C8
 ./src/scraper.py,context,1031,#96CEB4
 ./src/section_scoper.py,intelligence,305,#45B7D1
-./src/secure_config.py,utility,250,#98D8C8
+./src/secure_config.py,utility,260,#98D8C8
 ./src/self_healing.py,refinement,934,#FFEAA7
 ./src/semantic_candidate_ranker.py,refinement,442,#FFEAA7
 ./src/semantic_matcher.py,refinement,239,#FFEAA7
@@ -1010,7 +1010,7 @@ label,group,size,color
 ./src/ui/ui_run_comparison.py,Other,117,#AEB6BF
 ./src/ui/ui_run_results.py,Other,1375,#AEB6BF
 ./src/ui/ui_saved_packages.py,Other,411,#AEB6BF
-./src/ui/ui_sidebar.py,Other,473,#AEB6BF
+./src/ui/ui_sidebar.py,Other,472,#AEB6BF
 ./src/ui_pipeline.py,interface,515,#FF6B6B
 ./src/url_guard.py,Other,350,#AEB6BF
 ./src/url_inference.py,refinement,49,#FFEAA7
@@ -1166,6 +1166,7 @@ label,group,size,color
 ./tests/test_learning_metrics.py,Other,85,#AEB6BF
 ./tests/test_licence_bsl.py,Other,589,#AEB6BF
 ./tests/test_licence_elections.py,Other,210,#AEB6BF
+./tests/test_licence_enforcement.py,Other,127,#AEB6BF
 ./tests/test_licence_record.py,Other,94,#AEB6BF
 ./tests/test_license.py,Other,178,#AEB6BF
 ./tests/test_licensing_cli.py,Other,187,#AEB6BF
@@ -1252,7 +1253,7 @@ label,group,size,color
 ./tests/test_script_hooks.py,Other,159,#AEB6BF
 ./tests/test_secret_scan.py,Other,81,#AEB6BF
 ./tests/test_section_scoper.py,Other,371,#AEB6BF
-./tests/test_secure_config.py,Other,316,#AEB6BF
+./tests/test_secure_config.py,Other,425,#AEB6BF
 ./tests/test_self_healing.py,Other,1891,#AEB6BF
 ./tests/test_self_healing_timeout.py,Other,97,#AEB6BF
 ./tests/test_semantic_candidate_ranker.py,Other,307,#AEB6BF
