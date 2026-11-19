@@ -1,24 +1,13 @@
-"""Which licence this deployment runs under, and when the window closes (j-0309).
+"""The licence this deployment runs under, and when its window closes (j-0309).
 
-Two sources, one precedence rule:
+One source: **a signed licence file we issued** (``signed_file.py``), or nothing,
+in which case the deployment is Free. There is no store key, no activation call and
+no provider anywhere in this path - the product cannot be locked out of a licence
+by a payment provider's decisions.
 
-1. **A signed licence file we issued** (``signed_file.py``) - verified offline,
-   and the source of truth for the tier and the update window.
-2. **The legacy store key** (``activation.py``) - kept working exactly as it does
-   today, because buyers hold those keys and Lemon Squeezy's activation service is
-   still answering. It is the fallback, not the future.
-
-**A valid signed file wins when present.** If one is present but does not verify,
-it is *reported* rather than swallowed, and the legacy key is still honoured: an
-independent proof of purchase should not stop working because a file was corrupted
-in an email client. Both cases are visible in ``source`` and ``problem``.
-
-**The window** comes from the signed file's ``window_end``. The legacy path keeps
-its own rule (purchase date + 12 months, recorded at activation) until the store
-goes; nothing here re-derives one from the other.
-
-**No call is made by any function in this module.** The signed-file path imports no
-network module; the legacy path only reads the local file that activation wrote.
+**No function here makes a network call.** The signed file is verified locally
+against the public key compiled into the build; the only files touched are the
+licence file and the settings directory.
 """
 
 from __future__ import annotations
@@ -28,12 +17,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
-from src.licensing import activation
-from src.licensing.merchant import MERCHANT_OF_RECORD
 from src.licensing.signed_file import SignedLicence, verify_signed_file
+from src.licensing.window import RELEASE_DATE, RENEWAL_COPY, WindowDecision
 
 __all__ = [
-    "MIGRATION_PARAGRAPH",
     "LicenceState",
     "default_signed_path",
     "load_signed_licence",
@@ -42,22 +29,19 @@ __all__ = [
     "upgrade_check",
 ]
 
-#: What a buyer who already holds a store key is told. One paragraph, printed by
-#: ``tancat licence status`` and reproduced in the user docs.
-MIGRATION_PARAGRAPH = (
-    f"If you already hold a {MERCHANT_OF_RECORD} key, nothing changes: your key keeps working exactly "
-    "as it does today, and activation still happens once. When we send you a signed licence file, save "
-    "it at the path `tancat licence status` shows on its 'Signed licence file' line, and it is used in "
-    "preference to the key - verified offline, with no call to anyone. You can keep the key file as a "
-    "backup; it is simply no longer the first source."
-)
-
 #: Where a signed licence file is looked for, after ``AITEST_LICENCE_FILE``.
 SIGNED_FILENAME = "licence.signed.json"
 
 
+def default_signed_path() -> Path:
+    """The settings-dir path for a signed licence file."""
+    from src.secure_config import _config_dir
+
+    return Path(_config_dir()) / SIGNED_FILENAME
+
+
 def _date(value: object) -> date | None:
-    """Parse an ISO date or timestamp written by the activation path."""
+    """Parse an ISO date or timestamp, or ``None``."""
     text = str(value or "").strip()
     if not text:
         return None
@@ -68,13 +52,6 @@ def _date(value: object) -> date | None:
             return date.fromisoformat(text[:10])
         except ValueError:
             return None
-
-
-def default_signed_path() -> Path:
-    """The settings-dir path for a signed licence file."""
-    from src.secure_config import _config_dir
-
-    return Path(_config_dir()) / SIGNED_FILENAME
 
 
 def load_signed_licence(path: Path | None = None) -> tuple[SignedLicence | None, Path | None, str]:
@@ -103,7 +80,7 @@ def load_signed_licence(path: Path | None = None) -> tuple[SignedLicence | None,
 class LicenceState:
     """The licence this deployment holds, and whether a build may run under it."""
 
-    source: str  # "signed" | "legacy" | "none"
+    source: str  # "signed" | "none"
     tier: str
     window_end: date | None
     licence: SignedLicence | None = None
@@ -115,20 +92,11 @@ class LicenceState:
         return self.window_end is None or build_date <= self.window_end
 
 
-def resolve(build_date: date | None = None) -> LicenceState:
-    """The licence in force: signed file first, legacy key second, Free otherwise."""
+def resolve() -> LicenceState:
+    """The licence in force: the signed file, or Free."""
     signed, path, problem = load_signed_licence()
     if signed is not None:
         return LicenceState("signed", signed.tier, signed.window_end, licence=signed, path=path)
-
-    legacy = activation.read_licence()
-    if legacy:
-        decision = activation.entitlement(legacy, build_date=build_date)
-        purchased = _date(legacy.get("key_created_at"))
-        end = decision.window_end or (activation.window_end(purchased) if purchased else None)
-        tier = str(legacy.get("tier") or "pro")
-        return LicenceState("legacy", tier, end, problem=problem, path=activation.default_licence_path())
-
     return LicenceState("none", "free", None, problem=problem)
 
 
@@ -139,29 +107,24 @@ def _refusal(state: LicenceState, build_date: date, installed_version: str) -> s
     )
     return (
         f"This build was released after your update window ended on {end}. {held_text} - "
-        f"nothing on disk has changed. To use this build, {activation.RENEWAL_COPY}"
+        f"nothing on disk has changed. To use this build, {RENEWAL_COPY}"
     )
 
 
-def startup_check(*, build_date: date | None = None, installed_version: str = "") -> activation.WindowDecision:
+def startup_check(*, build_date: date | None = None, installed_version: str = "") -> WindowDecision:
     """May this build start? The backstop for a wheel installed by hand.
 
-    A Free install (no licence at all) is never refused, and the window is only
-    ever consulted for a licence that carries one.
+    A Free install (no licence file) is never refused, and the window is only
+    consulted for a licence that carries one.
     """
-    build = build_date or activation.RELEASE_DATE
-    state = resolve(build_date=build)
-    if not installed_version:
-        # The activation path records the version the buyer is running; use it so
-        # the refusal names something they can go back to.
-        stored = activation.read_licence() or {}
-        installed_version = str(stored.get("installed_version") or "")
+    build = build_date or RELEASE_DATE
+    state = resolve()
     if state.source == "none" or state.allows_build(build):
         message = "No licence file: running as Free Community." if state.source == "none" else ""
-        return activation.WindowDecision(True, message, state.window_end)
-    return activation.WindowDecision(False, _refusal(state, build, installed_version), state.window_end)
+        return WindowDecision(True, message, state.window_end)
+    return WindowDecision(False, _refusal(state, build, installed_version), state.window_end)
 
 
-def upgrade_check(*, build_date: date | None = None, installed_version: str = "") -> activation.WindowDecision:
+def upgrade_check(*, build_date: date | None = None, installed_version: str = "") -> WindowDecision:
     """The gate an upgrade must pass before it replaces the installed version."""
     return startup_check(build_date=build_date, installed_version=installed_version)

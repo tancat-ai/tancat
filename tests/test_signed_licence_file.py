@@ -24,7 +24,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from src.licensing import activation, entitlement, signed_file
+from src.licensing import entitlement, signed_file
 from src.licensing.merchant import MERCHANT_OF_RECORD
 from src.licensing.signed_file import REQUIRED_FIELDS, signed_file_text, verify_signed_file
 
@@ -163,7 +163,6 @@ def test_an_expired_window_refuses_an_upgrade_and_a_startup(
         window_end=(purchased + timedelta(days=30)).isoformat(),
     )
     monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.setattr(activation, "read_licence", lambda path=None: None)
 
     build = purchased + timedelta(days=400)
 
@@ -185,7 +184,6 @@ def test_a_build_inside_the_window_runs(
     licence_path = tmp_path / "licence.signed.json"
     payload = _write_licence(licence_path, private)
     monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.setattr(activation, "read_licence", lambda path=None: None)
 
     build = date.fromisoformat(payload["purchased_at"]) + timedelta(days=10)
     decision = entitlement.startup_check(build_date=build)
@@ -200,7 +198,6 @@ def test_a_build_inside_the_window_runs(
 
 def test_no_file_and_no_key_is_free(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AITEST_LICENCE_FILE", str(tmp_path / "absent.json"))
-    monkeypatch.setattr(activation, "read_licence", lambda path=None: None)
 
     state = entitlement.resolve()
     assert state.source == "none"
@@ -208,41 +205,15 @@ def test_no_file_and_no_key_is_free(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert entitlement.startup_check().allowed, "a Free install must never be refused"
 
 
-def test_a_signed_file_wins_over_a_store_key(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_key: tuple[bytes, str]
-) -> None:
-    private, _ = trusted_key
-    licence_path = tmp_path / "licence.signed.json"
-    _write_licence(licence_path, private, tier="pro")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.setattr(activation, "read_licence", lambda path=None: {"key": "legacy", "key_created_at": "2020-01-01"})
+def test_the_merchant_of_record_is_unnamed_and_sits_in_one_constant() -> None:
+    """No provider is signed yet, so the copy names the role and nobody else."""
+    assert MERCHANT_OF_RECORD == "our merchant of record", "a provider is named in the constant"
 
-    state = entitlement.resolve()
-    assert state.source == "signed"
-    assert state.tier == "pro"
-    assert state.window_end == date(2027, 11, 10)
+    from src.licensing import merchant
 
-
-def test_a_broken_signed_file_falls_back_to_the_key_and_says_so(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A corrupted file must not strand a buyer who also holds a working key."""
-    licence_path = tmp_path / "licence.signed.json"
-    licence_path.write_text('{"format": "tancat-licence/1", "payload": {}, "signature": "AAAA"}', encoding="utf-8")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.setattr(
-        activation,
-        "read_licence",
-        lambda path=None: {"key": "legacy", "key_created_at": "2026-01-01", "tier": "pro"},
-    )
-
-    state = entitlement.resolve()
-    assert state.source == "legacy"
-    assert state.problem, "the broken file must be reported, not swallowed"
-
-
-def test_the_merchant_name_lives_in_one_constant() -> None:
-    """A rename must be one edit; a literal elsewhere would drift."""
+    assert "merchant of record" in merchant.MERCHANT_OF_RECORD
+    # No module may hardcode a store or provider name in copy.
+    provider_names = ("lemon squeezy", "lemonsqueezy", "paddle", "polar.sh", "stripe", "gumroad", "creem")
     spelled: list[str] = []
     for path in sorted((ROOT / "src").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
@@ -257,16 +228,12 @@ def test_the_merchant_name_lives_in_one_constant() -> None:
         }
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
-                if MERCHANT_OF_RECORD.lower() in node.value.lower():
+                low = node.value.lower()
+                if any(name in low for name in provider_names):
                     spelled.append(path.relative_to(ROOT).as_posix())
                     break
 
-    # Copy is what a rename has to change; explanatory docstrings may name the store.
-    assert spelled == ["src/licensing/merchant.py"], (
-        f"the merchant name is spelled in copy outside merchant.py: {spelled}"
-    )
-    assert MERCHANT_OF_RECORD
-    assert MERCHANT_OF_RECORD in entitlement.MIGRATION_PARAGRAPH
+    assert spelled == [], f"a provider is named in product copy: {spelled}"
 
 
 # ---------------------------------------------------------------------------
@@ -306,28 +273,19 @@ def test_verification_works_with_the_socket_module_disabled(
     assert result.valid, result.reason
 
 
-def test_the_migration_paragraph_is_in_the_user_docs() -> None:
-    """Existing key holders must be told, in the page they already read."""
-    docs = (ROOT / "docs" / "user" / "reference" / "licensing.md").read_text(encoding="utf-8")
-    assert "already hold" in docs.lower()
-    assert "signed licence file" in docs
-    assert "offline" in docs.lower() or "no call" in docs.lower()
-
-
 # ---------------------------------------------------------------------------
-# The signed file is the licence: it sets the tier, and issuing keeps the key out
+# The signed file is the licence
 # ---------------------------------------------------------------------------
 
 
 def test_a_signed_file_grants_its_tier_with_no_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_key: tuple[bytes, str]
 ) -> None:
-    """The point of the file: entitlement comes from it, not from a store key."""
+    """The point of the file: entitlement comes from it, and nothing else."""
     private, _ = trusted_key
     licence_path = tmp_path / "licence.signed.json"
     _write_licence(licence_path, private, tier="pro")
     monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.setattr(activation, "read_licence", lambda path=None: None)
     monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
 
     from src.licensing.license import effective_tier, license_status
@@ -336,75 +294,49 @@ def test_a_signed_file_grants_its_tier_with_no_token(
     assert effective_tier() == "pro"
 
 
-def test_the_issuing_script_refuses_a_key_inside_the_repository(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The signing key must never live where a commit could pick it up."""
-    sys_path = str(ROOT / "scripts" / "maintenance")
-    import sys
+def test_nothing_in_the_licensing_package_can_make_a_call() -> None:
+    """j-0309: the licensing path never touches the network, at all.
 
-    sys.path.insert(0, sys_path)
-    try:
-        import issue_licence
-    finally:
-        sys.path.remove(sys_path)
+    Parsing modules may import ``urllib.parse`` (a pure string module); anything
+    that can open a connection must not appear anywhere in ``src/licensing/``.
+    """
+    network = {"socket", "http", "requests", "httpx", "aiohttp", "ssl", "ftplib", "smtplib"}
 
-    private, _ = _keypair()
-    inside = ROOT / ".licence-key-for-test"
-    inside.write_bytes(base64.b64encode(private))
-    try:
-        monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(inside))
-        monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
-        with pytest.raises(issue_licence.SigningKeyLocationError):
-            issue_licence.load_signing_key()
-    finally:
-        inside.unlink(missing_ok=True)
+    offenders: dict[str, list[str]] = {}
+    for path in sorted((ROOT / "src" / "licensing").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        found: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".")[0] in network or alias.name in {"urllib.request", "urllib.error"}:
+                        found.add(alias.name)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                module = node.module
+                if module.split(".")[0] in network or module in {"urllib.request", "urllib.error"}:
+                    found.add(module)
+        if found:
+            offenders[path.relative_to(ROOT).as_posix()] = sorted(found)
+
+    assert offenders == {}, f"the licensing package can call out: {offenders}"
 
 
-def test_the_issuing_script_writes_a_file_that_verifies(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_key: tuple[bytes, str]
-) -> None:
-    private, public = trusted_key
-    import sys
-
-    sys.path.insert(0, str(ROOT / "scripts" / "maintenance"))
-    try:
-        import issue_licence
-    finally:
-        sys.path.remove(str(ROOT / "scripts" / "maintenance"))
-
-    key_file = tmp_path / "signing.key"
-    key_file.write_text(base64.b64encode(private).decode("ascii"), encoding="utf-8")
-    out = tmp_path / "TC-1.json"
-    monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(key_file))
-    monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
-
-    code = issue_licence.main(
-        [
-            "--id",
-            "TC-2026-000999",
-            "--buyer",
-            "order 9001 / buyer@example.com",
-            "--purchased",
-            "2026-11-16",
-            "--out",
-            str(out),
-        ]
-    )
-    assert code == 0
-    result = verify_signed_file(out.read_text(encoding="utf-8"), public)
-    assert result.valid, result.reason
-    assert result.licence is not None
-    assert result.licence.window_end == date(2027, 11, 16)
-    assert issue_licence.public_key_b64(private) == public
+def test_the_activation_path_is_gone() -> None:
+    """No store activation module, no store ids, no activate URL anywhere in src/."""
+    assert not (ROOT / "src" / "licensing" / "activation.py").exists()
+    text = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace") for path in (ROOT / "src").rglob("*.py")
+    ).lower()
+    assert "api.lemonsqueezy.com" not in text
+    assert "licenses/activate" not in text
 
 
 # ---------------------------------------------------------------------------
 # The trust root is a real key, not a placeholder
 # ---------------------------------------------------------------------------
 
-#: Keys that must never ship as the trust root: a zero key, a repeated byte, and
-#: the 2026-09-28 pair that the 2026-11-18 ceremony superseded.
+#: Keys that must never ship as the trust root: the 2026-09-28 pair the 2026-11-18
+#: ceremony superseded.
 RETIRED_OR_PLACEHOLDER_KEYS = {
     "2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8=",  # ceremony 2026-09-28, retired
 }
@@ -432,8 +364,6 @@ def test_a_file_signed_with_the_owner_key_verifies_against_the_vendored_root() -
     if not key_path.exists():
         pytest.skip("the owner's signing key is not on this machine")
 
-    from cryptography.hazmat.primitives import serialization
-
     private = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
     assert isinstance(private, ed25519.Ed25519PrivateKey)
     raw = private.private_bytes(
@@ -445,17 +375,12 @@ def test_a_file_signed_with_the_owner_key_verifies_against_the_vendored_root() -
     assert result.licence is not None and result.licence.tier == "pro"
 
 
-def test_the_issuing_script_accepts_the_pem_key_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The owner's key is a PKCS8 PEM, so the script must read that form too."""
-    from cryptography.hazmat.primitives import serialization
+# ---------------------------------------------------------------------------
+# The issuing script
+# ---------------------------------------------------------------------------
 
-    private, public = _keypair()
-    key = ed25519.Ed25519PrivateKey.from_private_bytes(private)
-    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
-    key_file = tmp_path / "signing.pem"
-    key_file.write_bytes(pem)
-    out = tmp_path / "TC-PEM.json"
 
+def _issue_module() -> Any:
     import sys
 
     sys.path.insert(0, str(ROOT / "scripts" / "maintenance"))
@@ -463,7 +388,69 @@ def test_the_issuing_script_accepts_the_pem_key_form(tmp_path: Path, monkeypatch
         import issue_licence
     finally:
         sys.path.remove(str(ROOT / "scripts" / "maintenance"))
+    return issue_licence
 
+
+def test_the_issuing_script_refuses_a_key_inside_the_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The signing key must never live where a commit could pick it up."""
+    issue_licence = _issue_module()
+
+    private, _ = _keypair()
+    inside = ROOT / ".licence-key-for-test"
+    inside.write_bytes(base64.b64encode(private))
+    try:
+        monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(inside))
+        monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
+        with pytest.raises(issue_licence.SigningKeyLocationError):
+            issue_licence.load_signing_key()
+    finally:
+        inside.unlink(missing_ok=True)
+
+
+def test_the_issuing_script_writes_a_file_that_verifies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, trusted_key: tuple[bytes, str]
+) -> None:
+    private, public = trusted_key
+    issue_licence = _issue_module()
+
+    key_file = tmp_path / "signing.key"
+    key_file.write_text(base64.b64encode(private).decode("ascii"), encoding="utf-8")
+    out = tmp_path / "TC-1.json"
+    monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(key_file))
+    monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
+
+    code = issue_licence.main(
+        [
+            "--id",
+            "TC-2026-000999",
+            "--buyer",
+            "order 9001 / buyer@example.com",
+            "--purchased",
+            "2026-11-16",
+            "--out",
+            str(out),
+        ]
+    )
+    assert code == 0
+    result = verify_signed_file(out.read_text(encoding="utf-8"), public)
+    assert result.valid, result.reason
+    assert result.licence is not None
+    assert result.licence.window_end == date(2027, 11, 16)
+    assert issue_licence.public_key_b64(private) == public
+
+
+def test_the_issuing_script_accepts_the_pem_key_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The owner's key is a PKCS8 PEM, so the script must read that form too."""
+    private, public = _keypair()
+    key = ed25519.Ed25519PrivateKey.from_private_bytes(private)
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    key_file = tmp_path / "signing.pem"
+    key_file.write_bytes(pem)
+    out = tmp_path / "TC-PEM.json"
+
+    issue_licence = _issue_module()
     monkeypatch.setenv("TANCAT_LICENCE_SIGNING_KEY_FILE", str(key_file))
     monkeypatch.delenv("TANCAT_LICENCE_SIGNING_KEY", raising=False)
     assert issue_licence.main(["--id", "TC-2026-000777", "--buyer", "x", "--out", str(out)]) == 0

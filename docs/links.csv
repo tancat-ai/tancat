@@ -1275,8 +1275,8 @@ source,target,type
 ./scripts/license_gen.py,./src/licensing/license.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/input_parser.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/test_case_orchestrator.py,import
-./scripts/maintenance/issue_licence.py,./src/licensing/activation.py,import
 ./scripts/maintenance/issue_licence.py,./src/licensing/signed_file.py,import
+./scripts/maintenance/issue_licence.py,./src/licensing/window.py,import
 ./scripts/parity_check.py,./src/evidence_export.py,import
 ./scripts/parity_check.py,./src/evidence_index.py,import
 ./scripts/parity_check.py,./src/export_service.py,import
@@ -1395,9 +1395,7 @@ source,target,type
 ./src/cli/headless.py,./src/usage_meter.py,import
 ./src/cli/input_parser.py,./src/cli/config.py,import
 ./src/cli/main.py,./src/journey_scraper.py,import
-./src/cli/main.py,./src/licensing/activation.py,import
 ./src/cli/main.py,./src/licensing/entitlement.py,import
-./src/cli/main.py,./src/licensing/merchant.py,import
 ./src/cli/main.py,./src/llm_client.py,import
 ./src/cli/main.py,./src/llm_health.py,import
 ./src/cli/main.py,./src/pipeline_artifact_manager.py,import
@@ -1524,10 +1522,8 @@ source,target,type
 ./src/learning_metrics.py,./src/failure_classifier.py,import
 ./src/licensing/__init__.py,./src/licensing/license.py,import
 ./src/licensing/__init__.py,./src/licensing/tiers.py,import
-./src/licensing/activation.py,./src/licensing/merchant.py,import
-./src/licensing/activation.py,./src/secure_config.py,import
-./src/licensing/entitlement.py,./src/licensing/merchant.py,import
 ./src/licensing/entitlement.py,./src/licensing/signed_file.py,import
+./src/licensing/entitlement.py,./src/licensing/window.py,import
 ./src/licensing/entitlement.py,./src/secure_config.py,import
 ./src/licensing/license.py,./src/licensing/entitlement.py,import
 ./src/licensing/license.py,./src/licensing/tiers.py,import
@@ -2078,6 +2074,7 @@ source,target,type
 ./tests/test_license.py,./src/licensing/license.py,import
 ./tests/test_license.py,./src/licensing/tiers.py,import
 ./tests/test_license_loop_e2e.py,./src/licensing/license.py,import
+./tests/test_licensing_cli.py,./src/licensing/entitlement.py,import
 ./tests/test_llm_cache.py,./src/llm_cache.py,import
 ./tests/test_llm_cache.py,./src/semantic_candidate_ranker.py,import
 ./tests/test_llm_client.py,./src/llm_client.py,import

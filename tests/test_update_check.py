@@ -143,11 +143,24 @@ def test_the_manual_cli_check_prints_plainly(
 def test_the_upgrade_refuses_past_the_window_with_the_version_that_works(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from src.licensing import activation as A
+    from datetime import date
 
-    licence = tmp_path / "licence.json"
-    A.write_licence({"key": "k", "key_created_at": "2024-01-01", "installed_version": "1.2.0"}, licence)
-    monkeypatch.setattr(A, "default_licence_path", lambda: licence)
+    from src.licensing import entitlement, signed_file
+
+    state = entitlement.LicenceState(
+        "signed",
+        "pro",
+        date(2025, 1, 1),
+        licence=signed_file.SignedLicence(
+            id="TC-1",
+            product="tancat",
+            buyer_ref="x",
+            purchased_at=date(2024, 1, 1),
+            window_end=date(2025, 1, 1),
+            tier="pro",
+        ),
+    )
+    monkeypatch.setattr(entitlement, "resolve", lambda: state)
 
     assert cli_main.main(["update"]) == 3
     err = capsys.readouterr().err
@@ -159,11 +172,24 @@ def test_the_upgrade_refuses_past_the_window_with_the_version_that_works(
 def test_the_upgrade_inside_the_window_prints_the_command_and_does_not_shell_out(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from src.licensing import activation as A
+    from datetime import date
 
-    licence = tmp_path / "licence.json"
-    A.write_licence({"key": "k", "key_created_at": "2026-11-01", "installed_version": "1.2.0"}, licence)
-    monkeypatch.setattr(A, "default_licence_path", lambda: licence)
+    from src.licensing import entitlement, signed_file
+
+    state = entitlement.LicenceState(
+        "signed",
+        "pro",
+        date(2099, 1, 1),
+        licence=signed_file.SignedLicence(
+            id="TC-1",
+            product="tancat",
+            buyer_ref="x",
+            purchased_at=date(2026, 1, 1),
+            window_end=date(2099, 1, 1),
+            tier="pro",
+        ),
+    )
+    monkeypatch.setattr(entitlement, "resolve", lambda: state)
 
     assert cli_main.main(["update"]) == 0
     out = capsys.readouterr().out

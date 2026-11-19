@@ -119,12 +119,12 @@ def _user_docs() -> list[Path]:
     return sorted(DOCS.rglob("*.md"))
 
 
-def test_the_activation_module_exists() -> None:
-    """The pages are only held to this rule because the call is real."""
-    module = REPO_ROOT / "src" / "licensing" / "activation.py"
-    assert module.is_file()
-    text = module.read_text(encoding="utf-8")
-    assert "api.lemonsqueezy.com/v1/licenses/activate" in text
+def test_the_activation_path_is_gone() -> None:
+    """j-0309: licensing is offline, so no page may claim an activation call."""
+    assert not (REPO_ROOT / "src" / "licensing" / "activation.py").exists()
+    source = " ".join(p.read_text(encoding="utf-8", errors="replace") for p in (REPO_ROOT / "src").rglob("*.py"))
+    assert "api.lemonsqueezy.com" not in source.lower()
+    assert "licenses/activate" not in source.lower()
 
 
 def _pdf_text(path: Path) -> str:
@@ -179,7 +179,7 @@ def test_the_denial_rule_still_passes_the_three_known_good_shapes() -> None:
     """Why each passes: the cue word is about something else, or the customer acts."""
     allowed = [
         # "no others" counts the kinds of call, not the check.
-        "TanCat makes two kinds of call and no others: the activation request, and a version check at most once a day.",
+        "TanCat makes exactly one automatic call and no others: a version check at most once a day.",
         # This is what the check sends, not whether it happens.
         "The version check sends nothing about you.",
         # The customer may switch it off; the product still checks unless told not to.
@@ -200,27 +200,38 @@ def test_no_page_claims_no_outbound_traffic() -> None:
     assert offenders == {}, f"document(s) still claim no vendor traffic while activation calls out: {offenders}"
 
 
-def test_the_order_pdf_carries_the_activation_truth() -> None:
+def test_the_order_pdf_carries_the_one_call_truth() -> None:
     """The PDF is regenerated from its source; the shipped text must say so too."""
     text = _pdf_text(ORDER_PDF)
-    assert "once to our licensing service" in text, "the shipped PDF does not say one activation call"
+    assert "licensing service" not in text, "the shipped PDF still says there is a licensing call"
     assert "one version check a day" in text, "the shipped PDF does not state the daily version check"
-    assert "sends nothing about you" in text, "the shipped PDF does not draw the line"
+    assert "verified offline" in text, "the shipped PDF does not say licensing is offline"
     assert "installable Python packages" in text, "the shipped PDF describes update delivery the old way"
 
 
-def test_each_document_names_the_one_activation_call() -> None:
+def test_each_document_names_the_one_automatic_call() -> None:
     missing = [str(path.relative_to(REPO_ROOT)) for path, phrase in MUST_SAY.items() if phrase not in _flat(path)]
-    assert missing == [], f"document(s) that do not mention the activation call: {missing}"
+    assert missing == [], f"document(s) that do not mention the one automatic call: {missing}"
 
 
-def test_the_privacy_notice_names_both_runtime_recipients() -> None:
-    """Lemon Squeezy gets the key; PyPI gets the version question and nothing else."""
+def test_no_document_mentions_an_activation_call() -> None:
+    """The removed path must not survive in copy a buyer can read."""
+    offenders: dict[str, str] = {}
+    for name, text in _scanned_documents():
+        low = text.lower()
+        for stale in ("activation", "licensing service", "two kinds of call", "lemon squeezy"):
+            if stale in low:
+                offenders[name] = stale
+                break
+    assert offenders == {}, f"document(s) still describe the removed activation path: {offenders}"
+
+
+def test_the_privacy_notice_names_the_one_automatic_call() -> None:
+    """The version check is the only thing the product asks US for."""
     page = _flat(LANDING / "privacy.html")
-    assert "Lemon Squeezy" in page
-    assert re.search(r"single activation call to Lemon Squeezy", page), page[:200]
-    assert "pypi.org" in page, "the notice does not name what the version check contacts"
-    assert "sends nothing about you" in page, "the notice does not draw the line"
+    assert "version" in page.lower() and "check" in page.lower(), "the notice does not mention the check"
+    assert "sends nothing about you" in page or "carries nothing about you" in page, "the notice does not draw the line"
+    assert "Lemon Squeezy" not in page, "the notice still names a merchant as a runtime recipient"
 
 
 def test_the_install_footer_says_paid_once() -> None:
@@ -229,8 +240,9 @@ def test_the_install_footer_says_paid_once() -> None:
     assert "£399 per deployment, one price" not in page.replace("&pound;", "£")
 
 
-def test_the_terms_say_both_calls_and_that_the_product_works_offline() -> None:
+def test_the_terms_say_one_automatic_call_and_that_licensing_is_offline() -> None:
     page = _flat(LANDING / "terms.html")
-    assert "two kinds of outbound call and no others" in page
+    assert "exactly one automatic call" in page
     assert "version check at most once a day" in page
-    assert "works with no internet connection" in page
+    assert "licensing never touches the network" in page.lower()
+    assert "two kinds of outbound call" not in page

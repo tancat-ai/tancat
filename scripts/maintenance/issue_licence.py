@@ -39,8 +39,8 @@ if str(REPO_ROOT) not in sys.path:
 from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ed25519  # noqa: E402
 
-from src.licensing.activation import add_months  # noqa: E402
 from src.licensing.signed_file import PRODUCT, signed_file_text  # noqa: E402
+from src.licensing.window import add_months  # noqa: E402
 
 
 class SigningKeyLocationError(RuntimeError):

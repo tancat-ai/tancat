@@ -2,12 +2,11 @@
 
 The owner approved this on 2026-11-14, with conditions. Read them as the spec:
 
-- **The product still works fully offline.** TanCat makes two kinds of call and no
-  others: one when you activate a licence key (see ``src/licensing/activation.py``)
-  and a **version check at most once a day**, if you leave it on. Neither carries
-  test data, file names, usage or anything else about the customer - the version
-  check sends the request itself and nothing more, and the activation sends the
-  key you pasted and a name for the deployment.
+- **The product still works fully offline.** TanCat makes exactly one automatic
+  call and no others: a **version check at most once a day**, if you leave it on.
+  Licensing is verified offline from a signed license file, so it never touches the
+  network (j-0309). The check carries no test data, file names, usage or anything
+  else about the customer - it sends the request itself and nothing more.
 - **On by default, with an off switch.** The setting is ``update_check`` in the
   same store as the other preferences; its default is **on** (``True``). When it
   is off there is no call and no notice, ever.

@@ -612,7 +612,6 @@ Usage:
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
   tancat licence status      Show the licence and its update window.
-  tancat licence activate K  Activate a store key on this machine (one call, legacy path).
   tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
@@ -733,15 +732,12 @@ def _run_interactive() -> int:
 
 
 def _licence_command(argv: list[str]) -> int:
-    """``tancat licence status|activate`` - the only place a key is pasted.
+    """``tancat licence status`` - what this deployment holds, and its window.
 
-    ``status`` reads the local licence file and says what the window is;
-    ``activate`` makes the single call to the store (j-0304, the legacy path). Neither is
-    needed on a Free install.
+    One source: a signed licence file we issued, verified offline; otherwise Free.
+    There is no activation step and nothing to paste (j-0309).
     """
-    import getpass
-
-    from src.licensing import activation, entitlement
+    from src.licensing import entitlement
 
     action = argv[0] if argv else "status"
     if action == "status":
@@ -751,43 +747,22 @@ def _licence_command(argv: list[str]) -> int:
         if state.source == "none":
             print("No licence on this machine: running as Free Community.")
             print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
-            print("Or activate a store key with: tancat licence activate <key from your receipt>")
-            print()
-            print(entitlement.MIGRATION_PARAGRAPH)
             return 0
-        if state.licence is not None:
-            print(f"Source:       signed licence file ({state.path})")
-            print(f"Licence id:   {state.licence.id}")
-            print(f"Buyer:        {state.licence.buyer_ref}")
-            print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
-        else:
-            print(f"Source:       store key ({state.path})")
-            # A key holder is the person the migration paragraph is written for, so
-            # the path it mentions has to be on screen for them too (t-1461).
-            print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
+        print(f"Source:       signed licence file ({state.path})")
+        assert state.licence is not None
+        print(f"Licence id:   {state.licence.id}")
+        print(f"Buyer:        {state.licence.buyer_ref}")
+        print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
         print(f"Tier:         {state.tier}")
         print(f"Window ends:  {state.window_end.isoformat() if state.window_end else '(unknown)'}")
-        build = activation.RELEASE_DATE
+        build = entitlement.RELEASE_DATE
         print(f"This build:   {build.isoformat()} - {'inside' if state.allows_build(build) else 'AFTER'} the window")
         if not state.allows_build(build):
             print()
             print(entitlement.startup_check().message)
-        if state.source == "legacy":
-            print()
-            print(entitlement.MIGRATION_PARAGRAPH)
         return 0
 
-    if action == "activate":
-        key = argv[1] if len(argv) > 1 else ""
-        if not key:
-            from src.licensing.merchant import MERCHANT_OF_RECORD as _mor
-
-            key = getpass.getpass(f"Paste your {_mor} licence key: ").strip()
-        result = activation.activate(key, instance_name=str(Path.cwd()))
-        print(result.message)
-        return 0 if result.ok else 2
-
-    print("Usage: tancat licence [status|activate <key>]", file=sys.stderr)
+    print("Usage: tancat licence [status]", file=sys.stderr)
     return 2
 
 
@@ -861,15 +836,6 @@ def main(argv: list[str] | None = None) -> int:
     backstop = _startup_backstop()
     if backstop is not None:
         return backstop
-
-    # j-0304: last_seen_at is recorded on every start. A local file write, no
-    # call out - the licence file is the only thing touched.
-    try:
-        from src.licensing.activation import touch_last_seen
-
-        touch_last_seen()
-    except OSError:  # a read-only install still runs; the timestamp is a convenience
-        pass
 
     # j-0306: the daily version check runs off the main thread (never a wait), and
     # the notice prints only from the cache, once per new version per day.

@@ -37,18 +37,18 @@
 </style>
 <!-- =====================================================================
      TANCAT CHECKOUT CONFIG  -  the ONLY place to edit the paid path.
-     Owner: paste the Lemon Squeezy checkout URL for the Pro product
-     between the quotes below, then save and re-deploy the site.
+     Owner: paste the checkout URL from the merchant of record once the
+     store is live, then save and re-deploy the site.
      The pricing card's "Buy Pro" button reads this value, so no layout
      edit is ever needed. Leave it as "" until the store is live: the button
      then falls back to the contact section below.
      Example:
-       checkoutUrl: "https://tancat.lemonsqueezy.com/buy/1a2b3c4d-...."
+       checkoutUrl: "https://checkout.example.com/buy/PRODUCT-ID"
      ===================================================================== -->
 <script>
   window.TANCAT_CONFIG = {
-    // Lemon Squeezy checkout URL for "TanCat Pro Deployment" (the product
-    // page or its shareable checkout link). Empty string = use #contact.
+    // Checkout URL for "TanCat Pro Deployment" (the product page or its
+    // shareable checkout link). Empty string = use #contact.
     checkoutUrl: ""
   };
 </script>
@@ -343,7 +343,7 @@
   </div>
 </div>
 <div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing. Prices exclude taxes. A <strong class="text-slate-400">deployment</strong> is one installation serving one organisation.</div>
-<div class="text-center mt-3 text-xs font-mono text-slate-500">Update policy: a licence is perpetual for the version you receive and includes all updates released within 12 months of purchase. Updates after that are paid. Security fixes and bug fixes in your version line stay free. Updates are released as installable Python packages on the <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/releases" rel="noopener noreferrer" target="_blank">releases page</a>, and you upgrade the way you upgrade any Python tool. You choose when to install one. TanCat makes two kinds of call and no others: the activation request you trigger when you paste a licence key, and a version check at most once a day if you leave it on (it sends nothing about you; settings turns it off). No automatic upgrade - you choose when to install one.</div>
+<div class="text-center mt-3 text-xs font-mono text-slate-500">Update policy: a licence is perpetual for the version you receive and includes all updates released within 12 months of purchase. Updates after that are paid. Security fixes and bug fixes in your version line stay free. Updates are released as installable Python packages on the <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/releases" rel="noopener noreferrer" target="_blank">releases page</a>, and you upgrade the way you upgrade any Python tool. You choose when to install one. TanCat makes <strong class="text-slate-400">exactly one automatic call, and no others</strong> - a version check at most once a day if you leave it on - and licensing never touches the network: your licence file is verified offline, so a store closing cannot stop it working.</div></div>
 <div class="text-center mt-6 text-sm text-slate-400">
   Need a custom arrangement?
   <a class="text-amber-400 hover:text-amber-300 underline underline-offset-4" href="#contact">Talk to us</a>

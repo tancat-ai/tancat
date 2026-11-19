@@ -52,21 +52,21 @@ def test_the_updates_clause_describes_installable_packages_and_no_runtime_call()
     assert "installable Python packages" in page, "the updates clause does not say how updates arrive"
     assert "upgrade the way you upgrade any Python tool" in page, "the clause does not say how a customer upgrades"
     assert "delivered as files" not in page, "the clause still describes the old file delivery"
-    # j-0306: two kinds of call, and the product still works offline.
-    assert "two kinds of outbound call and no others" in page, "the clause does not state the calls it makes"
+    # j-0309: one automatic call (the version check); licensing is offline.
+    assert "exactly one automatic call" in page, "the clause does not state the one call it makes"
     assert "version check at most once a day" in page, "the clause does not state the daily version check"
-    assert "works with no internet connection" in page, "the clause does not say the product works offline"
+    assert "licensing never touches the network" in page.lower(), "the clause does not say licensing is offline"
     assert "choose when to install" in page, "the clause does not say the buyer chooses when to install"
 
 
-def test_lemon_squeezy_is_named_once_as_the_merchant_of_record() -> None:
+def test_the_merchant_of_record_is_named_by_role_not_by_company() -> None:
+    """No provider is signed yet, and no licence has been sold through one."""
     raw = TERMS.read_text(encoding="utf-8")
-    assert raw.count("Lemon Squeezy") == 1, (
-        f"Lemon Squeezy is named {raw.count('Lemon Squeezy')} times - once, in the payment clause"
-    )
     payment = _text(TERMS).split("Payment and refunds", 1)[1].split("Ending the licence", 1)[0]
-    assert "Lemon Squeezy" in payment, "the one mention is not in the payment clause"
-    assert "merchant of record" in payment, "the payment clause does not say what Lemon Squeezy is"
+    assert "merchant of record" in payment, "the payment clause does not name the merchant of record"
+    assert "seller of record" in payment, "the payment clause does not say who sells the transaction"
+    for provider in ("Lemon Squeezy", "Paddle", "Polar", "Stripe", "Gumroad", "Creem"):
+        assert provider not in raw, f"{provider} is named in the terms, but no provider is signed"
 
 
 def test_the_company_provides_support_and_the_developer_answers_it() -> None:
@@ -113,7 +113,7 @@ def test_the_dpa_states_our_role_and_the_only_personal_data_we_handle() -> None:
 
 def test_the_dpa_names_the_providers_and_where_they_sit() -> None:
     page = _text(DPA)
-    assert "Lemon Squeezy" in page and "merchant of record" in page, "the merchant of record is not named"
+    assert "merchant of record" in page, "the DPA does not name the merchant of record"
     assert "Zoho" in page, "the email provider is not named"
     assert "EU data centre" in page, "the email provider's data centre is not stated"
     assert "GitHub Pages" in page, "the site host is not named"
@@ -311,16 +311,12 @@ def test_every_page_that_states_the_delivery_also_rules_out_both_shortcuts() -> 
         # j-0306: the guarantees are now "one activation call" and "a version
         # check at most once a day". A page that claims no vendor call at all, or
         # leaves the version check out, is the false one.
-        if "no call to a vendor server" in page:
-            problems.append(f"{path.relative_to(ROOT)}: still claims there is no vendor call at all")
-        if "activation" not in page.lower():
-            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the activation call")
+        if "activation" in page.lower():
+            problems.append(f"{path.relative_to(ROOT)}: still describes the removed activation call")
         if "version check" not in page.lower():
             problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the daily version check")
-        # j-0306: the old guarantee was "no automatic update check"; the truth is
-        # now that the check exists and never installs anything by itself.
-        if "no automatic upgrade" not in page.lower() and "no automatic update check" not in page.lower():
-            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not that upgrades are chosen")
+        if "automatic" not in page.lower():
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the automatic-call policy")
     assert problems == [], (
         "a page leaves the product's update behaviour open:" + "\n" + "  " + ("\n" + "  ".join(problems))
     )

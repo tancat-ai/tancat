@@ -362,7 +362,7 @@ def _signed_licence_status() -> LicenseResult | None:
 
     A signed file is a licence we issued, so it is the first source: its tier is
     the effective tier and it needs no token. Imported lazily because the
-    activation/entitlement modules import this one for the trust root.
+    entitlement imports this module for the trust root.
     """
     try:
         from src.licensing.entitlement import resolve
