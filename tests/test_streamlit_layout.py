@@ -30,7 +30,6 @@ from tests.streamlit_app_test_helpers import (
     BASE_TOGGLE_LABELS,
     CHECK_LLM_BUTTON,
     EXACT_SET_HINT,
-    LICENCE_BUTTON_LABELS,
     build_sidebar_app,
     expected_selectbox_labels,
     expected_text_input_labels,
@@ -98,18 +97,13 @@ class TestSidebarWidgets:
         assert set(labels) == set(BASE_TOGGLE_LABELS), f"Sidebar toggle set changed. Got: {labels}{EXACT_SET_HINT}"
 
     def test_sidebar_button_set_is_exact(self, at: AppTest) -> None:
-        """Sidebar buttons must be exactly "Check My LLM" plus one licence action.
+        """Sidebar buttons must be exactly "Check My LLM".
 
-        The licence action label depends on whether a licence is installed, so
-        either known label is accepted - but a third button (e.g. a restored
-        preset) still fails.
+        j-0309: the licence is a signed file, so there is no paste action any more -
+        a restored second button (or a preset) still fails.
         """
         labels = [w.label for w in at.sidebar.button]
-        assert len(labels) == 2, f"Sidebar should have exactly 2 buttons. Got: {labels}"
-        assert CHECK_LLM_BUTTON in labels, f"Missing the 'Check My LLM' button. Got: {labels}"
-        licence_labels = set(labels) - {CHECK_LLM_BUTTON}
-        assert len(licence_labels) == 1, f"Expected exactly one licence action. Got: {labels}"
-        assert next(iter(licence_labels)) in LICENCE_BUTTON_LABELS, f"Unexpected licence button label. Got: {labels}"
+        assert labels == [CHECK_LLM_BUTTON], f"Sidebar buttons changed. Got: {labels}"
 
     def test_sidebar_has_consent_mode_selector(self, at: AppTest) -> None:
         """The Consent Handling selectbox is present (it drives consent mode)."""

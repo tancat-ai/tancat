@@ -314,14 +314,14 @@ def test_a_planted_key_instruction_is_caught() -> None:
         target.write_text(
             original.replace(
                 "&mdash; nothing is switched on, and no call is made to us or",
-                "by pasting it as AITEST_LICENSE_KEY &mdash; nothing is switched on, and no call is made to us or",
+                "by pasting your licence key &mdash; nothing is switched on, and no call is made to us or",
                 1,
             ),
             encoding="utf-8",
         )
         found = [word for word in DEAD_KEY_WORDS if word.lower() in _flat(target).lower()]
         assert found, "the plant did not land - the test would pass vacuously"
-        assert "AITEST_LICENSE_KEY" in found
+        assert "licence key" in found
     finally:
         target.write_text(original, encoding="utf-8")
 

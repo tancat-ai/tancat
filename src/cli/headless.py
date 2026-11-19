@@ -140,7 +140,7 @@ def _license_usage_section() -> dict[str, Any]:
             "license": {
                 "status": meter.summary().license_status,
                 "tier": meter.summary().tier,
-                "token_present": _license_token_present(),
+                "token_present": _licence_file_present(),
             },
             "usage": meter.summary().to_dict(),
         }
@@ -148,11 +148,12 @@ def _license_usage_section() -> dict[str, Any]:
         return {"license": {"status": "unknown", "tier": "free", "error": str(exc)}, "usage": {}}
 
 
-def _license_token_present() -> bool:
+def _licence_file_present() -> bool:
+    """True when a signed licence file is in force (j-0309: there is no token)."""
     try:
-        from src.licensing.license import load_license
+        from src.licensing.entitlement import resolve
 
-        return bool(load_license())
+        return resolve().source == "signed"
     except Exception:  # pragma: no cover - defensive
         return False
 
@@ -361,8 +362,8 @@ def run(args: argparse.Namespace) -> int:
         lstat = license_section.get("license", {})
         if lstat.get("status") in ("expired_blocked", "invalid") and lstat.get("token_present"):
             print(
-                f"ERROR: license '{lstat.get('status')}' — set a valid AITEST_LICENSE_KEY "
-                "(or AITEST_LICENSE_FILE) or clear AITEST_ENFORCE_LICENSING.",
+                f"ERROR: license '{lstat.get('status')}' — save a valid signed licence file "
+                "(run 'tancat licence status' for the path) or clear AITEST_ENFORCE_LICENSING.",
                 file=sys.stderr,
             )
             return EXIT_CONFIG_ERROR

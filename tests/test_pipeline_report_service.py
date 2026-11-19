@@ -83,8 +83,6 @@ def test_free_deployment_is_refused_the_jira_report(tmp_path: Path, monkeypatch:
     No free allowance - the free reports must still be produced, and only
     report_jira.md is withheld.
     """
-    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
-    monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
     meter = _meter(tmp_path)
     monkeypatch.setattr("src.usage_meter.UsageMeter", lambda: meter)
 

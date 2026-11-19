@@ -1,28 +1,19 @@
-"""Licensing — tier config, claims, and ed25519 offline license validation.
+"""Licensing - the tier table, and one signed licence file verified offline.
 
-Phase 6e. Open-core honesty (spec §5.4 / §7.6): the repo is BSL 1.1
-(source-available; converts to Apache-2.0 after the Change Date); a
-license key is an *entitlement marker*, not DRM. A modified fork can strip any
-check. The key's real value is ToS/support entitlement, honest tier enforcement
-for the 99% who run stock builds, and the air-gap premium bundle. Everything
-here is purely local — **zero network calls** (the egress audit gate enforces
-that this stays true).
+**One mechanism (j-0309):** a signed licence file we issue, or nothing (Free). There
+is no token format and no activation step. Everything here is purely local -
+**zero network calls**, enforced by the AST test over this package and by the egress
+audit gate.
 """
 
 from src.licensing.license import (
-    GRACE_DAYS,
+    VENDORED_PUBLIC_KEY_B64,
     LicenseResult,
     LicenseStatus,
-    LicenseValidationError,
-    SigningKeyError,
     effective_tier,
     feature_enabled,
     license_status,
-    load_license,
-    save_license_key,
-    sign_license,
     vendor_public_key,
-    verify_license,
 )
 from src.licensing.tiers import (
     DEFAULT_TIERS,
@@ -38,11 +29,9 @@ from src.licensing.tiers import (
 __all__ = [
     "DEFAULT_TIERS",
     "FREE_TIER",
-    "GRACE_DAYS",
+    "VENDORED_PUBLIC_KEY_B64",
     "LicenseResult",
     "LicenseStatus",
-    "LicenseValidationError",
-    "SigningKeyError",
     "TierSpec",
     "effective_tier",
     "feature_enabled",
@@ -50,11 +39,7 @@ __all__ = [
     "is_paid_tier",
     "license_status",
     "limit_for",
-    "load_license",
-    "save_license_key",
-    "sign_license",
     "tier_claims",
     "tier_label",
     "vendor_public_key",
-    "verify_license",
 ]

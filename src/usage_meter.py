@@ -192,14 +192,14 @@ class UsageMeter:
 
     @property
     def runs_limit(self) -> int | None:
-        tier = effective_tier(now=_epoch(self._now)) if self._now else effective_tier()
+        tier = effective_tier()
         if is_paid_tier(tier):
             return None
         return self._int_env("AITEST_FREE_TIER_RUNS", limit_for("free", "runs_per_month", 25) or 25)
 
     @property
     def exports_limit(self) -> int | None:
-        tier = effective_tier(now=_epoch(self._now)) if self._now else effective_tier()
+        tier = effective_tier()
         if is_paid_tier(tier):
             return None
         return self._int_env("AITEST_FREE_TIER_EXPORTS", limit_for("free", "evidence_exports_per_month", 10) or 10)
@@ -289,8 +289,10 @@ class UsageMeter:
     # -- summary + gates -------------------------------------------------------
     def summary(self) -> UsageSummary:
         now = self._now or datetime.now(UTC)
-        status = license_status(now=_epoch(now))
-        tier = effective_tier(now=_epoch(now))
+        # The licence has no clock: its status comes from a signed file (j-0309), so
+        # only the usage window is measured against *now*.
+        status = license_status()
+        tier = effective_tier()
         start, end = monthly_window(now)
         return UsageSummary(
             tier=tier,

@@ -1,16 +1,16 @@
-# License Key Operations (Phase 6e)
+# Licence Signing Key Operations
 
 **Created:** 2026-09-06 (audit follow-up — BACKLOG B-053)
 **Owner:** Cat Tan Operations Ltd (company number 17576111; single-operator signing key holder)
-**Scope:** operational security of the ed25519 license signing key. For the validation code, see `src/licensing/license.py`; for the tier table, `src/licensing/tiers.py`; for the spec, `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4.
+**Scope:** operational security of the ed25519 licence signing key. For the validation code, see `src/licensing/signed_file.py` and `src/licensing/license.py`; for the tier table, `src/licensing/tiers.py`.
 
 ---
 
 ## 1. What exists today
 
-- **Offline ed25519 signing.** Keys are generated and tokens signed via `python scripts/license_gen.py` (`gen-keys` / `sign`). **No network calls are involved in validation** — the egress audit guarantees the licensing path adds zero outbound HTTP.
+- **Offline ed25519 signing.** A licence file is signed by `python scripts/maintenance/issue_licence.py`, which reads the private key from outside the repository. **No network calls are involved in validation** — the licensing path imports no network module and the egress audit reports zero flagged call sites.
 - **Vendored public key.** `src/licensing/license.py` ships `VENDORED_PUBLIC_KEY_B64`; it is the trust root for all stock builds and is **not overridable by the customer** (B-050, resolved: the customer-settable trust root was removed). The trust root must not be customer-settable — otherwise a stock build could self-sign its way into paid tier without a fork. Rotation ships with a product release (§5).
-- **Token:** `payload_b64 "." signature_b64` (custom format, `cryptography`'s ed25519 primitive). Payload carries `deployment_id`, `tier`, `claims`, `issued_at`, `expires_at`, `issuer`.
+- **The licence file:** JSON with `format`, a `payload` (`id`, `product`, `buyer_ref`, `purchased_at`, `window_end`, `tier`) and a base64 `signature` over the canonical payload. It is the only licence mechanism — there is no token format and no activation call (j-0309).
 
 ## 2. The single-operator risk (why this doc exists)
 
@@ -23,15 +23,15 @@ Both are existential for the licensing revenue model — this is the highest-val
 
 ## 3. Key generation & storage
 
-1. Generate on an offline machine: `python scripts/license_gen.py gen-keys`.
+1. Generate on an offline machine, e.g. `openssl genpkey -algorithm ed25519 -out tancat-licence-signing.key`, and keep the public half as base64 raw bytes for `VENDORED_PUBLIC_KEY_B64`.
 2. The **private key never enters the repo, cloud storage, or a chat transcript.** Store it in a secrets manager, or on encrypted offline media (LUKS/BitLocker volume, hardware token if available).
 3. Record (outside the key material): key ID, creation date, which deployment pubkey it corresponds to, and who holds it. Single-operator today — name a secondary holder *before* launch (even a sealed escrow copy with a lawyer or a co-founder).
 
 ## 4. Backup
 
 - Keep **at least two backups on separate media in separate locations** (e.g. one encrypted USB off-site, one secrets-manager entry).
-- **Test recovery**, not just backup: on a clean machine, restore the key, sign a test token, and verify it against the vendored pubkey. An untested backup is a hope, not a backup.
-- Re-test recovery after any `license_gen.py` format change.
+- **Test recovery**, not just backup: on a clean machine, restore the key, sign a test licence file with `issue_licence.py`, and verify it against the vendored public key (`tancat licence status`, or the acceptance test in `tests/test_signed_licence_file.py`). An untested backup is a hope, not a backup.
+- Re-test recovery after any change to the signed-file format.
 
 ## 5. Rotation (planned key compromise or periodic hygiene)
 
@@ -85,7 +85,7 @@ the shipped root**; the constant now holds the pair minted on 2026-11-18.
 
 Recorded 2026-09-29.
 
-- **Keypair generated:** 2026-09-28, offline, with `python scripts/license_gen.py gen-keys`.
+- **Keypair generated:** 2026-09-28, offline (this pair signed the older token format and is retired; see §8a for the current pair).
   The private half was copied into the owner's password manager; it lives there and **is not on
   this machine**.
 - **Acceptance test passed:** 2026-09-29. A 7-day `pro` token (`deployment_id` `owner-trust-test`)

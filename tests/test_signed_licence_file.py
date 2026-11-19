@@ -286,7 +286,6 @@ def test_a_signed_file_grants_its_tier_with_no_token(
     licence_path = tmp_path / "licence.signed.json"
     _write_licence(licence_path, private, tier="pro")
     monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence_path))
-    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
 
     from src.licensing.license import effective_tier, license_status
 

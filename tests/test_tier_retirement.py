@@ -17,7 +17,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from src.licensing.license import LicenseClaims, LicenseStatus, sign_license, verify_license
+import pytest
+
+from src.licensing import signed_file
+from src.licensing.license import LicenseStatus, license_status
 from src.licensing.tiers import RETIRED_TIERS, is_published_tier, published_tiers, tier_claims
 
 _LANDING = Path(__file__).resolve().parent.parent / "landing" / "index.html"
@@ -74,15 +77,15 @@ def test_pro_grants_the_support_the_page_promises() -> None:
 # -- backward compatibility of an already-issued licence ----------------------
 
 
-def test_licence_with_retired_airgap_key_still_verifies() -> None:
-    """A licence signed with the retired key must NOT silently downgrade to free.
+def test_licence_with_retired_airgap_key_still_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A signed licence naming the retired key must NOT silently downgrade to free.
 
-    ``verify_license`` maps an unknown tier key to ``free``, so deleting the key
-    would have quietly turned a paying deployment into the free tier. The key is
-    therefore kept resolvable.
+    An unknown tier is refused outright (``signed_file``) rather than demoted, and the
+    retired key stays resolvable, so a licence that named it still reports its own
+    claims.
     """
     import base64
-    from datetime import UTC, datetime, timedelta
+    from datetime import date
 
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -93,23 +96,31 @@ def test_licence_with_retired_airgap_key_still_verifies() -> None:
         serialization.PrivateFormat.Raw,
         serialization.NoEncryption(),
     )
-    pub = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    public = base64.b64encode(
+        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    ).decode()
+    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
 
-    now = datetime.now(UTC)
-    token = sign_license(
-        LicenseClaims(
-            deployment_id="test-deploy",
-            tier="airgap",
-            claims=(),
-            issued_at=now.isoformat(),
-            expires_at=(now + timedelta(days=30)).isoformat(),
-            issuer="test",
+    path = tmp_path / "licence.signed.json"
+    purchased = date(2026, 11, 1)
+    path.write_text(
+        signed_file.signed_file_text(
+            {
+                "id": "TC-TEST-AIRGAP",
+                "product": "tancat",
+                "buyer_ref": "test",
+                "period": purchased.isoformat(),
+                "purchased_at": purchased.isoformat(),
+                "window_end": "2099-01-01",
+                "tier": "airgap",
+            },
+            raw,
         ),
-        raw,
+        encoding="utf-8",
     )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
 
-    result = verify_license(token, base64.b64encode(pub).decode("ascii"))
+    result = license_status()
     assert result.status == LicenseStatus.VALID
-    # The retired tier's own claims survive; it did not fall back to free.
     assert result.tier == "airgap"
     assert "private_network" in result.claims

@@ -1,340 +1,178 @@
-"""Phase 6e — offline ed25519 license + tier tests.
+"""The licence gate: one signed file, verified offline, and the tier it grants (j-0309).
 
-Hermetic: sign/verify roundtrip, tamper rejection, expiry + grace, tier claims,
-unlicensed = free tier. No network. The trust root is the vendored constant
-(B-050: not customer-settable); end-to-end tests monkeypatch that constant.
+The token format is gone (t-1468). What is left to hold is the gate the rest of the
+product asks: ``license_status`` reports a valid signed file or Free, and
+``feature_enabled`` answers from the tier table. The signature-level tests live in
+``test_signed_licence_file.py``; these tests are about the gate itself.
+
+No network: the licensing package imports no network module, checked there.
 """
 
 from __future__ import annotations
 
-import time
-from datetime import UTC, datetime, timedelta
+import base64
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from src.licensing import license as _license_module
+from src.licensing import entitlement, signed_file
+from src.licensing import license as _license
 from src.licensing.license import (
-    GRACE_DAYS,
-    LicenseClaims,
+    VENDORED_PUBLIC_KEY_B64,
     LicenseStatus,
     effective_tier,
     feature_enabled,
     license_status,
-    sign_license,
-    verify_license,
+    vendor_public_key,
 )
 from src.licensing.tiers import feature_required_tier, limit_for, tier_claims
 
 
 def _keypair() -> tuple[bytes, str]:
-    import base64
-
-    from cryptography.hazmat.primitives import serialization
-
-    priv = ed25519.Ed25519PrivateKey.generate()
-    raw = priv.private_bytes(
-        serialization.Encoding.Raw,
-        serialization.PrivateFormat.Raw,
-        serialization.NoEncryption(),
+    private = ed25519.Ed25519PrivateKey.generate()
+    raw = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
     )
-    pub = priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    return raw, base64.b64encode(pub).decode()
+    public = base64.b64encode(
+        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    ).decode()
+    return raw, public
 
 
-def _claims(tier: str = "pro", **kw: Any) -> LicenseClaims:
-    now = datetime.now(UTC)
-    data = {
-        "deployment_id": kw.get("deployment_id", "test-deploy"),
-        "tier": tier,
-        "claims": kw.get("claims", ()),
-        "issued_at": kw.get("issued_at", now.isoformat()),
-        "expires_at": kw.get("expires_at", (now + timedelta(days=30)).isoformat()),
-        "issuer": kw.get("issuer", "cat-tan-operations"),
-    }
-    return LicenseClaims(**data)
+@pytest.fixture
+def signed_licence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """A valid signed licence file in force, verified against a throwaway key."""
+    private, public = _keypair()
+    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+    path = tmp_path / "licence.signed.json"
+    purchased = date(2026, 11, 10)
+    path.write_text(
+        signed_file.signed_file_text(
+            {
+                "id": "TC-2026-000421",
+                "product": "tancat",
+                "buyer_ref": "order 421 / buyer@example.com",
+                "purchased_at": purchased.isoformat(),
+                "window_end": (purchased + timedelta(days=365)).isoformat(),
+                "tier": "pro",
+            },
+            private,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+    return {"path": path, "private": private, "public": public}
 
 
-def _make_token(private_key: bytes, claims: LicenseClaims) -> str:
-    return sign_license(claims, private_key)
-
-
-# -- sign / verify roundtrip --------------------------------------------------
-
-
-def test_sign_verify_roundtrip() -> None:
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims(tier="pro"))
-    result = verify_license(token, pub)
-    assert result.status == LicenseStatus.VALID
-    assert result.tier == "pro"
-    assert result.deployment_id == "test-deploy"
-    assert result.usable is True
-    assert "pom" in tier_claims("pro")
-    assert "generate" in tier_claims("free")
-
-
-def test_tampered_payload_rejected() -> None:
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims())
-    payload, sig = token.split(".", 1)
-    # Deterministic forgery: decode → change a JSON field → re-encode.
-    import base64
-    import json
-
-    payload_json = json.loads(base64.urlsafe_b64decode(payload + "==").decode("utf-8"))
-    payload_json["tier"] = "airgap"  # an attacker trying to self-upgrade
-    payload_json["expires_at"] = "2999-01-01T00:00:00+00:00"
-    forged_payload = base64.urlsafe_b64encode(json.dumps(payload_json).encode("utf-8")).decode("ascii").rstrip("=")
-    forged = f"{forged_payload}.{sig}"
-    result = verify_license(forged, pub)
-    assert result.status == LicenseStatus.INVALID
-    assert "Signature" in result.reason
-
-
-def test_tampered_signature_rejected() -> None:
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims())
-    payload, sig = token.split(".", 1)
-    sig = ("A" if sig[0] != "A" else "B") + sig[1:]
-    result = verify_license(f"{payload}.{sig}", pub)
-    assert result.status == LicenseStatus.INVALID
-    assert result.usable is False
-
-
-def test_wrong_public_key_rejected() -> None:
-    priv, _pub = _keypair()
-    other_priv, other_pub = _keypair()
-    token = _make_token(priv, _claims())
-    result = verify_license(token, other_pub)
-    assert result.status == LicenseStatus.INVALID
-
-
-def test_empty_token_is_unlicensed() -> None:
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims())
-    assert verify_license("", pub).status == LicenseStatus.UNLICENSED
-    assert verify_license(None, pub).status == LicenseStatus.UNLICENSED
-    assert verify_license(token, pub).status == LicenseStatus.VALID
-
-
-# -- expiry + grace -----------------------------------------------------------
-
-
-def test_expired_within_grace_is_usable() -> None:
-    priv, pub = _keypair()
-    past = datetime.now(UTC) - timedelta(days=5)
-    token = _make_token(priv, _claims(expires_at=past.isoformat()))
-    result = verify_license(token, pub, grace_days=GRACE_DAYS)
-    assert result.status == LicenseStatus.EXPIRED_GRACE
-    assert result.usable is True
-    assert result.grace_until
-
-
-def test_expired_beyond_grace_blocked() -> None:
-    priv, pub = _keypair()
-    past = datetime.now(UTC) - timedelta(days=10)
-    token = _make_token(priv, _claims(expires_at=past.isoformat()))
-    result = verify_license(token, pub, grace_days=7)
-    assert result.status == LicenseStatus.EXPIRED_BLOCKED
-    assert result.usable is False
-
-
-def test_valid_timestamp_boundary() -> None:
-    priv, pub = _keypair()
-    now = int(time.time())
-    claims = _claims(expires_at=datetime.fromtimestamp(now + 100, tz=UTC).isoformat())
-    result = verify_license(_make_token(priv, claims), pub, now=now)
-    assert result.status == LicenseStatus.VALID
-
-
-# -- tier claims + feature gates ----------------------------------------------
-
-
-def test_tier_table_shape() -> None:
-    assert set(tier_claims("free")) >= {"generate", "evidence_export", "self_heal", "rag_learning"}
-    assert "jira_export" in tier_claims("self-serve")
-    assert "pom" in tier_claims("pro")
-    assert "ci_runs" in tier_claims("pro")
-    assert "private_network" in tier_claims("airgap")
-    assert limit_for("free", "runs_per_month") == 25
-    assert limit_for("pro", "runs_per_month") is None
-
-
-def test_feature_required_tier() -> None:
-    assert feature_required_tier("generate") == "free"
-    assert feature_required_tier("jira_export") == "self-serve"
-    assert feature_required_tier("pom") == "pro"
-    assert feature_required_tier("nope") is None
-
-
-def test_unlicensed_effective_tier_is_free(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
-    monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
+def test_no_licence_file_is_the_free_tier(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(tmp_path / "absent.json"))
+    result = license_status()
+    assert result.status == LicenseStatus.UNLICENSED
+    assert result.tier == "free"
+    assert result.usable, "the free tier must stay usable"
     assert effective_tier() == "free"
 
 
-def test_feature_enabled_by_tier(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    # Valid pro license (env inline) → POM enabled. B-050: trust root is the
-    # vendored constant (not customer-settable), so patch it to the test key.
-    priv, pub = _keypair()
-    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)
-    token = _make_token(priv, _claims(tier="pro"))
-    monkeypatch.setenv("AITEST_LICENSE_KEY", token)
-    assert feature_enabled("pom") is True
-    assert feature_enabled("jira_export") is True
-    assert feature_enabled("private_network") is False  # pro has no private-network claim
+def test_a_valid_signed_file_reports_its_tier(signed_licence: dict[str, Any]) -> None:
+    result = license_status()
+    assert result.status == LicenseStatus.VALID
+    assert result.tier == "pro"
+    assert result.licence_id == "TC-2026-000421"
+    assert result.usable
     assert effective_tier() == "pro"
 
 
-def test_feature_enabled_free_tier(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
-    monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
-    assert feature_enabled("generate") is True
-    assert feature_enabled("self_heal") is True
-    assert feature_enabled("pom") is False
-    assert feature_enabled("jira_export") is False
+def test_a_refused_file_is_invalid_and_names_the_reason(
+    signed_licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path: Path = signed_licence["path"]
+    path.write_text(path.read_text(encoding="utf-8").replace("TC-2026-000421", "TC-2026-999999"), encoding="utf-8")
 
-
-def test_license_key_file_loaded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims(tier="airgap"))
-    key_file = tmp_path / "license.key"
-    key_file.write_text(token + "\n", encoding="utf-8")
-    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)  # B-050
-    monkeypatch.setenv("AITEST_LICENSE_FILE", str(key_file))
     result = license_status()
-    assert result.status == LicenseStatus.VALID
-    assert result.tier == "airgap"
-
-
-def test_expired_blocked_ci_flag_off() -> None:
-    priv, pub = _keypair()
-    past = datetime.now(UTC) - timedelta(days=10)
-    token = _make_token(priv, _claims(tier="pro", expires_at=past.isoformat()))
-    result = verify_license(token, pub, grace_days=7)
-    assert result.status == LicenseStatus.EXPIRED_BLOCKED
-    # Even blocked, the OSS core (generate/self-heal/evidence) stays enabled by
-    # tier — feature_enabled reads tier claims, not the blocked flag (spec §7.6).
-    assert feature_enabled("generate", tier=result.tier) is True
-
-
-def test_malformed_token_invalid() -> None:
-    priv, pub = _keypair()
-    assert verify_license("garbage", pub).status == LicenseStatus.INVALID
-    assert verify_license("a.b.c", pub).status == LicenseStatus.INVALID
-
-
-def test_headline_smoke() -> None:
-    from src.licensing.license import LicenseResult
-
-    for status in (
-        LicenseStatus.VALID,
-        LicenseStatus.EXPIRED_GRACE,
-        LicenseStatus.EXPIRED_BLOCKED,
-        LicenseStatus.INVALID,
-        LicenseStatus.UNLICENSED,
-    ):
-        h = LicenseResult(status=status).headline
-        assert h and len(h) > 5
-
-
-# -- trust-root rotation (key ceremonies 2026-09-28 and 2026-11-18) -----------
-
-# The public half of the pair minted for the product. The private half is held
-# off-machine by the owner and never enters the repo. Pinned so a stray revert
-# cannot restore a key whose signing half nobody holds.
-ROTATED_PUBLIC_KEY_B64 = "8E9jcDty0vLC8W6jzovJE9m/aHTFcLYtOEno/00b/S4="
-
-
-def test_vendored_trust_root_is_the_rotated_public_key() -> None:
-    """The shipped trust root is the rotated key, not a retired one."""
-    import base64
-
-    from src.licensing.license import vendor_public_key
-
-    pub = vendor_public_key()
-    assert pub == ROTATED_PUBLIC_KEY_B64
-    assert len(base64.b64decode(pub)) == 32
-
-
-def test_token_signed_with_the_vendored_pair_verifies(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A token whose signer matches the vendored root verifies.
-
-    The shipped private half is deliberately not on this machine, so the
-    matching pair is generated here and patched in as the trust root - the
-    same B-050 pattern, exercising the real verify path with no ``public_key``
-    argument.
-    """
-    priv, pub = _keypair()
-    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)
-    result = verify_license(_make_token(priv, _claims(tier="pro")))
-    assert result.status == LicenseStatus.VALID
-    assert result.tier == "pro"
-
-
-def test_token_from_a_different_pair_is_refused() -> None:
-    """A token signed by another pair is refused by the shipped trust root.
-
-    The first call passes no ``public_key``, so it uses the real vendored key.
-    The second call is a sanity check that the token is well-formed and would
-    verify under its own public half.
-    """
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims(tier="airgap"))
-
-    assert verify_license(token).status == LicenseStatus.INVALID
-    assert verify_license(token, pub).status == LicenseStatus.VALID
-
-
-# -- paste-box install: save a token to the config file -----------------------
-
-
-def test_save_license_key_writes_and_reads_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A pasted token lands in _config_dir()/license.key and reads back valid."""
-    from src.licensing.license import save_license_key
-
-    priv, pub = _keypair()
-    token = _make_token(priv, _claims(tier="pro", deployment_id="deploy-42"))
-    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)  # B-050
-    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
-    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
-    monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
-
-    result = save_license_key(token)
-
-    assert result.status == LicenseStatus.VALID
-    assert result.deployment_id == "deploy-42"
-    key_file = tmp_path / "license.key"
-    assert key_file.read_text(encoding="utf-8").strip() == token
-    # Read back through the same file route the CLI and CI use.
-    read_back = license_status()
-    assert read_back.status == LicenseStatus.VALID
-    assert read_back.tier == "pro"
-    assert read_back.deployment_id == "deploy-42"
-
-
-def test_save_license_key_refuses_malformed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """A malformed token is refused with a message and nothing is written."""
-    from src.licensing.license import save_license_key
-
-    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
-
-    result = save_license_key("not-a-token")
-
     assert result.status == LicenseStatus.INVALID
-    assert result.reason
-    assert not (tmp_path / "license.key").exists()
+    assert result.tier == "free"
+    assert "signature does not verify" in result.reason
+    assert "refused" in result.headline.lower()
 
 
-def test_save_license_key_refuses_blank(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from src.licensing.license import save_license_key
+def test_a_licence_for_another_product_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    private, public = _keypair()
+    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+    path = tmp_path / "licence.signed.json"
+    path.write_text(
+        signed_file.signed_file_text(
+            {
+                "id": "TC-1",
+                "product": "not-tancat",
+                "buyer_ref": "x",
+                "purchased_at": "2026-11-01",
+                "window_end": "2027-11-01",
+                "tier": "pro",
+            },
+            private,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+    assert license_status().status == LicenseStatus.INVALID
 
-    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
 
-    result = save_license_key("   ")
+def test_an_expired_window_still_reports_the_tier_but_blocks_new_builds(
+    signed_licence: dict[str, Any],
+) -> None:
+    """The window is a build gate, not a tier switch - the held version keeps running."""
+    state = entitlement.resolve()
+    assert state.source == "signed"
+    assert state.tier == "pro"
 
-    assert result.status == LicenseStatus.INVALID
-    assert not (tmp_path / "license.key").exists()
+    end = state.window_end
+    assert end is not None
+    assert not entitlement.startup_check(build_date=end + timedelta(days=30)).allowed
+    assert entitlement.startup_check(build_date=end - timedelta(days=1)).allowed
+
+
+def test_feature_enabled_follows_the_tier(signed_licence: dict[str, Any]) -> None:
+    assert feature_enabled("jira_export")
+    assert "jira_export" in tier_claims("pro")
+
+
+def test_feature_enabled_free_tier(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(tmp_path / "absent.json"))
+    # The OSS core claims are free; the paid ones are not.
+    assert feature_enabled("evidence_export")
+    assert not feature_enabled("jira_export")
+
+
+def test_the_tier_table_shape() -> None:
+    from src.licensing.tiers import tiers
+
+    free = tiers()["free"]
+    assert "runs_per_month" in dict(free.limits)
+    assert (limit_for("free", "runs_per_month") or 0) > 0
+    assert feature_required_tier("jira_export") is not None
+
+
+def test_the_public_surface_has_no_token_route() -> None:
+    """One mechanism: nothing here can load, save or verify a token."""
+    for gone in ("load_license", "save_license_key", "sign_license", "verify_license", "LicenseClaims"):
+        assert not hasattr(_license, gone), f"{gone} still exists - a second verification route"
+    assert vendor_public_key() == VENDORED_PUBLIC_KEY_B64
+    assert len(base64.b64decode(VENDORED_PUBLIC_KEY_B64)) == 32
+
+
+def test_the_gate_makes_no_network_call(signed_licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    """The gate is pure file reading plus ed25519 maths."""
+    import socket
+
+    def _no_socket(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the licence gate tried to open a socket")
+
+    monkeypatch.setattr(socket, "socket", _no_socket)
+    monkeypatch.setattr(socket, "create_connection", _no_socket)
+
+    assert license_status().status == LicenseStatus.VALID
+    assert effective_tier() == "pro"

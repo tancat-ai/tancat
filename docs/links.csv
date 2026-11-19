@@ -1272,7 +1272,6 @@ source,target,type
 ./scripts/evidence_capture_benchmark.py,./src/evidence_image.py,import
 ./scripts/export_gate.py,./src/export_service.py,import
 ./scripts/export_gate.py,./src/pipeline_models.py,import
-./scripts/license_gen.py,./src/licensing/license.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/input_parser.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/test_case_orchestrator.py,import
 ./scripts/maintenance/issue_licence.py,./src/licensing/signed_file.py,import
@@ -1527,7 +1526,6 @@ source,target,type
 ./src/licensing/entitlement.py,./src/secure_config.py,import
 ./src/licensing/license.py,./src/licensing/entitlement.py,import
 ./src/licensing/license.py,./src/licensing/tiers.py,import
-./src/licensing/license.py,./src/secure_config.py,import
 ./src/licensing/signed_file.py,./src/licensing/license.py,import
 ./src/licensing/signed_file.py,./src/licensing/tiers.py,import
 ./src/link_scoping.py,./src/placeholder_resolver.py,import
@@ -1734,6 +1732,7 @@ source,target,type
 ./src/ui/ui_saved_packages.py,./src/ui/ui_results.py,import
 ./src/ui/ui_saved_packages.py,./src/ui/ui_sidebar.py,import
 ./src/ui/ui_sidebar.py,./src/flow_memory.py,import
+./src/ui/ui_sidebar.py,./src/licensing/entitlement.py,import
 ./src/ui/ui_sidebar.py,./src/licensing/license.py,import
 ./src/ui/ui_sidebar.py,./src/ocr_backends.py,import
 ./src/ui/ui_sidebar.py,./src/pdf_ingest.py,import
@@ -2073,7 +2072,6 @@ source,target,type
 ./tests/test_learning_metrics.py,./src/learning_metrics.py,import
 ./tests/test_license.py,./src/licensing/license.py,import
 ./tests/test_license.py,./src/licensing/tiers.py,import
-./tests/test_license_loop_e2e.py,./src/licensing/license.py,import
 ./tests/test_licensing_cli.py,./src/licensing/entitlement.py,import
 ./tests/test_llm_cache.py,./src/llm_cache.py,import
 ./tests/test_llm_cache.py,./src/semantic_candidate_ranker.py,import
@@ -2382,7 +2380,6 @@ source,target,type
 ./tests/test_url_resolver.py,./src/url_resolver.py,import
 ./tests/test_url_utils.py,./src/url_resolver.py,import
 ./tests/test_url_utils.py,./src/url_utils.py,import
-./tests/test_usage_meter.py,./src/licensing/license.py,import
 ./tests/test_usage_meter.py,./src/usage_meter.py,import
 ./tests/test_user_story_parser.py,./src/user_story_parser.py,import
 ./tests/test_verify_baseline.py,./src/verify_baseline.py,import
