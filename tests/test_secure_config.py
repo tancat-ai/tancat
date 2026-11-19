@@ -6,6 +6,7 @@ import hashlib
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -314,3 +315,111 @@ class TestLoadSaveConfigInternals:
         self._tmp_config.write_bytes(b"not-valid-encrypted-data")
         config = _load_config()
         assert config == {"version": 1, "keys": {}}
+
+
+class TestWeOnlyLockWhatWeCreated:
+    """t-1472: locking somebody else's folder locked a buyer out of their licence.
+
+    A buyer who makes ``~/.ai-test-gen`` and saves their signed licence there before
+    the first run had the first run replace the folder's inherited ACLs - after which
+    the account could neither read nor replace the licence, and the product fell back
+    to Free. The rule is now: the ACL change applies only to a directory this process
+    created.
+    """
+
+    def test_a_pre_existing_config_dir_is_left_alone(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        target = tmp_path / ".ai-test-gen"
+        target.mkdir()  # the buyer's folder, created outside our process
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        locked: list[Path] = []
+        monkeypatch.setattr(secure_config, "_restrict_to_owner", lambda path: locked.append(path))
+
+        assert secure_config._config_dir() == target
+        assert locked == [], "a directory we did not create must never be re-permissioned"
+
+    def test_a_directory_we_create_is_still_locked(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        locked: list[Path] = []
+        monkeypatch.setattr(secure_config, "_restrict_to_owner", lambda path: locked.append(path))
+
+        created = secure_config._config_dir()
+        assert locked == [created], "the folder we create is still owner-only"
+
+    def test_a_licence_saved_before_the_first_run_still_works(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The buyer's sequence, end to end: make the folder, save the file, run."""
+        import base64
+
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
+        from src.licensing import entitlement, signed_file
+
+        home = tmp_path / "home"
+        config = home / ".ai-test-gen"
+        config.mkdir(parents=True)  # pre-created by the buyer, not by us
+
+        private = ed25519.Ed25519PrivateKey.generate()
+        raw = private.private_bytes(
+            serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+        )
+        public = base64.b64encode(
+            private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        ).decode()
+        monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+        monkeypatch.setattr(Path, "home", lambda: home)
+        monkeypatch.delenv("AITEST_LICENCE_FILE", raising=False)
+
+        licence = config / "licence.signed.json"
+        licence.write_text(
+            signed_file.signed_file_text(
+                {
+                    "id": "TC-2026-000900",
+                    "product": "tancat",
+                    "buyer_ref": "order 900 / buyer@example.com",
+                    "purchased_at": "2026-11-01",
+                    "window_end": "2027-11-01",
+                    "tier": "pro",
+                },
+                raw,
+            ),
+            encoding="utf-8",
+        )
+
+        # The first run reaches the config dir (through the licence path) and must
+        # leave the buyer's folder and file exactly as they were.
+        state = entitlement.resolve()
+        assert state.source == "signed"
+        assert licence.read_text(encoding="utf-8"), "the licence file must still be readable"
+        assert licence.is_file()
+        # And it can be replaced in place.
+        licence.write_text(licence.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+class TestAPermissionFailureIsExplained:
+    """t-1472: an errno is not an instruction."""
+
+    def test_a_permission_error_names_the_fix_in_words(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from src.licensing import entitlement
+
+        licence = tmp_path / "licence.signed.json"
+        licence.write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence))
+
+        original = Path.read_text
+
+        def read_text_denied(self: Path, *args: Any, **kwargs: Any) -> str:
+            if self == licence:
+                raise PermissionError(13, "Permission denied", str(self))
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", read_text_denied)
+
+        result = entitlement.load_signed_licence()
+        assert result[0] is None
+        problem = result[2]
+        assert "no permission" in problem
+        assert "Move it to a new folder" in problem
+        assert "tancat licence status" in problem
+        assert "Errno" not in problem, "an errno is not an instruction"

@@ -423,17 +423,16 @@ class SidebarConfig:
         st.sidebar.divider()
         st.sidebar.subheader("License & Usage")
 
-        if status.status in ("valid",):
+        # j-0309/t-1472: two live states only - a verified file, or the free tier
+        # (a refused file reports as invalid with the reason). The grace/blocked
+        # branches went with the token format.
+        if status.status == "valid":
             st.sidebar.success(status.headline)
-        elif status.status in ("expired_grace",):
-            st.sidebar.warning(status.headline)
-        elif status.status in ("expired_blocked", "invalid"):
+        elif status.status == "invalid":
             st.sidebar.error(status.headline)
         else:
             st.sidebar.info(status.headline)
 
-        # Small action + hidden paste panel (design 2026-09-29, owner's
-        # amendment: the box is not permanently visible).
         SidebarConfig._render_license_entry(status)
 
         runs = summary.runs_used

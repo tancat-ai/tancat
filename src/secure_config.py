@@ -32,16 +32,26 @@ from typing import Any
 
 
 def _config_dir() -> Path:
-    """Return the config directory, creating it owner-only if needed."""
+    """Return the config directory, creating it owner-only if WE created it.
+
+    t-1472: the ACL change is applied **only to a directory this process created**.
+    Locking a directory that already existed is how a buyer lost their own files: a
+    buyer who makes ``~/.ai-test-gen`` and saves their licence there before the first
+    run had the first run replace the folder's inherited ACLs, after which the account
+    could neither read nor replace the licence, and the product fell back to Free with
+    an errno.
+
+    ``exist_ok=True`` stays race-safe: on a fresh machine several workers race to
+    create it; the one that wins creates and locks, the others see it exists and leave
+    it alone. A folder that already exists is somebody's (usually the buyer's), and is
+    never re-permissioned.
+    """
     home = Path.home()
     config_dir = home / ".ai-test-gen"
-    # exist_ok=True is race-safe: on a fresh machine several workers create
-    # the directory at once, and a plain mkdir raises FileExistsError for all
-    # but one. _restrict_to_owner is idempotent and best-effort, so it also
-    # covers a directory created by a racing worker (or one that already
-    # existed with the wrong permissions).
+    created_here = not config_dir.exists()
     config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    _restrict_to_owner(config_dir)
+    if created_here:
+        _restrict_to_owner(config_dir)
     return config_dir
 
 

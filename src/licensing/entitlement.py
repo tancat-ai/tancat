@@ -104,6 +104,15 @@ def load_signed_licence(path: Path | None = None) -> tuple[SignedLicence | None,
         text = target.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None, None, ""
+    except PermissionError:
+        return (
+            None,
+            target,
+            (
+                f"The licence file at {target} could not be read - it exists, but this account has no "
+                "permission for it. Move it to a new folder and run 'tancat licence status' to see the path."
+            ),
+        )
     except OSError as exc:
         return None, target, f"The licence file at {target} could not be read: {exc}"
 
