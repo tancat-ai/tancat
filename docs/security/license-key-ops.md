@@ -43,7 +43,7 @@ check it against the vendored public key (`tancat licence status`, or the accept
 in `tests/test_signed_licence_file.py`). An untested backup is a hope, not a backup.
 
 **Where the key lives**: outside the repository. Today it is
-`C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key` on the owner's machine, with
+`%USERPROFILE%\.clowder\secrets\tancat-licence-signing.key` on the owner's machine, with
 his note beside it. `issue_licence.py` refuses to read a key from inside the repo and
 refuses to write a buyer's licence there.
 
@@ -110,7 +110,7 @@ The trust root signs **licence files** (``src/licensing/signed_file.py``) - the 
 the constant now holds the pair minted on 2026-11-18.
 
 - **Generated:** 2026-11-18 by the owner, outside the repository.
-- **Private half:** `C:/Users/l_a_c/.clowder/secrets/tancat-licence-signing.key` (PKCS8 PEM) on this
+- **Private half:** `%USERPROFILE%\.clowder\secrets\tancat-licence-signing.key` (PKCS8 PEM) on the owner's
   machine, with the owner's note beside it in the same directory. **The product and the repository carry
   only the public half**; the issuing script (`scripts/maintenance/issue_licence.py`) refuses to read a
   key from inside the repo and refuses to write a buyer's file there.

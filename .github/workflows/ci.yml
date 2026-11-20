@@ -377,9 +377,24 @@ jobs:
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             BASE=$(git rev-parse HEAD~1)
           fi
+
+          # t-1473: a base that is not in the checkout must not fail this job for a
+          # reason that has nothing to do with types. The checkout can be shallow, or
+          # the PR base can have moved since the run began. Fetch the base explicitly;
+          # if that fails, compare against HEAD~1 and SAY which base was used; only a
+          # missing base with no parent to fall back to is an error.
           if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
-            echo "::error::parity base '$BASE' is not in this checkout"
-            exit 1
+            echo "Parity base '$BASE' is not in this checkout - fetching it."
+            git fetch --depth=1 --no-tags origin "$BASE" || true
+          fi
+          if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
+            if git rev-parse --verify --quiet "HEAD~1^{commit}" >/dev/null; then
+              BASE=$(git rev-parse HEAD~1)
+              echo "::warning::parity base could not be fetched - falling back to HEAD~1 ($BASE)"
+            else
+              echo "::error::parity base is not in this checkout and HEAD~1 does not resolve either"
+              exit 1
+            fi
           fi
           echo "Parity diff base: $BASE"
           CHANGED=$(git diff --name-only "$BASE" HEAD -- '*.py' \
