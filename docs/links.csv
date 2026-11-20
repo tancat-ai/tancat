@@ -1272,9 +1272,10 @@ source,target,type
 ./scripts/evidence_capture_benchmark.py,./src/evidence_image.py,import
 ./scripts/export_gate.py,./src/export_service.py,import
 ./scripts/export_gate.py,./src/pipeline_models.py,import
-./scripts/license_gen.py,./src/licensing/license.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/input_parser.py,import
 ./scripts/maintenance/cli_e2e_validation.py,./src/cli/test_case_orchestrator.py,import
+./scripts/maintenance/issue_licence.py,./src/licensing/signed_file.py,import
+./scripts/maintenance/issue_licence.py,./src/licensing/window.py,import
 ./scripts/parity_check.py,./src/evidence_export.py,import
 ./scripts/parity_check.py,./src/evidence_index.py,import
 ./scripts/parity_check.py,./src/export_service.py,import
@@ -1382,7 +1383,7 @@ source,target,type
 ./src/cli/headless.py,./src/ci_ignore.py,import
 ./src/cli/headless.py,./src/cli/session.py,import
 ./src/cli/headless.py,./src/journey_models.py,import
-./src/cli/headless.py,./src/licensing/license.py,import
+./src/cli/headless.py,./src/licensing/entitlement.py,import
 ./src/cli/headless.py,./src/llm_health.py,import
 ./src/cli/headless.py,./src/pipeline_report_service.py,import
 ./src/cli/headless.py,./src/provider_config.py,import
@@ -1393,7 +1394,7 @@ source,target,type
 ./src/cli/headless.py,./src/usage_meter.py,import
 ./src/cli/input_parser.py,./src/cli/config.py,import
 ./src/cli/main.py,./src/journey_scraper.py,import
-./src/cli/main.py,./src/licensing/activation.py,import
+./src/cli/main.py,./src/licensing/entitlement.py,import
 ./src/cli/main.py,./src/llm_client.py,import
 ./src/cli/main.py,./src/llm_health.py,import
 ./src/cli/main.py,./src/pipeline_artifact_manager.py,import
@@ -1520,9 +1521,13 @@ source,target,type
 ./src/learning_metrics.py,./src/failure_classifier.py,import
 ./src/licensing/__init__.py,./src/licensing/license.py,import
 ./src/licensing/__init__.py,./src/licensing/tiers.py,import
-./src/licensing/activation.py,./src/secure_config.py,import
+./src/licensing/entitlement.py,./src/licensing/signed_file.py,import
+./src/licensing/entitlement.py,./src/licensing/window.py,import
+./src/licensing/entitlement.py,./src/secure_config.py,import
+./src/licensing/license.py,./src/licensing/entitlement.py,import
 ./src/licensing/license.py,./src/licensing/tiers.py,import
-./src/licensing/license.py,./src/secure_config.py,import
+./src/licensing/signed_file.py,./src/licensing/license.py,import
+./src/licensing/signed_file.py,./src/licensing/tiers.py,import
 ./src/link_scoping.py,./src/placeholder_resolver.py,import
 ./src/llm_cache.py,./src/llm_client.py,import
 ./src/llm_cache.py,./src/storage.py,import
@@ -1727,6 +1732,7 @@ source,target,type
 ./src/ui/ui_saved_packages.py,./src/ui/ui_results.py,import
 ./src/ui/ui_saved_packages.py,./src/ui/ui_sidebar.py,import
 ./src/ui/ui_sidebar.py,./src/flow_memory.py,import
+./src/ui/ui_sidebar.py,./src/licensing/entitlement.py,import
 ./src/ui/ui_sidebar.py,./src/licensing/license.py,import
 ./src/ui/ui_sidebar.py,./src/ocr_backends.py,import
 ./src/ui/ui_sidebar.py,./src/pdf_ingest.py,import
@@ -2066,7 +2072,7 @@ source,target,type
 ./tests/test_learning_metrics.py,./src/learning_metrics.py,import
 ./tests/test_license.py,./src/licensing/license.py,import
 ./tests/test_license.py,./src/licensing/tiers.py,import
-./tests/test_license_loop_e2e.py,./src/licensing/license.py,import
+./tests/test_licensing_cli.py,./src/licensing/entitlement.py,import
 ./tests/test_llm_cache.py,./src/llm_cache.py,import
 ./tests/test_llm_cache.py,./src/semantic_candidate_ranker.py,import
 ./tests/test_llm_client.py,./src/llm_client.py,import
@@ -2262,6 +2268,9 @@ source,target,type
 ./tests/test_settings_store.py,./src/ocr_backends.py,import
 ./tests/test_settings_store.py,./src/secure_config.py,import
 ./tests/test_settings_store.py,./src/settings_store.py,import
+./tests/test_signed_licence_file.py,./src/licensing/license.py,import
+./tests/test_signed_licence_file.py,./src/licensing/merchant.py,import
+./tests/test_signed_licence_file.py,./src/licensing/signed_file.py,import
 ./tests/test_skeleton_parser.py,./src/pipeline_models.py,import
 ./tests/test_skeleton_parser.py,./src/skeleton_parser.py,import
 ./tests/test_skeleton_prompt_template.py,./src/test_generator.py,import
@@ -2371,7 +2380,6 @@ source,target,type
 ./tests/test_url_resolver.py,./src/url_resolver.py,import
 ./tests/test_url_utils.py,./src/url_resolver.py,import
 ./tests/test_url_utils.py,./src/url_utils.py,import
-./tests/test_usage_meter.py,./src/licensing/license.py,import
 ./tests/test_usage_meter.py,./src/usage_meter.py,import
 ./tests/test_user_story_parser.py,./src/user_story_parser.py,import
 ./tests/test_verify_baseline.py,./src/verify_baseline.py,import

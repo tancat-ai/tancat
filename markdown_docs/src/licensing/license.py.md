@@ -1,11 +1,12 @@
 ---
 purpose: >
-  Offline ed25519-signed license validation (Phase 6e, spec §5.4). A JWT-ish token
-  (payload_b64.signature_b64, no JWT library — hand-rolled base64 + the existing cryptography
-  dependency) carrying {deployment_id, tier, claims, issued_at, expires_at, issuer}. Validated
-  at startup and before CI runs with ZERO network calls; 7-day grace; unlicensed = free tier.
-lines: ~340
+  The licence gate: one signed licence file (src/licensing/signed_file.py) verified offline
+  against a vendored ed25519 public key, or nothing (free tier). Reports the tier the
+  deployment runs under and answers the feature gates. No token format, no activation call,
+  no network.
+lines: ~150
 created: "2026-09-05"
+updated: "2026-11-19"
 ---
 
 # `src/licensing/license.py`
@@ -13,77 +14,55 @@ created: "2026-09-05"
 ## High-Level Purpose
 
 **Open-core honesty:** this is *entitlement/support marking*, not DRM. A modified fork can strip
-it — accepted and documented. The key's real value is ToS entitlement, honest tier enforcement
-for stock builds, and the air-gap premium bundle.
+it — accepted and documented. The licence's real value is ToS entitlement and honest tier
+enforcement for stock builds.
 
-Validation contract (zero network calls):
-- No key configured → `UNLICENSED` (free tier — open core stays usable).
-- Signature invalid / payload malformed → `INVALID`.
-- now ≤ expires_at → `VALID`; expires_at < now ≤ expires_at + grace → `EXPIRED_GRACE` (usable,
-  banner); past grace → `EXPIRED_BLOCKED` (runs/CI blocked, evidence read-only).
+**One mechanism (j-0309 / t-1468).** The entitlement is a signed licence file or nothing:
+
+- a valid signed file → `VALID`, with its tier and licence id;
+- a file that exists but does not verify → `INVALID`, with the reason from the verifier;
+- no file → `UNLICENSED` (free tier — open core stays usable).
+
+The token format (`payload_b64.signature_b64`), its env vars (`AITEST_LICENSE_KEY`,
+`AITEST_LICENSE_FILE`), `scripts/license_gen.py` and the UI paste box are **deleted**. There is
+no grace period and no `expires_at`; the only date a licence carries is `window_end`, the last
+day a *build* released inside the purchase window may run (the version the buyer holds keeps
+working).
+
+**Zero network calls:** this module imports no network code; the AST test over
+`src/licensing/` and the egress audit both enforce it.
 
 ## Public API
 
-### `class LicenseClaims(deployment_id, tier, claims=(), issued_at="", expires_at="", issuer="cat-tan-operations")`
-Payload model with `from_dict` / `to_dict` (JSON round-trip).
+### `VENDORED_PUBLIC_KEY_B64`, `vendor_public_key() -> str`
 
-### `sign_license(claims, private_key: bytes) -> str`
-Vendor/tests: ed25519-sign the claims (raw 32-byte private key); returns `payload_b64.sig_b64`.
+The trust root the signed file is verified against. Not customer-settable (B-050); rotation ships
+with a product release.
 
-### `verify_license(token, public_key=None, *, now=None, grace_days=None) -> LicenseResult`
-The hard gate: empty token → `UNLICENSED`; malformed → `INVALID`; signature verify → `INVALID`;
-then expiry vs `now` (+ grace) → `VALID` / `EXPIRED_GRACE` / `EXPIRED_BLOCKED`. Unknown tier is
-demoted to free with a warning (never hard-fails validity). `now`/`grace_days` override for tests.
+### `class LicenseStatus`
 
-### `LicenseResult` (dataclass)
-`status`, `tier`, `claims` (frozenset), `deployment_id`, `expires_at`, `grace_until`, `reason`,
-`data`. `usable` = valid/grace/unlicensed; `headline` = one-line banner text.
+String constants: `UNLICENSED`, `VALID`, `INVALID`.
 
-### Accessors
-- `load_license() -> str | None` — `AITEST_LICENSE_KEY` → `AITEST_LICENSE_FILE` →
-  `~/.ai-test-gen/license.key`.
-- `save_license_key(token) -> LicenseResult` — verify a pasted token and, when it is signed,
-  write it to `~/.ai-test-gen/license.key`. The write asks for mode 0600; that is a Unix
-  permission and Windows ignores it (the file reads back as 666 there), so the `chmod` is
-  best-effort and is kept for Linux installs. Blank/malformed/forged tokens are
-  refused and nothing is written; the result carries the reason. This is the paste box's
-  install path, so one paste covers app, CLI and CI. The two env routes still win at read time.
-- `license_status(now=None) -> LicenseResult` — the deployment's effective state.
-- `effective_tier(now=None) -> str` — tier under which the deployment runs (free when
-  unlicensed).
-- `feature_enabled(feature, tier=None, now=None) -> bool` — claim check. A blocked/invalid
-  license is NOT a downgrade of the OSS core — only CI/headless runs are withheld until a valid
-  license exists (spec §5.4: license presence is an upgrade, never a lockout).
-- `vendor_public_key() -> str` — the trust root, always the vendored key (not customer-settable, B-050).
+### `class LicenseResult`
 
-## How It Works (internals)
+`status`, `tier`, `claims` (frozenset), `licence_id`, `reason`. Properties: `usable` (valid or
+unlicensed) and `headline` (the one-line banner the UI shows).
 
-### `verify_license(token, ...)` — the verification ladder
-1. `_decode_public_key(public_key_b64)` — base64 → 32 raw bytes → `Ed25519PublicKey`;
-   bad encoding/size → `VALIDATION INVALID`.
-2. Split `payload_b64 "." sig_b64`; `_b64decode` (padding-tolerant) → JSON → `LicenseClaims`
-   (`from_dict` raises `LicenseValidationError` on missing fields).
-3. `pub.verify(_b64decode(sig_b64), payload_b64)` — the hard signature gate; bad sig →
-   `INVALID` ("the key was altered or forged").
-4. Well-formedness: tier must exist in the tier table (else demoted to free); effective claims =
-   token claims ∪ tier table claims.
-5. Expiry: `_ts(expires_at)` vs `now_ts` (grace = `grace_days` or `GRACE_DAYS`=7) →
-   blocked / grace / valid; `grace_until` reported for the two expired states.
+### `license_status() -> LicenseResult`
 
-### `_b64decode(data)` — base64url decode, tolerating missing `=` padding
-Real-world tokens frequently strip padding; the verifier pads to a multiple of 4 before decode.
+One call to `src.licensing.entitlement.resolve()` - the single place the precedence lives.
 
-### `sign_license(claims, private_key)` — token minting
-Base64url(json payload) + ed25519 signature over the payload string; `SigningKeyError` if the
-key isn't 32 raw bytes (the vendor tool never silently falls back).
+### `effective_tier() -> str`
 
-### Internal utilities
-- `_now_ts()` / `_ts(iso)` / `_iso(ts)` — epoch↔ISO conversion (naive timestamps assumed UTC).
-- `VENDORED_PUBLIC_KEY_B64` — the shipped default public key (Cat Tan Operations holds the
-  signing side — the vendor tool `scripts/license_gen.py` can mint a fresh keypair).
+The tier the deployment runs under (free when unlicensed or refused).
 
-## Public API Additions
+### `feature_enabled(feature, tier=None) -> bool`
 
-Refreshed 2026-10-02: public symbols present in the source and not listed above.
+True when the tier's claims include `feature`; the OSS core claims are free.
 
-- `LicenseStatus` (class): Enum-ish statuses for license_state (string constants).
+## Where the rest lives
+
+- `src/licensing/signed_file.py` — the file format, signing and verification.
+- `src/licensing/entitlement.py` — where the file is looked for (`AITEST_LICENCE_FILE`, else the
+  settings directory), and the update-window checks.
+- `src/licensing/window.py` — the release date, the 12-month window, and the refusal wording.

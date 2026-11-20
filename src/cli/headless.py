@@ -140,7 +140,7 @@ def _license_usage_section() -> dict[str, Any]:
             "license": {
                 "status": meter.summary().license_status,
                 "tier": meter.summary().tier,
-                "token_present": _license_token_present(),
+                "licence_valid": _licence_file_present(),
             },
             "usage": meter.summary().to_dict(),
         }
@@ -148,13 +148,37 @@ def _license_usage_section() -> dict[str, Any]:
         return {"license": {"status": "unknown", "tier": "free", "error": str(exc)}, "usage": {}}
 
 
-def _license_token_present() -> bool:
-    try:
-        from src.licensing.license import load_license
+def _licence_file_present() -> bool:
+    """True when a signed licence file is in force and verifies.
 
-        return bool(load_license())
+    j-0309/t-1470: there is no token and no grace period. "Present" here means the
+    file exists, the signature verifies, the product matches and the tier is known.
+    """
+    try:
+        from src.licensing.entitlement import resolve
+
+        return resolve().source == "signed"
     except Exception:  # pragma: no cover - defensive
         return False
+
+
+def _licence_refusal() -> str:
+    """Why an enforcing run may not proceed, or "" when the licence is good.
+
+    Three ways to fail, each with its own sentence: no file, a file that does not
+    verify (the reason comes from the verifier), or a build outside the update window.
+    """
+    from src.licensing.entitlement import resolve, startup_check
+
+    state = resolve()
+    if state.source != "signed":
+        if state.problem:
+            return f"the licence file could not be used - {state.problem}"
+        return "no signed licence file was found"
+    decision = startup_check()
+    if not decision.allowed:
+        return decision.message
+    return ""
 
 
 async def _run_pipeline_async(
@@ -351,20 +375,19 @@ def run(args: argparse.Namespace) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
-    # --- license validation (Phase 6e, spec §5.4) ---------------------------
-    # Report-only by default (open-core adoption on-ramp — §9 Q1). Paid
-    # deployments set AITEST_ENFORCE_LICENSING=1 for a hard gate: generation is
-    # refused only when a license token is present but unusable (expired beyond
-    # grace / invalid signature) — the free tier always remains legitimate.
+    # --- licence gate (j-0309, t-1470) --------------------------------------
+    # Report-only by default: the free tier is a legitimate way to run, so a
+    # deployment without a licence is never refused unless it asks to be.
+    #
+    # AITEST_ENFORCE_LICENSING=1 means: a run needs a VALID signed licence for this
+    # build. Missing, refused, or past the update window all refuse, with the reason
+    # and the command that checks it. 0 or unset: nothing refuses.
     license_section = _license_usage_section()
     if os.environ.get("AITEST_ENFORCE_LICENSING", "0") == "1":
-        lstat = license_section.get("license", {})
-        if lstat.get("status") in ("expired_blocked", "invalid") and lstat.get("token_present"):
-            print(
-                f"ERROR: license '{lstat.get('status')}' — set a valid AITEST_LICENSE_KEY "
-                "(or AITEST_LICENSE_FILE) or clear AITEST_ENFORCE_LICENSING.",
-                file=sys.stderr,
-            )
+        refusal = _licence_refusal()
+        if refusal:
+            print(f"ERROR: {refusal}", file=sys.stderr)
+            print("Check the licence with: tancat licence status", file=sys.stderr)
             return EXIT_CONFIG_ERROR
 
     # --- workspace isolation (AI-029) --------------------------------------

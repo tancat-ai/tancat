@@ -27,11 +27,11 @@ Renders the configuration sidebar:
 
 ### `render_license_usage()` (static)
 
-Renders the one-line licence state, then a small action (`Enter a licence` / `Replace licence`)
-and a hidden paste panel. The panel is not permanently visible: it opens on the action and
-closes after a successful save; a refused token or a save error shows its reason in the panel.
-The token field is cleared after every outcome, so reopening it never prefills the previous
-token. Saving calls `save_license_key` and writes `~/.ai-test-gen/license.key`.
+Renders the one-line licence state, then where the licence file belongs: with no licence it
+names the path the product reads (`.../licence.signed.json`) and the command that confirms it
+(`tancat licence status`); with a valid licence it shows the path alone. There is nothing to
+paste - the licence is a signed file, verified offline (j-0309), and the paste panel was deleted
+with the token route (t-1468).
 
 ## How It Works (Internals)
 
@@ -69,7 +69,7 @@ Private helpers with real logic not listed above.
 
 ### `SidebarConfig.render_license_usage() -> None` - method of `SidebarConfig`
 
-- `_render_license_entry(status: Any) -> None` (method of `SidebarConfig`): Small licence action plus a hidden paste panel (design 2026-09-29). The one-line state is rendered above, unchanged. This adds one small action next to it: "Enter a licence" when none is installed, "Replace licence" o...
+- `_render_license_entry(status: Any) -> None` (method of `SidebarConfig`): names the licence file path and the `tancat licence status` command when no licence is in force, and the path alone when one is valid. No button, form or text area - the paste flow was deleted with the token route (t-1468).
 
 - `_module_available(name: str) -> bool` (function): Whether *name* can be imported here (used to report what this build has).
 - `_gpu_unavailable_reason() -> str | None` (function): Why the GPU OCR tier is hidden, or None when it can run. Mirrors UnlimitedOCRBackend.engine_available: PyTorch -> CUDA/ROCm -> transformers. It names the true cause and how to install it, so a machine that has a G...

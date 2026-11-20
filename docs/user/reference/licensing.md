@@ -1,10 +1,10 @@
 ---
-description: TanCat licensing and tiers - the free limits, how to install a Pro licence key, and what the paid tiers add to a deployment.
+description: TanCat licensing and tiers - the free limits, how to install a Pro licence file, and what the paid tiers add to a deployment.
 ---
 
 # Licensing and tiers
 
-TanCat runs unlicensed on the **Free** tier. A licence key raises the limits and
+TanCat runs unlicensed on the **Free** tier. A licence file raises the limits and
 unlocks the paid features. A licence is an entitlement marker, not DRM - it
 tells the app what the deployment is allowed to do.
 
@@ -20,7 +20,7 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
-| Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence, key issued by us |
+| Licence | Business Source License 1.1 (source-available) | Commercial per-deployment licence: a signed licence file issued by us |
 | Price | Free | £399 per deployment |
 | Support | - | Email support and setup help - direct from the developer |
 | Updates | - | All updates released within 12 months of purchase; later updates optional and paid |
@@ -53,43 +53,45 @@ converts to Apache-2.0 four years after each version's release.
 
 Updates are released as installable Python packages on the
 [releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
-way you upgrade any Python tool. You choose when to install one. TanCat makes **two kinds of call and no others**: the activation request you trigger by
-pasting a licence key, and a **version check at most once a day** if you leave it on. The version
-check carries nothing about you, and settings turns it off. No automatic upgrade - you choose when
-to install one. Everything else works offline.
+way you upgrade any Python tool. You choose when to install one.
 
-## Install a licence key
+TanCat makes **exactly one automatic call, and no others**: a version check at most once a day if you
+leave it on. It carries nothing about you, and settings turns it off. **Licensing never touches the
+network** - your licence file is verified offline against a public key built into the product. No
+automatic upgrade: you choose when to install one.
 
-There are three routes, checked in this order:
+## Install a licence file
 
-1. **`AITEST_LICENSE_KEY`** - the token inline. Best for CI, where you inject it
-   from a secret store:
+A licence is a **signed file** we issue to you. Save it and the product reads it; there
+is nothing to switch on and no call is made.
 
-   ```bash
-   AITEST_LICENSE_KEY=<token> bash launch_ui.sh
-   ```
-
-2. **`AITEST_LICENSE_FILE`** - a path to a file containing the token:
+1. **`AITEST_LICENCE_FILE`** - a path to your licence file. Best for CI, where you inject
+   it from a secret store:
 
    ```bash
-   AITEST_LICENSE_FILE=/etc/tancat/license.key bash launch_ui.sh
+   AITEST_LICENCE_FILE=/etc/tancat/licence.signed.json bash launch_ui.sh
    ```
 
-3. **`~/.ai-test-gen/license.key`** - the default key file for the deployment.
-   Save the token there once and the app finds it on every start.
+2. **The default path** `tancat licence status` prints - the settings directory for the
+   deployment, `licence.signed.json` inside it.
 
-When a valid key is loaded, the UI reports the tier and the deployment it is
-signed for.
+The file is JSON: its format, a payload (licence id, product, buyer reference, purchase
+date, window end and tier) and a signature. The product verifies the signature against
+a public key built into it, offline, so nothing about your licence leaves the machine.
+
+If you hold an older token, it still verifies offline and is used when no signed file
+is present; we do not document the token routes because the licence is the signed file.
 
 ## How the licence is checked
 
-At startup TanCat reads the key, verifies its signature against the vendored
-trust root, and reads the tier from the payload. If no key is present, or the
-key cannot be verified, the app runs on the Free tier - it does not block you.
+At startup TanCat reads the licence file, verifies its signature against the
+public key built into the product, and takes the tier and the update window from
+the payload. If there is no file, or it cannot be verified, the app runs on the
+Free tier - it does not block you.
 
-Because the tier travels inside the signed payload, an unknown tier key is
-treated as Free. That is deliberate: a licence that cannot be understood never
-silently grants more than it should.
+Because the tier travels inside the signed payload, an unknown tier is refused
+rather than guessed at. That is deliberate: a licence that cannot be understood
+never silently grants more than it should.
 
 ## Next
 

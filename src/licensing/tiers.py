@@ -13,7 +13,7 @@ pricing page. Enterprise and regulated buyers are still served, but as a
 The ``airgap`` (and legacy ``self-serve``) keys are **retired but still
 resolvable**: they stay in the table so a licence already signed against them
 keeps verifying with its own claims, instead of silently downgrading to free
-(``license.verify_license`` falls back to ``free`` for any key it does not know).
+(a licence naming an unknown tier is refused outright by ``signed_file``, not demoted).
 They are unpublished: see :data:`RETIRED_TIERS` and :func:`published_tiers`.
 
 | Published tier | Claims (additive)                              | Limits                  |
@@ -78,7 +78,7 @@ FREE_TIER = "free"
 #: Tiers that are no longer published: not sold, no price, absent from the
 #: pricing page and the decision record. They REMAIN in the tier table so a
 #: licence already signed against them still verifies with its own claims
-#: (license.verify_license maps any unknown tier key to ``free``, so deleting
+#: (an unknown tier in a signed licence is refused, so deleting
 #: a key would silently downgrade a paying deployment).
 RETIRED_TIERS: frozenset[str] = frozenset({"self-serve", "airgap"})
 

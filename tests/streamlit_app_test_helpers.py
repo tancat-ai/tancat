@@ -46,7 +46,6 @@ from streamlit.testing.v1 import AppTest
 APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
 CHECK_LLM_BUTTON = "🩺 Check My LLM"
-LICENCE_BUTTON_LABELS = ("Enter a licence", "Replace licence")
 OCR_BACKEND_SELECTBOX = "OCR Backend (document mode)"
 
 BASE_SELECTBOX_LABELS = frozenset({"LLM Provider", "Consent Handling"})

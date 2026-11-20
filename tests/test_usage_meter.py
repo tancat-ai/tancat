@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from src.licensing import license as _license_module
-from src.licensing.license import LicenseClaims, sign_license
+from src.licensing import signed_file as _signed_file
 from src.usage_meter import FreeTierLimitError, UsageMeter, monthly_window
 
 
@@ -137,35 +138,41 @@ def test_enforcement_off_disables_cap(tmp_path: Path) -> None:
     m.assert_run_allowed()  # no hard stop
 
 
-def _paid_license(monkeypatch: pytest.MonkeyPatch, tier: str = "self-serve") -> None:
-    """Install a valid license in the real env via monkeypatch."""
+def _paid_license(monkeypatch: pytest.MonkeyPatch, tier: str = "pro") -> None:
+    """A signed licence file in force, verified against a throwaway key (j-0309)."""
     import base64
+    from datetime import date
 
-    from cryptography.hazmat.primitives import serialization
-
-    priv = ed25519.Ed25519PrivateKey.generate()
-    raw = priv.private_bytes(
+    private = ed25519.Ed25519PrivateKey.generate()
+    raw = private.private_bytes(
         serialization.Encoding.Raw,
         serialization.PrivateFormat.Raw,
         serialization.NoEncryption(),
     )
-    pub_b64 = base64.b64encode(
-        priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    public = base64.b64encode(
+        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     ).decode()
-    now = _now()
-    token = sign_license(
-        LicenseClaims(
-            deployment_id="paid-deploy",
-            tier=tier,
-            issued_at=now.isoformat(),
-            expires_at=(now + timedelta(days=30)).isoformat(),
+    monkeypatch.setattr(_signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+
+    path = Path(tempfile.mkdtemp()) / "licence.signed.json"
+    purchased = date.today()
+    path.write_text(
+        _signed_file.signed_file_text(
+            {
+                "id": "TC-TEST-0001",
+                "product": "tancat",
+                "buyer_ref": "test",
+                "purchased_at": purchased.isoformat(),
+                "window_end": (purchased + timedelta(days=365)).isoformat(),
+                "tier": tier,
+            },
+            raw,
         ),
-        raw,
+        encoding="utf-8",
     )
-    monkeypatch.setenv("AITEST_LICENSE_KEY", token)
-    # B-050: trust root is the vendored constant (not customer-settable); patch
-    # it to the test key so the self-signed token verifies end-to-end.
-    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub_b64)
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+    for legacy in ("AITEST_LICENSE_KEY", "AITEST_LICENSE_FILE"):
+        monkeypatch.delenv(legacy, raising=False)
 
 
 def test_paid_tier_has_no_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

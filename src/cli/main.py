@@ -612,7 +612,6 @@ Usage:
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
   tancat licence status      Show the licence and its update window.
-  tancat licence activate K  Activate a Lemon Squeezy key on this machine (one call).
   tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
@@ -733,44 +732,41 @@ def _run_interactive() -> int:
 
 
 def _licence_command(argv: list[str]) -> int:
-    """``tancat licence status|activate`` - the only place a key is pasted.
+    """``tancat licence status`` - what this deployment holds, and its window.
 
-    ``status`` reads the local licence file and says what the window is;
-    ``activate`` makes the single call to Lemon Squeezy (j-0304). Neither is
-    needed on a Free install.
+    One source: a signed licence file we issued, verified offline; otherwise Free.
+    There is no activation step and nothing to paste (j-0309).
     """
-    import getpass
-
-    from src.licensing import activation
+    from src.licensing import entitlement
 
     action = argv[0] if argv else "status"
-    licence = activation.read_licence()
     if action == "status":
-        if not licence:
-            print("No licence on this machine: running as Free Community.")
-            print("Activate with: tancat licence activate <key from your receipt>")
+        state = entitlement.resolve()
+        if state.problem:
+            print(f"Licence file: could not be used - {state.problem}")
+        if state.source == "none":
+            print("No licence in force: running as Free Community.")
+            if state.path is not None:
+                print(f"Signed licence file: {state.path} (present, but refused)")
+                print(f"Refused because: {state.problem}")
+            else:
+                print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
             return 0
-        decision = activation.entitlement(licence)
-        print(f"Licence key:  {licence.get('key', '(not stored)')[:12]}...")
-        print(f"Purchased:    {licence.get('key_created_at') or '(not recorded)'}")
-        print(f"Window ends:  {decision.window_end.isoformat() if decision.window_end else '(unknown)'}")
-        print(
-            f"This build:   {activation.RELEASE_DATE.isoformat()} - {'inside' if decision.allowed else 'AFTER'} the window"
-        )
-        if not decision.allowed:
+        print(f"Source:       signed licence file ({state.path})")
+        assert state.licence is not None
+        print(f"Licence id:   {state.licence.id}")
+        print(f"Buyer:        {state.licence.buyer_ref}")
+        print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
+        print(f"Tier:         {state.tier}")
+        print(f"Window ends:  {state.window_end.isoformat() if state.window_end else '(unknown)'}")
+        build = entitlement.RELEASE_DATE
+        print(f"This build:   {build.isoformat()} - {'inside' if state.allows_build(build) else 'AFTER'} the window")
+        if not state.allows_build(build):
             print()
-            print(activation.startup_check(licence).message)
+            print(entitlement.startup_check().message)
         return 0
 
-    if action == "activate":
-        key = argv[1] if len(argv) > 1 else ""
-        if not key:
-            key = getpass.getpass("Paste your Lemon Squeezy licence key: ").strip()
-        result = activation.activate(key, instance_name=str(Path.cwd()))
-        print(result.message)
-        return 0 if result.ok else 2
-
-    print("Usage: tancat licence [status|activate <key>]", file=sys.stderr)
+    print("Usage: tancat licence [status]", file=sys.stderr)
     return 2
 
 
@@ -781,10 +777,14 @@ def _startup_backstop() -> int | None:
     message names the window end, the version that keeps working and how to
     renew. A Free install (no licence) is never refused.
     """
-    from src.licensing.activation import startup_check
+    from src.licensing.entitlement import record_running_version, resolve, startup_check
 
     decision = startup_check()
     if decision.allowed:
+        if resolve().source == "signed":
+            from src import version_check
+
+            record_running_version(version_check.current_version())
         return None
     print(f"ERROR: {decision.message}", file=sys.stderr)
     return 3
@@ -800,7 +800,7 @@ def _update_command(argv: list[str]) -> int:
     shelling out from inside the process.
     """
     from src import version_check
-    from src.licensing.activation import upgrade_check
+    from src.licensing.entitlement import upgrade_check
 
     if "--check" in argv:
         result = version_check.check(force=True)
@@ -844,15 +844,6 @@ def main(argv: list[str] | None = None) -> int:
     backstop = _startup_backstop()
     if backstop is not None:
         return backstop
-
-    # j-0304: last_seen_at is recorded on every start. A local file write, no
-    # call out - the licence file is the only thing touched.
-    try:
-        from src.licensing.activation import touch_last_seen
-
-        touch_last_seen()
-    except OSError:  # a read-only install still runs; the timestamp is a convenience
-        pass
 
     # j-0306: the daily version check runs off the main thread (never a wait), and
     # the notice prints only from the cache, once per new version per day.

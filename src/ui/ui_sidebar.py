@@ -423,17 +423,16 @@ class SidebarConfig:
         st.sidebar.divider()
         st.sidebar.subheader("License & Usage")
 
-        if status.status in ("valid",):
+        # j-0309/t-1472: two live states only - a verified file, or the free tier
+        # (a refused file reports as invalid with the reason). The grace/blocked
+        # branches went with the token format.
+        if status.status == "valid":
             st.sidebar.success(status.headline)
-        elif status.status in ("expired_grace",):
-            st.sidebar.warning(status.headline)
-        elif status.status in ("expired_blocked", "invalid"):
+        elif status.status == "invalid":
             st.sidebar.error(status.headline)
         else:
             st.sidebar.info(status.headline)
 
-        # Small action + hidden paste panel (design 2026-09-29, owner's
-        # amendment: the box is not permanently visible).
         SidebarConfig._render_license_entry(status)
 
         runs = summary.runs_used
@@ -456,84 +455,18 @@ class SidebarConfig:
 
     @staticmethod
     def _render_license_entry(status: Any) -> None:
-        """Small licence action plus a hidden paste panel (design 2026-09-29).
+        """Where the licence file goes, and how to confirm it (j-0309).
 
-        The one-line state is rendered above, unchanged. This adds one small
-        action next to it: "Enter a licence" when none is installed, "Replace
-        licence" once one is. The paste field + Save only appear after the
-        action is clicked and close after a successful save, so the box is
-        never permanently visible. The field is cleared after every outcome,
-        so it never prefills the previous token, and a refused token or a save
-        error shows a line here in the panel, not only in the state line.
+        There is nothing to paste: a licence is a signed file, verified offline. The
+        panel shows the path the product reads and the command that confirms it, so a
+        buyer is never sent looking for an activation step that does not exist.
         """
-        from src.licensing.license import LicenseStatus, save_license_key
+        from src.licensing.entitlement import default_signed_path
 
-        flash = st.session_state.pop("license_entry_flash", None)
-        if flash is not None:
-            kind, message = flash
-            # Clear the paste field on any outcome (success or refusal) before
-            # the widget is instantiated this run, so reopening "Replace
-            # licence" never prefills the previous token.
-            st.session_state["license_entry_token"] = ""
-            if kind == "success":
-                st.sidebar.success(message)
-            elif kind == "warning":
-                st.sidebar.warning(message)
-            else:
-                st.sidebar.error(message)
-
-        installed = status.status in (
-            LicenseStatus.VALID,
-            LicenseStatus.EXPIRED_GRACE,
-            LicenseStatus.EXPIRED_BLOCKED,
+        path = default_signed_path()
+        if getattr(status, "status", "") == "valid":
+            st.sidebar.caption(f"Licence file: {path}")
+            return
+        st.sidebar.caption(
+            f"No licence file at {path}. Save the signed licence we sent you there, then run: tancat licence status"
         )
-        open_key = "license_entry_open"
-        if st.sidebar.button(
-            "Replace licence" if installed else "Enter a licence",
-            key="license_entry_button",
-            help="Paste the licence token from your email.",
-        ):
-            st.session_state[open_key] = not st.session_state.get(open_key, False)
-
-        if not st.session_state.get(open_key, False):
-            return
-
-        with st.sidebar.form("license_entry_form", clear_on_submit=False):
-            token = st.sidebar.text_area(
-                "Licence token",
-                key="license_entry_token",
-                height=80,
-                placeholder="Paste the token from your email, then Save.",
-            )
-            submitted = st.sidebar.form_submit_button("Save")
-
-        if not submitted:
-            return
-
-        try:
-            result = save_license_key(token)
-        except Exception as exc:  # a filesystem/permission error must show a line, not raise
-            st.session_state["license_entry_flash"] = ("error", f"Could not save the licence: {exc}")
-            st.rerun()
-            return
-
-        if result.status == LicenseStatus.INVALID:
-            # Refusal is an outcome too: show the reason on the rerun and clear
-            # the field there.
-            st.session_state["license_entry_flash"] = ("error", f"That licence token was refused: {result.reason}")
-            st.rerun()
-            return
-
-        deployment = result.deployment_id or "unknown"
-        if result.status == LicenseStatus.VALID:
-            st.session_state["license_entry_flash"] = (
-                "success",
-                f"Licence installed. Deployment id: {deployment}.",
-            )
-        else:
-            st.session_state["license_entry_flash"] = (
-                "warning",
-                f"Licence installed, but it is not active ({result.status}). Deployment id: {deployment}.",
-            )
-        st.session_state[open_key] = False
-        st.rerun()
