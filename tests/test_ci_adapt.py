@@ -380,3 +380,118 @@ def test_adapt_no_url_fails_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     report = adapt_package(pkg, junit)
     assert report.summary["candidates"] == 1
     assert report.candidates[0]["status"] == "no-url"
+
+
+# ---------------------------------------------------------------------------
+# j-0312: identity outranks prominence, and only the first failure is honest
+# ---------------------------------------------------------------------------
+
+
+def test_a_right_label_outranks_a_wrong_href_and_a_prominent_button() -> None:
+    """A link to another page cannot steal a step named for the right element."""
+    elements = [
+        {
+            "selector": 'a[href="/wrong.html"]',
+            "role": "a",
+            "tag": "a",
+            "text": "Cart",
+            "accessible_name": "Cart",
+            "href": "http://x/wrong.html",
+            "is_visible": True,
+        },
+        {
+            "selector": 'a[href="/cart.html"]',
+            "role": "a",
+            "tag": "a",
+            "text": "Cart overview",
+            "accessible_name": "Cart overview",
+            "href": "http://x/cart.html",
+            "is_visible": True,
+        },
+        {
+            "selector": "button.add-to-cart",
+            "role": "button",
+            "tag": "button",
+            "text": "Add to cart",
+            "accessible_name": "Add to cart",
+            "href": "",
+            "is_visible": True,
+        },
+    ]
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+        # The exact label wins even though its href is the wrong page; the right
+        # href with a different label comes next; the button never wins.
+        assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart"]') == 'a[href="/wrong.html"]'
+    finally:
+        monkeypatch.undo()
+
+
+def _multi_step_evidence(pkg: Path, steps: list[dict[str, object]], test: str = "test_01") -> Path:
+    out = pkg / "evidence" / f"{test}.evidence.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps({"test": {"name": test, "status": "failed"}, "steps": steps}),
+        encoding="utf-8",
+    )
+    return out
+
+
+def test_three_broken_locators_yield_exactly_one_candidate_the_first(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    stamp = {"failed_step": 1}
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "Cart", "result": {"status": "failed", "error": "Locator 'a[href=\"/cart\"]' not found"}},
+            {
+                "label": "Products",
+                "result": {"status": "failed", "error": "Locator '#p1' not found", "off_course": stamp},
+            },
+            {"label": "Email", "result": {"status": "failed", "error": "Locator '#e1' not found", "off_course": stamp}},
+        ],
+    )
+
+    candidates = adapt._evidence_repair_candidates(pkg)
+
+    assert len(candidates) == 1, candidates
+    assert 'a[href="/cart"]' in candidates[0]["message"]
+    assert "first failed step 1" in candidates[0]["reason"]
+    assert "off_course" in candidates[0]["reason"]
+
+
+def test_an_assertion_as_the_first_failure_yields_no_candidate(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "Summary", "result": {"status": "failed", "error": "AssertionError: expected text"}},
+            {
+                "label": "Cart",
+                "result": {
+                    "status": "failed",
+                    "error": "Locator 'a[href=\"/cart\"]' not found",
+                    "off_course": {"failed_step": 1},
+                },
+            },
+        ],
+    )
+
+    assert adapt._evidence_repair_candidates(pkg) == []
+
+
+def test_a_single_candidate_case_still_yields_one(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "go to store", "result": {"status": "passed"}},
+            {"label": "Cart", "result": {"status": "failed", "error": "Locator '#cart' not found"}},
+        ],
+    )
+
+    candidates = adapt._evidence_repair_candidates(pkg)
+
+    assert len(candidates) == 1
+    assert "#cart" in candidates[0]["message"]

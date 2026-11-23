@@ -196,6 +196,93 @@ def scrape_elements(url: str) -> list[dict[str, Any]]:
     return elements
 
 
+_HREF_LOCATOR_RE = re.compile(r"""href\s*=\s*(['"])(.*?)""", re.IGNORECASE)
+
+
+def _identity_path(value: str) -> str:
+    """A comparable path for a link: scheme, host, query and .html ignored.
+
+    ``/cart``, ``/cart.html`` and ``https://site/cart.html`` all describe the
+    cart page. The comparison is about WHICH page a link goes to, not its text.
+    """
+    from urllib.parse import urlsplit
+
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        path = (
+            urlsplit(text).path
+            if "://" in text or text.startswith("//")
+            else urlsplit("//x" + (text if text.startswith("/") else "/" + text)).path
+        )
+    except ValueError:
+        return ""
+    path = path.strip("/").lower()
+    if path.endswith("/index.html"):
+        path = path[: -len("/index.html")]
+    if path.endswith(".html") or path.endswith(".htm"):
+        path = path.rsplit(".", 1)[0]
+    return path.strip("/")
+
+
+def _target_href(old_locator: str) -> str:
+    match = _HREF_LOCATOR_RE.search(old_locator or "")
+    return _identity_path(match.group(2)) if match else ""
+
+
+def _accessible_text(element: dict[str, Any]) -> str:
+    """The words a person hears for an element, normalised for comparison."""
+    parts = [
+        element.get("accessible_name"),
+        element.get("aria_label"),
+        element.get("text"),
+        element.get("title"),
+        element.get("name"),
+    ]
+    return " ".join(str(part).strip() for part in parts if part and str(part).strip()).lower()
+
+
+#: Generic UI nouns an author puts in a step label but a screen reader never
+#: announces. "Cart link" names the element "Cart"; "Add to cart link" names the
+#: button "Add to cart". The words are removed from BOTH sides so the comparison
+#: is about what identifies the element, not how the sentence describes it.
+_GENERIC_LABEL_WORDS = {
+    "a",
+    "an",
+    "the",
+    "link",
+    "button",
+    "anchor",
+    "element",
+    "control",
+    "nav",
+    "navigation",
+    "clickable",
+    "select",
+    "text",
+    "field",
+    "input",
+}
+
+
+def _label_matches(description: str, element: dict[str, Any]) -> bool:
+    """Identity match on the accessible name, not mere word overlap.
+
+    ``cart`` and ``Cart link`` both match a link named ``Cart``; neither matches
+    ``Add to cart``, which is exactly the prominent button that used to win.
+    Generic UI nouns are dropped on both sides; every identifying word must then
+    be equal, so a wrong-href candidate cannot outrank the right label.
+    """
+
+    def words(text: str) -> set[str]:
+        return {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word and word not in _GENERIC_LABEL_WORDS}
+
+    wanted = words(description)
+    offered = words(_accessible_text(element))
+    return bool(wanted) and wanted == offered
+
+
 def find_replacement_locator(
     url: str,
     action: str,
@@ -204,8 +291,19 @@ def find_replacement_locator(
 ) -> str | None:
     """Re-resolve *description* to a locator; None when nothing better exists.
 
-    Uses the product's own scorer, so the replacement is as good as a
-    fresh resolution — and the assertion gate decides whether it survives.
+    The product's scorer still supplies the page's candidates, but IDENTITY
+    evidence outranks prominence (j-0312). A candidate whose href points at the
+    same page as the broken link, or whose accessible name is the step label, is
+    a better repair than a big button that happens to share a word:
+
+    1. both href and label match;
+    2. exact label match, even with a different href;
+    3. href match, with no exact label;
+    4. the scorer's order unchanged.
+
+    A right label therefore always outranks a wrong href (tier 2 > tier 3),
+    which is what stops a link to another page stealing a named step. The
+    assertion gate still decides whether the patch survives.
     """
     if not description.strip():
         return None
@@ -214,16 +312,23 @@ def find_replacement_locator(
     elements = scrape_elements(url)
     resolver = PlaceholderResolver()
     ranked = resolver.rank_candidates(action, description, elements)
-    for score, element in ranked:
+
+    target = _target_href(old_locator)
+    usable: list[tuple[int, int, int, str]] = []
+    for order, (score, element) in enumerate(ranked):
         selector = str(element.get("selector", "")).strip()
-        if not selector:
-            continue
-        if selector == old_locator:
-            continue  # same locator — not an adaptation
-        if score < 1:
-            continue
-        return selector
-    return None
+        if not selector or selector == old_locator or score < 1:
+            continue  # same locator, no adaptation; scorer already rejected it
+        label = _label_matches(description, element)
+        href = bool(target) and _identity_path(str(element.get("href") or "")) == target
+        tier = 3 if label and href else 2 if label else 1 if href else 0
+        usable.append((tier, score, order, selector))
+
+    if not usable:
+        return None
+    # Stable sort: within an identity tier the product's own ranking stands.
+    usable.sort(key=lambda row: (-row[0], -row[1], row[2]))
+    return usable[0][3]
 
 
 # ---------------------------------------------------------------------------
@@ -320,12 +425,17 @@ _EVIDENCE_SUFFIX = ".evidence.json"
 
 
 def _evidence_repair_candidates(package: Path) -> list[dict[str, str]]:
-    """(test, message) pairs for LocatorNotFound-class steps the tracker recorded.
+    """At most ONE candidate per test: the EARLIEST failed step, if it is locator-class.
 
     The carry-on rule (t-1057) means a dead locator does not end its test: the step
     is written to the sidecar with status ``failed`` and an error naming the
-    locator, and the test fails later on whatever assertion trips. Reading only the
-    junit message therefore misses every repairable failure of this shape.
+    locator, and the test carries on. After that first failure the journey is off
+    course - the tracker stamps every later step with ``off_course`` naming the
+    ``failed_step`` (and the page it did not reach, when known). Later failures are
+    consequences of the first one, so repairing them chases symptoms: three dead
+    locators in one test are not three repairs, they are one lost journey. Only the
+    first failure is an honest candidate; if that one is an assertion, the test
+    yields none and the later steps stay off course.
     """
     records: list[dict[str, str]] = []
     for path in sorted(package.rglob(f"*{_EVIDENCE_SUFFIX}")):
@@ -334,13 +444,25 @@ def _evidence_repair_candidates(package: Path) -> list[dict[str, str]]:
         except json.JSONDecodeError, OSError:
             continue
         test = str((data.get("test") or {}).get("name") or path.name[: -len(_EVIDENCE_SUFFIX)])
-        for step in data.get("steps") or []:
+        steps = data.get("steps") or []
+        first_failed: tuple[int, dict[str, Any]] | None = None
+        for index, step in enumerate(steps):
             result = step.get("result") or {}
-            if result.get("status") != "failed":
-                continue
-            message = str(result.get("error") or result.get("failure_note") or "").strip()
-            if message and is_repair_candidate(message):
-                records.append({"test": test, "message": message})
+            if result.get("status") == "failed":
+                first_failed = (index + 1, result)
+                break
+        if first_failed is None:
+            continue
+        number, result = first_failed
+        message = str(result.get("error") or result.get("failure_note") or "").strip()
+        if not message or not is_repair_candidate(message):
+            continue
+        # The tracker's stamp is the reason: later failures were marked off course
+        # FROM this step, so they cannot be independent repair targets.
+        later = steps[number:]  # steps after the first failed one
+        stamped = sum(1 for step in later if ((step.get("result") or {}).get("off_course")))
+        reason = f"first failed step {number}; {stamped} later step(s) stamped off_course by the tracker"
+        records.append({"test": test, "message": message, "reason": reason})
     return records
 
 
@@ -414,6 +536,8 @@ def adapt_package(
             "label": description,
             "action": action,
         }
+        if cand.get("reason"):
+            entry["reason"] = cand["reason"]
 
         if not report.url:
             entry["status"] = "no-url"
