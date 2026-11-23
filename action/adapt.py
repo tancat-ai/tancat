@@ -196,7 +196,7 @@ def scrape_elements(url: str) -> list[dict[str, Any]]:
     return elements
 
 
-_HREF_LOCATOR_RE = re.compile(r"""href\s*=\s*(['"])(.*?)""", re.IGNORECASE)
+_HREF_LOCATOR_RE = re.compile(r"""href\s*=\s*(['"])(.*?)\1""", re.IGNORECASE)
 
 
 def _identity_path(value: str) -> str:

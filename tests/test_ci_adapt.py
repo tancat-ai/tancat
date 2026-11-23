@@ -495,3 +495,69 @@ def test_a_single_candidate_case_still_yields_one(tmp_path: Path) -> None:
 
     assert len(candidates) == 1
     assert "#cart" in candidates[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# j-0312 follow-up: the href tiers were dead code until the backreference was
+# restored, so each one gets a test of its own
+# ---------------------------------------------------------------------------
+
+
+def _element(selector: str, text: str, href: str = "", tag: str = "a", role: str = "a") -> dict[str, object]:
+    return {
+        "selector": selector,
+        "role": role,
+        "tag": tag,
+        "text": text,
+        "accessible_name": text,
+        "href": href,
+        "is_visible": True,
+    }
+
+
+def test_the_href_pattern_reads_the_target_out_of_a_locator() -> None:
+    """The one-character fault: a literal \x01 where the backreference belonged."""
+    assert adapt._target_href('a.wrongclass[href="/cart.html"]') == "cart"
+    assert adapt._target_href("a[href='https://site/cart.html?x=1']") == "cart"
+    assert adapt._target_href("#cart") == ""
+
+
+def test_a_locator_the_pattern_cannot_read_returns_no_target_rather_than_raising() -> None:
+    for locator in ("", "#cart", "a[href=/cart.html]", "text=Cart", 'a[href=""]'):
+        assert adapt._target_href(locator) == "", locator
+
+
+def test_href_and_label_together_beat_every_other_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 1 (both) - the strongest evidence there is."""
+    elements = [
+        _element("button.add-to-cart", "Add to cart", "", "button", "button"),
+        _element('a[href="/cart.html"]', "Cart overview", "http://x/cart.html"),
+        _element('a[href="/cart.html"].header', "Cart", "http://x/cart.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert (
+        find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/bogus.html"]') == 'a[href="/cart.html"].header'
+    )
+
+
+def test_an_exact_label_beats_a_wrong_href(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 2 (label) outranks tier 3 (href) - a right name is not stolen by a path."""
+    elements = [
+        _element('a[href="/cart.html"]', "Shopping bag", "http://x/cart.html"),
+        _element('a[href="/elsewhere.html"]', "Cart", "http://x/elsewhere.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"]') == 'a[href="/elsewhere.html"]'
+
+
+def test_an_href_match_alone_beats_a_merely_prominent_element(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 3 - the case that was silently dead: no label match, right page."""
+    elements = [
+        _element("button.btn-primary", "Continue", "", "button", "button"),
+        _element('a[href="/cart.html"]', "Your basket", "http://x/cart.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"].old') == 'a[href="/cart.html"]'
