@@ -182,7 +182,7 @@
       "label": "./action/adapt.py",
       "group": "Other",
       "type": "src",
-      "size": 643,
+      "size": 652,
       "color": "#AEB6BF"
     },
     {
@@ -8622,7 +8622,7 @@
       "label": "./tests/test_ci_adapt.py",
       "group": "Other",
       "type": "test",
-      "size": 563,
+      "size": 603,
       "color": "#AEB6BF"
     },
     {

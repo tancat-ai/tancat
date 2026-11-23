@@ -19,7 +19,7 @@ label,group,size,color
 ./SHARED_TASK_NOTES.md,Documentation,39,#F7DC6F
 ./action.yml,Configuration,169,#BB8FCE
 ./action/__init__.py,Other,0,#AEB6BF
-./action/adapt.py,Other,643,#AEB6BF
+./action/adapt.py,Other,652,#AEB6BF
 ./action/cache_key.py,Other,70,#AEB6BF
 ./action/entrypoint.sh,Configuration,751,#BB8FCE
 ./action/export_evidence_junit.py,Other,67,#AEB6BF
@@ -1074,7 +1074,7 @@ label,group,size,color
 ./tests/test_b103_select_discovery.py,Other,125,#AEB6BF
 ./tests/test_browser_utils.py,Other,263,#AEB6BF
 ./tests/test_bug_evidence_generator.py,Other,272,#AEB6BF
-./tests/test_ci_adapt.py,Other,563,#AEB6BF
+./tests/test_ci_adapt.py,Other,603,#AEB6BF
 ./tests/test_ci_adapt_cart_regression.py,Other,83,#AEB6BF
 ./tests/test_ci_cache_key.py,Other,73,#AEB6BF
 ./tests/test_ci_export_junit.py,Other,113,#AEB6BF

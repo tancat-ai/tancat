@@ -29,7 +29,7 @@ def _cart_package(tmp_path: Path, url: str) -> Path:
         "from playwright.sync_api import Page\n"
         "class HomePage:\n"
         "    def click_cart(self):\n"
-        "        self.tracker.click('a[href=\"/bogus.html\"]', label='Cart link')\n",
+        "        self.tracker.click('a[href=\"/bogus.html\"]', label='Cart')\n",
         encoding="utf-8",
     )
     (pkg / "test_main.py").write_text("def test_01(page):\n    pass\n", encoding="utf-8")
@@ -41,7 +41,7 @@ def _cart_package(tmp_path: Path, url: str) -> Path:
                 "test": {"name": "test_01", "status": "failed"},
                 "steps": [
                     {
-                        "label": "Cart link",
+                        "label": "Cart",
                         "result": {
                             "status": "failed",
                             "error": "Locator 'a[href=\"/bogus.html\"]' not found on current page",

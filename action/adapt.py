@@ -231,15 +231,13 @@ def _target_href(old_locator: str) -> str:
     return _identity_path(match.group(2)) if match else ""
 
 
+#: The fields an accessible name can come from, strongest first.
+_NAME_FIELDS = ("accessible_name", "aria_label", "text", "title", "name")
+
+
 def _accessible_text(element: dict[str, Any]) -> str:
     """The words a person hears for an element, normalised for comparison."""
-    parts = [
-        element.get("accessible_name"),
-        element.get("aria_label"),
-        element.get("text"),
-        element.get("title"),
-        element.get("name"),
-    ]
+    parts = [element.get(field) for field in _NAME_FIELDS]
     return " ".join(str(part).strip() for part in parts if part and str(part).strip()).lower()
 
 
@@ -267,20 +265,31 @@ _GENERIC_LABEL_WORDS = {
 
 
 def _label_matches(description: str, element: dict[str, Any]) -> bool:
-    """Identity match on the accessible name, not mere word overlap.
+    """Identity match on ONE name field, not on the union of them all.
 
     ``cart`` and ``Cart link`` both match a link named ``Cart``; neither matches
     ``Add to cart``, which is exactly the prominent button that used to win.
     Generic UI nouns are dropped on both sides; every identifying word must then
-    be equal, so a wrong-href candidate cannot outrank the right label.
+    be equal.
+
+    The comparison is per FIELD. Unioning the fields let a link to the RIGHT page
+    whose ``aria-label`` was ``Cart`` but whose visible text was ``Proceed`` fail
+    the label test (the union read "cart proceed"), so a link to the WRONG page
+    with visible text ``Cart`` won. A field that names the element is a name in
+    its own right; combining them invents one the page never shows.
     """
 
     def words(text: str) -> set[str]:
         return {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word and word not in _GENERIC_LABEL_WORDS}
 
     wanted = words(description)
-    offered = words(_accessible_text(element))
-    return bool(wanted) and wanted == offered
+    if not wanted:
+        return False
+    for name_field in _NAME_FIELDS:
+        value = element.get(name_field)
+        if value and words(str(value)) == wanted:
+            return True
+    return False
 
 
 def find_replacement_locator(

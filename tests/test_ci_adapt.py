@@ -561,3 +561,43 @@ def test_an_href_match_alone_beats_a_merely_prominent_element(monkeypatch: pytes
     monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
 
     assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"].old') == 'a[href="/cart.html"]'
+
+
+def test_a_same_page_link_with_the_label_in_another_field_beats_an_other_page_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """j-0312 review: a union of name fields invents a name the page never shows.
+
+    The right-page link carries ``aria-label='Cart'`` but visible text ``Proceed``;
+    the wrong-page link's visible text is ``Cart``. Per-field matching names the
+    first as ``Cart`` and the second as ``Cart`` too, so the href tier decides -
+    and the right page wins. The union used to read the first as "cart proceed",
+    lose its label, and hand the step to the wrong page.
+    """
+    right_page = {
+        "selector": 'a[href="/cart.html"]',
+        "role": "a",
+        "tag": "a",
+        "text": "Proceed",
+        "accessible_name": "Cart",
+        "aria_label": "Cart",
+        "href": "http://x/cart.html",
+        "is_visible": True,
+    }
+    wrong_page = _element('a[href="/elsewhere.html"]', "Cart", "http://x/elsewhere.html")
+    prominent = _element("button.btn-primary", "Continue", "", "button", "button")
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: [prominent, wrong_page, right_page])
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"].old') == 'a[href="/cart.html"]'
+
+
+def test_the_label_is_matched_per_field_not_across_them() -> None:
+    element = {
+        "selector": 'a[href="/cart.html"]',
+        "text": "Proceed",
+        "aria_label": "Cart",
+        "accessible_name": "Cart",
+    }
+    assert adapt._label_matches("Cart", element), "the aria-label names the element"
+    # The union of fields is not a name the page shows.
+    assert not adapt._label_matches("Cart Proceed", element)
