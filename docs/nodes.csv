@@ -62,6 +62,7 @@ label,group,size,color
 ./docs/implementation/landing-asset-sources.json,Other,76,#AEB6BF
 ./docs/implementation/landing-build/tailwind.config.js,Other,21,#AEB6BF
 ./docs/implementation/landing-build/tailwind.input.css,Other,3,#AEB6BF
+./docs/implementation/pypi-first-release.md,Documentation,57,#F7DC6F
 ./docs/implementation/refactor_audit_2026-05-20.md,Documentation,132,#F7DC6F
 ./docs/implementation/tancat-pro-install-and-licence.html,Other,74,#AEB6BF
 ./docs/launch/lemon-squeezy-checklist.html,Other,186,#AEB6BF
@@ -665,7 +666,7 @@ label,group,size,color
 ./notebook_upload.md,Documentation,13862,#F7DC6F
 ./notebooks/debug_pipeline.ipynb,Other,1333,#AEB6BF
 ./overrides/404.html,Other,21,#AEB6BF
-./pyproject.toml,Configuration,216,#BB8FCE
+./pyproject.toml,Configuration,249,#BB8FCE
 ./pytest.ini,Configuration,33,#BB8FCE
 ./scripts/MAINTENANCE.md,Documentation,87,#F7DC6F
 ./scripts/README.md,Documentation,361,#F7DC6F
@@ -830,6 +831,7 @@ label,group,size,color
 ./scripts/mock_server.py,Other,241,#AEB6BF
 ./scripts/parity_check.py,Other,464,#AEB6BF
 ./scripts/rag_ingest.py,Other,411,#AEB6BF
+./scripts/release_guards.py,Other,141,#AEB6BF
 ./scripts/reliability_test.py,Other,414,#AEB6BF
 ./scripts/rerun_mock_resolve_learn.py,Other,34,#AEB6BF
 ./scripts/run_lv_eval.py,Other,79,#AEB6BF
@@ -1236,7 +1238,8 @@ label,group,size,color
 ./tests/test_rag_retriever.py,Other,423,#AEB6BF
 ./tests/test_rag_store.py,Other,983,#AEB6BF
 ./tests/test_rag_switches.py,Other,516,#AEB6BF
-./tests/test_release_workflows.py,Other,132,#AEB6BF
+./tests/test_release_guards.py,Other,118,#AEB6BF
+./tests/test_release_workflows.py,Other,135,#AEB6BF
 ./tests/test_report_parity.py,Other,398,#AEB6BF
 ./tests/test_report_utils.py,Other,581,#AEB6BF
 ./tests/test_resolver_observed_scope.py,Other,856,#AEB6BF

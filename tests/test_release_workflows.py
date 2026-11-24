@@ -40,7 +40,10 @@ def test_release_workflow_is_tag_driven_and_gated() -> None:
     for job in ("build", "release", "move-v1"):
         assert job in jobs, f"release.yml is missing the {job} job"
     assert jobs["build"]["needs"] == ["gates", "full-self-test"]
-    assert jobs["release"]["needs"] == "build"
+    # j-0313: the GitHub Release now waits for the PyPI publish, so a public
+    # release page cannot exist without a published package.
+    assert jobs["release"]["needs"] == ["build", "publish"]
+    assert "publish" in jobs
     assert jobs["move-v1"]["needs"] == "release"
 
 

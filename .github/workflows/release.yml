@@ -84,21 +84,20 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Check the tag matches the packaged version
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          PKG_VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
-          if [ "$TAG" != "v${PKG_VERSION}" ]; then
-            echo "::error::tag '${TAG}' does not match pyproject version 'v${PKG_VERSION}' — bump [project].version before tagging."
-            exit 1
-          fi
-          echo "Releasing ${TAG} (pyproject version ${PKG_VERSION})."
-
       # The wheel's entry point is exercised by the gated ci.yml test job
       # (install the wheel, run `tancat --help`); this job only produces the
       # artifacts the Release attaches.
       - name: Build the package (sdist + wheel)
         run: uv build
+
+      - name: Release guards (version, size, licence record, tag on main)
+        # Each guard refuses with its own message. Nothing reaches PyPI unless all
+        # four pass: the tag names the packaged version, no file is 100 MB or more
+        # (the size is printed either way), the licence record matches uv.lock, and
+        # the commit is on main.
+        run: |
+          git fetch --no-tags origin main
+          python scripts/release_guards.py --tag "${GITHUB_REF_NAME}" --dist dist
 
       - name: Upload distributions
         uses: actions/upload-artifact@v7
@@ -106,10 +105,38 @@ jobs:
           name: dist
           path: dist/
 
+  publish:
+    name: Publish to PyPI (trusted publishing)
+    runs-on: ubuntu-latest
+    needs: build
+    # Trusted publishing: GitHub mints a short-lived OIDC token, PyPI verifies the
+    # workflow's identity. No API token is stored anywhere - not in secrets, not in
+    # the repo. The `pypi` environment must exist with the pending publisher
+    # registered for project tancat, owner tancat-ai, repo tancat, this workflow.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/tancat
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
+          attestations: true
+
   release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, publish]
     permissions:
       contents: write
     steps:

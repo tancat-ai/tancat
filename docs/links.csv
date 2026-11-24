@@ -159,6 +159,10 @@ source,target,type
 ./docs/implementation/fonts/README.md,./src/orchestrator.py,proximity
 ./docs/implementation/fonts/README.md,./src/scraper.py,proximity
 ./docs/implementation/fonts/README.md,./src/test_generator.py,proximity
+./docs/implementation/pypi-first-release.md,./src/llm_client.py,proximity
+./docs/implementation/pypi-first-release.md,./src/orchestrator.py,proximity
+./docs/implementation/pypi-first-release.md,./src/scraper.py,proximity
+./docs/implementation/pypi-first-release.md,./src/test_generator.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/llm_client.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/orchestrator.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/scraper.py,proximity

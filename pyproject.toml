@@ -111,6 +111,39 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src", "cli"]
 
+# The sdist must hold the product, not the machine that built it (j-0313). Without
+# this, hatchling packed scratch/ (2.5 GB), generated_tests/ and exported_tests/
+# into a 1.3 GB tarball - over PyPI's 100 MB per-file limit, so a release could
+# never publish. Only the wheel's packages, the docs a buyer needs and the files
+# the build itself reads are included.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/cli",
+  "/docs/user",
+  "/docs/licenses",
+  "/landing",
+  "/scripts",
+  "/pyproject.toml",
+  "/uv.lock",
+  "/README.md",
+  "/LICENSE",
+  "/NOTICE",
+]
+exclude = [
+  "/scratch",
+  "/generated_tests",
+  "/exported_tests",
+  "/evidence",
+  "/fixtures",
+  "/tests",
+  "/markdown_docs",
+  "/notebooks",
+  "/screenshots",
+  "/training_data",
+  "/action/__pycache__",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py314"
