@@ -109,17 +109,26 @@ def _parse_version(text: str) -> tuple[int, ...]:
 
 
 def current_version() -> str:
-    """The installed version, or the source-tree fallback."""
-    from importlib.metadata import PackageNotFoundError, version
+    """The running version, from the one place that knows it (src/version_info.py).
 
-    try:
-        return version("tancat")
-    except PackageNotFoundError:
-        return "0.1.0"
+    A source checkout used to answer a hardcoded 0.1.0, so it reported a newer
+    release as available against its own tree (j-0313 review).
+    """
+    from src.version_info import installed_version
+
+    return installed_version()
 
 
 def is_newer(latest: str, current: str) -> bool:
-    """True when *latest* is a strictly newer version than *current*."""
+    """True when *latest* is a strictly newer version than *current*.
+
+    An unknown current (no metadata, no pyproject) is never "older": comparing
+    against nothing would invent a notice.
+    """
+    from src.version_info import version_is_known
+
+    if not version_is_known(current) or not version_is_known(latest):
+        return False
     return _parse_version(latest) > _parse_version(current)
 
 

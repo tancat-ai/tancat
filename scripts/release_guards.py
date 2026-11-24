@@ -38,16 +38,42 @@ def packaged_version(repo_root: Path) -> str:
         return str(tomllib.load(handle)["project"]["version"])
 
 
+def _version_key(text: str) -> tuple[int, ...]:
+    """A comparable key: '1.0.0' -> (1, 0, 0); a suffix ends the numbers."""
+    parts: list[int] = []
+    for chunk in str(text).strip().lstrip("v").split("."):
+        digits = ""
+        for char in chunk:
+            if not char.isdigit():
+                break
+            digits += char
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
 def tag_matches_version(tag: str, repo_root: Path) -> tuple[bool, str]:
-    """Guard 1: the tag is ``v`` + the packaged version."""
+    """Guard 1: the tag is ``v`` + the packaged version.
+
+    A mismatch is named for the half that is actually wrong: a tag behind the
+    packaged version is stale (re-tag), and a tag ahead of it means the version
+    was never bumped. Leading with "bump pyproject" on a stale tag sent the
+    reader to the wrong file.
+    """
     version = packaged_version(repo_root)
     expected = f"v{version}"
-    if tag != expected:
+    if tag == expected:
+        return True, f"tag '{tag}' matches [project].version {version}"
+    if _version_key(tag) < _version_key(expected):
         return False, (
-            f"tag '{tag}' does not match the packaged version '{expected}'. "
-            f"Bump [project].version in pyproject.toml to {version} (or tag {expected}) before releasing."
+            f"the tag is stale: tag '{tag}' is older than [project].version {version} "
+            f"(expected tag '{expected}'). Re-tag the release commit as '{expected}'."
         )
-    return True, f"tag '{tag}' matches [project].version {version}"
+    return False, (
+        f"[project].version is behind the tag: tag '{tag}' is newer than version {version} "
+        f"(expected tag '{expected}'). Bump [project].version to {tag.lstrip('v')}, merge, then tag."
+    )
 
 
 def file_sizes(dist: Path) -> list[tuple[Path, int]]:

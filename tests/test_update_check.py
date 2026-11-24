@@ -373,3 +373,42 @@ def test_the_background_refresh_returns_before_the_fetch_completes(
             break
         time.sleep(0.05)
     assert V.read_cache(_isolated).get("latest_version") == "1.5.0", "the background result was not recorded"
+
+
+# -- j-0313 review: one version, and the same one from a source run -----------
+
+
+def test_a_source_run_reports_the_version_the_wheel_carries() -> None:
+    """The fallback used to be a hardcoded 0.1.0, so a source checkout reported
+    a newer release as available against its own tree."""
+    import subprocess
+
+    from src.version_info import installed_version, pyproject_version
+
+    root = Path(__file__).resolve().parent.parent
+    source_version = pyproject_version(root)
+    assert source_version, "pyproject.toml has no [project].version"
+
+    # A source run reads the same number (installed metadata, else pyproject).
+    assert installed_version() == source_version
+
+    # And so does the built wheel's metadata, read from the artefact.
+    out = root / "scratch" / "t1494-dist"
+    subprocess.run(["uv", "build", "--wheel", "--out-dir", str(out)], cwd=root, check=True, capture_output=True)
+    wheel = next(out.glob("*.whl"))
+    import zipfile
+
+    with zipfile.ZipFile(wheel) as archive:
+        metadata = next(n for n in archive.namelist() if n.endswith("METADATA"))
+        version_line = next(
+            line for line in archive.read(metadata).decode().splitlines() if line.startswith("Version: ")
+        )
+    assert version_line == f"Version: {source_version}", f"{version_line} vs {source_version}"
+
+
+def test_an_unknown_current_version_never_looks_outdated() -> None:
+    """No metadata and no pyproject means 'unknown', not 'older'."""
+    from src import version_check as V
+
+    assert not V.is_newer("1.0.0", "unknown")
+    assert not V.is_newer("unknown", "1.0.0")

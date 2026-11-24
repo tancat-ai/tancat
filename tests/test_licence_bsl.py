@@ -43,7 +43,7 @@ EXPECTED_PARAMETERS = {
     ),
     # t-1407 (j-0299): the author assigned the copyright to the company, so the
     # Licensed Work names the company as holder. The Licensor line already did.
-    "Licensed Work": "TanCat version 0.1.0 or later. The Licensed Work is (c) 2026 Cat Tan Operations Ltd.",
+    "Licensed Work": "TanCat version 1.0.0 or later. The Licensed Work is (c) 2026 Cat Tan Operations Ltd.",
     "Change Date": "The fourth anniversary of the date the Licensed Work is first publicly distributed.",
     "Change License": "Apache License, Version 2.0",
 }

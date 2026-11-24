@@ -666,7 +666,7 @@ label,group,size,color
 ./notebook_upload.md,Documentation,13862,#F7DC6F
 ./notebooks/debug_pipeline.ipynb,Other,1333,#AEB6BF
 ./overrides/404.html,Other,21,#AEB6BF
-./pyproject.toml,Configuration,249,#BB8FCE
+./pyproject.toml,Configuration,255,#BB8FCE
 ./pytest.ini,Configuration,33,#BB8FCE
 ./scripts/MAINTENANCE.md,Documentation,87,#F7DC6F
 ./scripts/README.md,Documentation,361,#F7DC6F
@@ -831,7 +831,7 @@ label,group,size,color
 ./scripts/mock_server.py,Other,241,#AEB6BF
 ./scripts/parity_check.py,Other,464,#AEB6BF
 ./scripts/rag_ingest.py,Other,411,#AEB6BF
-./scripts/release_guards.py,Other,141,#AEB6BF
+./scripts/release_guards.py,Other,167,#AEB6BF
 ./scripts/reliability_test.py,Other,414,#AEB6BF
 ./scripts/rerun_mock_resolve_learn.py,Other,34,#AEB6BF
 ./scripts/run_lv_eval.py,Other,79,#AEB6BF
@@ -877,7 +877,7 @@ label,group,size,color
 ./src/cli/evidence_generator.py,Other,538,#AEB6BF
 ./src/cli/headless.py,Other,577,#AEB6BF
 ./src/cli/input_parser.py,Other,586,#AEB6BF
-./src/cli/main.py,Other,885,#AEB6BF
+./src/cli/main.py,Other,886,#AEB6BF
 ./src/cli/menu_renderer.py,Other,883,#AEB6BF
 ./src/cli/pipeline_runner.py,Other,1463,#AEB6BF
 ./src/cli/report_generator.py,Other,450,#AEB6BF
@@ -1022,7 +1022,8 @@ label,group,size,color
 ./src/user_story_parser.py,intelligence,311,#45B7D1
 ./src/verification_strength.py,Other,228,#AEB6BF
 ./src/verify_baseline.py,Other,276,#AEB6BF
-./src/version_check.py,Other,359,#AEB6BF
+./src/version_check.py,Other,368,#AEB6BF
+./src/version_info.py,Other,49,#AEB6BF
 ./src/vision_enricher.py,intelligence,307,#45B7D1
 ./streamlit_app.py,interface,997,#FF6B6B
 ./tests/__init__.py,Other,1,#AEB6BF
@@ -1238,7 +1239,7 @@ label,group,size,color
 ./tests/test_rag_retriever.py,Other,423,#AEB6BF
 ./tests/test_rag_store.py,Other,983,#AEB6BF
 ./tests/test_rag_switches.py,Other,516,#AEB6BF
-./tests/test_release_guards.py,Other,118,#AEB6BF
+./tests/test_release_guards.py,Other,200,#AEB6BF
 ./tests/test_release_workflows.py,Other,135,#AEB6BF
 ./tests/test_report_parity.py,Other,398,#AEB6BF
 ./tests/test_report_utils.py,Other,581,#AEB6BF
@@ -1314,7 +1315,7 @@ label,group,size,color
 ./tests/test_ui_run_comparison.py,Other,83,#AEB6BF
 ./tests/test_ui_saved_packages.py,Other,58,#AEB6BF
 ./tests/test_ui_sidebar.py,Other,388,#AEB6BF
-./tests/test_update_check.py,Other,373,#AEB6BF
+./tests/test_update_check.py,Other,414,#AEB6BF
 ./tests/test_url_guard.py,Other,287,#AEB6BF
 ./tests/test_url_inference.py,Other,139,#AEB6BF
 ./tests/test_url_resolver.py,Other,308,#AEB6BF

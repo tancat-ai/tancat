@@ -35,11 +35,23 @@ def _dist(tmp_path: Path, files: dict[str, int]) -> Path:
 def test_the_tag_must_match_the_packaged_version() -> None:
     ok, message = G.tag_matches_version("v9.9.9", ROOT)
     assert not ok
-    assert "does not match the packaged version" in message
-    assert "[project].version" in message
+    assert "[project].version is behind the tag" in message, message
+    assert "Bump [project].version" in message
 
     version = G.packaged_version(ROOT)
     assert G.tag_matches_version(f"v{version}", ROOT)[0]
+
+
+def test_a_stale_tag_is_named_as_the_stale_half() -> None:
+    """j-0313 review: the message must lead with what is actually wrong."""
+    version = G.packaged_version(ROOT)
+    stale = "v0.9.0"
+    ok, message = G.tag_matches_version(stale, ROOT)
+
+    assert not ok
+    assert "the tag is stale" in message, message
+    assert f"older than [project].version {version}" in message
+    assert "Bump [project].version" not in message, "a stale tag must not send the reader to pyproject"
 
 
 def test_a_file_at_the_limit_is_refused_and_the_sizes_are_printed(tmp_path: Path) -> None:
@@ -134,8 +146,9 @@ def built_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
         text=True,
         timeout=600,
     )
-    if result.returncode != 0:
-        pytest.skip(f"could not build a wheel here: {result.stderr[-300:]}")
+    # A guard that skips is not a guard: the repo builds with uv everywhere, so a
+    # build that cannot run here is a real failure and must be visible in CI.
+    assert result.returncode == 0, f"the wheel could not be built: {(result.stderr or result.stdout)[-600:]}"
     wheels = sorted(out.glob("*.whl"))
     assert wheels, "the build produced no wheel"
     return wheels[0]
