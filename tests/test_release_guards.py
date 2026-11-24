@@ -7,9 +7,11 @@ publishing identity.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,3 +118,70 @@ def test_the_tag_trigger_covers_versions_and_excludes_the_floating_tag() -> None
 
     assert "v*" in tags
     assert "!v1" in tags
+
+
+# -- j-0313 review: the BUILT wheel must carry the identity, not just the config --
+
+
+@pytest.fixture(scope="module")
+def built_wheel(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the wheel once and return its path (the artefact, not the config)."""
+    out = tmp_path_factory.mktemp("dist")
+    result = subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(out)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    if result.returncode != 0:
+        pytest.skip(f"could not build a wheel here: {result.stderr[-300:]}")
+    wheels = sorted(out.glob("*.whl"))
+    assert wheels, "the build produced no wheel"
+    return wheels[0]
+
+
+def _metadata_lines(wheel: Path) -> dict[str, list[str]]:
+    import zipfile
+
+    with zipfile.ZipFile(wheel) as archive:
+        name = next(name for name in archive.namelist() if name.endswith("METADATA"))
+        text = archive.read(name).decode("utf-8")
+    fields: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if ": " in line and not line.startswith(" "):
+            key, value = line.split(": ", 1)
+            fields.setdefault(key, []).append(value)
+    return fields
+
+
+def test_the_built_wheel_declares_our_project_urls(built_wheel: Path) -> None:
+    """A flat project_urls key inside [project] is not PEP 621, so hatchling drops it."""
+    fields = _metadata_lines(built_wheel)
+    url_lines = fields.get("Project-URL", [])
+
+    assert "Repository, https://github.com/tancat-ai/tancat" in url_lines, url_lines
+    assert "Homepage, https://tancat.dev" in url_lines, url_lines
+    assert fields.get("Name") == ["tancat"], fields.get("Name")
+
+
+def test_the_built_wheel_passes_the_products_own_identity_check(built_wheel: Path) -> None:
+    """The update check reads a published answer; ours must not look foreign."""
+    from src import version_check
+
+    fields = _metadata_lines(built_wheel)
+    urls: dict[str, str] = {}
+    for line in fields.get("Project-URL", []):
+        label, _, value = line.partition(", ")
+        urls[label] = value
+    feed = {
+        "info": {
+            "name": (fields.get("Name") or [""])[0],
+            "version": (fields.get("Version") or [""])[0],
+            "author_email": (fields.get("Author-email") or [""])[0],
+            "project_urls": urls,
+        }
+    }
+
+    assert version_check.identity_matches(feed), feed
+    assert version_check.is_newer((fields.get("Version") or ["0"])[0], "0.9.0")

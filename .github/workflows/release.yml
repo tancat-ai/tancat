@@ -15,9 +15,13 @@
 #     -> move-v1          force-moves the floating `v1` tag so `uses: ...@v1` resolves
 #
 # Cutting a release: bump `[project].version` in pyproject.toml, merge to main,
-# then `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the
-# version or the build job fails (one source of truth). The **first** release
-# should be `v1.0.0` so the moving `v1` tag exists for consumers to pin.
+# then `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the version
+# or the guards refuse it (one source of truth).
+#
+# ONE SCHEME: `vX.Y.Z`, starting at `v1.0.0`. The first release is what customers
+# install, so it does not carry a 0.x "provisional" number; and `move-v1` only
+# fires on `v1.*`, so a 0.1.0 first release would never create the floating `v1`
+# tag consumers pin. Bump `[project].version` to `1.0.0` before tagging.
 #
 # GitHub Marketplace: YES — the Action is published to the Marketplace. It is a
 # Docker action with `branding`, so it is eligible. The listing is a one-time

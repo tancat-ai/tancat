@@ -4,15 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tancat"
-version = "0.1.0"
+version = "1.0.0"
 description = "AI-powered Playwright test generator using local LLMs (llama.cpp, Ollama, LM Studio)"
 readme = "README.md"
 authors = [{ name = "Cat Tan Operations Ltd", email = "hello@tancat.dev" }]
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
-# j-0306: the update check trusts a PyPI answer only when it carries our
-# repository or domain, so the FIRST published release must carry them too.
-project_urls = { Repository = "https://github.com/tancat-ai/tancat", Homepage = "https://tancat.dev" }
 requires-python = ">=3.14"
 dependencies = [
     "playwright>=1.40.0",
@@ -57,6 +54,15 @@ dependencies = [
 # cli.main:main is sync (it wraps asyncio.run(interactive_session())) and
 # re-exports the real implementation from src.cli.main, so installing yields a
 # working `tancat` interactive CLI.
+# PEP 621 project URLs live in their own table (j-0313 review). A flat
+# `project_urls = {...}` key inside [project] is not part of the standard, so
+# hatchling silently dropped it and the wheel's METADATA carried no Project-URL:
+# PyPI would show no links, and the product's own update check - which requires
+# one of these URLs - would read our own release as someone else's.
+[project.urls]
+Repository = "https://github.com/tancat-ai/tancat"
+Homepage = "https://tancat.dev"
+
 [project.scripts]
 tancat = "cli.main:main"
 

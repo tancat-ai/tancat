@@ -299,7 +299,9 @@ def test_the_real_pyproject_publishes_the_identity_the_check_requires() -> None:
     with (root / "pyproject.toml").open("rb") as handle:
         project = tomllib.load(handle)["project"]
 
-    urls = project.get("project_urls") or {}
+    # PEP 621 puts these in the [project.urls] table (a flat `project_urls` key
+    # inside [project] is dropped by the packager - j-0313 review).
+    urls = project.get("urls") or {}
     assert urls.get("Repository") == "https://github.com/tancat-ai/tancat"
     assert urls.get("Homepage") == "https://tancat.dev"
 
