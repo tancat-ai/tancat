@@ -159,6 +159,10 @@ source,target,type
 ./docs/implementation/fonts/README.md,./src/orchestrator.py,proximity
 ./docs/implementation/fonts/README.md,./src/scraper.py,proximity
 ./docs/implementation/fonts/README.md,./src/test_generator.py,proximity
+./docs/implementation/pypi-first-release.md,./src/llm_client.py,proximity
+./docs/implementation/pypi-first-release.md,./src/orchestrator.py,proximity
+./docs/implementation/pypi-first-release.md,./src/scraper.py,proximity
+./docs/implementation/pypi-first-release.md,./src/test_generator.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/llm_client.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/orchestrator.py,proximity
 ./docs/implementation/refactor_audit_2026-05-20.md,./src/scraper.py,proximity
@@ -1403,6 +1407,7 @@ source,target,type
 ./src/cli/main.py,./src/run_result_persistence.py,import
 ./src/cli/main.py,./src/settings_store.py,import
 ./src/cli/main.py,./src/storage.py,import
+./src/cli/main.py,./src/version_info.py,import
 ./src/cli/menu_renderer.py,./src/pipeline_artifact_manager.py,import
 ./src/cli/menu_renderer.py,./src/provider_config.py,import
 ./src/cli/menu_renderer.py,./src/secure_config.py,import
@@ -1761,6 +1766,7 @@ source,target,type
 ./src/verification_strength.py,./src/pipeline_models.py,import
 ./src/version_check.py,./src/secure_config.py,import
 ./src/version_check.py,./src/settings_store.py,import
+./src/version_check.py,./src/version_info.py,import
 ./src/vision_enricher.py,./src/llm_client.py,import
 ./streamlit_app.py,./src/export_service.py,import
 ./streamlit_app.py,./src/gantt_utils.py,import
@@ -2376,6 +2382,7 @@ source,target,type
 ./tests/test_ui_sidebar.py,./src/flow_memory.py,import
 ./tests/test_ui_sidebar.py,./src/licensing/license.py,import
 ./tests/test_ui_sidebar.py,./src/ui/ui_sidebar.py,import
+./tests/test_update_check.py,./src/version_info.py,import
 ./tests/test_url_guard.py,./src/url_guard.py,import
 ./tests/test_url_inference.py,./src/url_inference.py,import
 ./tests/test_url_resolver.py,./src/url_resolver.py,import

@@ -10,9 +10,6 @@ readme = "README.md"
 authors = [{ name = "Cat Tan Operations Ltd", email = "hello@tancat.dev" }]
 license = "BUSL-1.1"
 license-files = ["LICENSE"]
-# j-0306: the update check trusts a PyPI answer only when it carries our
-# repository or domain, so the FIRST published release must carry them too.
-project_urls = { Repository = "https://github.com/tancat-ai/tancat", Homepage = "https://tancat.dev" }
 requires-python = ">=3.14"
 dependencies = [
     "playwright>=1.40.0",
@@ -57,6 +54,15 @@ dependencies = [
 # cli.main:main is sync (it wraps asyncio.run(interactive_session())) and
 # re-exports the real implementation from src.cli.main, so installing yields a
 # working `tancat` interactive CLI.
+# PEP 621 project URLs live in their own table (j-0313 review). A flat
+# `project_urls = {...}` key inside [project] is not part of the standard, so
+# hatchling silently dropped it and the wheel's METADATA carried no Project-URL:
+# PyPI would show no links, and the product's own update check - which requires
+# one of these URLs - would read our own release as someone else's.
+[project.urls]
+Repository = "https://github.com/tancat-ai/tancat"
+Homepage = "https://tancat.dev"
+
 [project.scripts]
 tancat = "cli.main:main"
 
@@ -110,6 +116,39 @@ dev = [
 ]
 [tool.hatch.build.targets.wheel]
 packages = ["src", "cli"]
+
+# The sdist must hold the product, not the machine that built it (j-0313). Without
+# this, hatchling packed scratch/ (2.5 GB), generated_tests/ and exported_tests/
+# into a 1.3 GB tarball - over PyPI's 100 MB per-file limit, so a release could
+# never publish. Only the wheel's packages, the docs a buyer needs and the files
+# the build itself reads are included.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/cli",
+  "/docs/user",
+  "/docs/licenses",
+  "/landing",
+  "/scripts",
+  "/pyproject.toml",
+  "/uv.lock",
+  "/README.md",
+  "/LICENSE",
+  "/NOTICE",
+]
+exclude = [
+  "/scratch",
+  "/generated_tests",
+  "/exported_tests",
+  "/evidence",
+  "/fixtures",
+  "/tests",
+  "/markdown_docs",
+  "/notebooks",
+  "/screenshots",
+  "/training_data",
+  "/action/__pycache__",
+]
 
 [tool.ruff]
 line-length = 120

@@ -641,13 +641,14 @@ _PROVIDER_DEFAULTS_NOTE = "saved setting, then $LLM_PROVIDER, else the provider'
 
 
 def _version() -> str:
-    """Return the installed package version (fallback for a source checkout)."""
-    from importlib.metadata import PackageNotFoundError, version
+    """The running version, from the one place that knows it (src/version_info.py).
 
-    try:
-        return version("tancat")
-    except PackageNotFoundError:
-        return "0.1.0"
+    The old fallback was a hardcoded 0.1.0, so a source checkout printed 0.1.0 and
+    the update check then reported 1.0.0 "available" against its own tree.
+    """
+    from src.version_info import installed_version
+
+    return installed_version()
 
 
 def _commit() -> str:
