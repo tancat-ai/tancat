@@ -380,3 +380,224 @@ def test_adapt_no_url_fails_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     report = adapt_package(pkg, junit)
     assert report.summary["candidates"] == 1
     assert report.candidates[0]["status"] == "no-url"
+
+
+# ---------------------------------------------------------------------------
+# j-0312: identity outranks prominence, and only the first failure is honest
+# ---------------------------------------------------------------------------
+
+
+def test_a_right_label_outranks_a_wrong_href_and_a_prominent_button() -> None:
+    """A link to another page cannot steal a step named for the right element."""
+    elements = [
+        {
+            "selector": 'a[href="/wrong.html"]',
+            "role": "a",
+            "tag": "a",
+            "text": "Cart",
+            "accessible_name": "Cart",
+            "href": "http://x/wrong.html",
+            "is_visible": True,
+        },
+        {
+            "selector": 'a[href="/cart.html"]',
+            "role": "a",
+            "tag": "a",
+            "text": "Cart overview",
+            "accessible_name": "Cart overview",
+            "href": "http://x/cart.html",
+            "is_visible": True,
+        },
+        {
+            "selector": "button.add-to-cart",
+            "role": "button",
+            "tag": "button",
+            "text": "Add to cart",
+            "accessible_name": "Add to cart",
+            "href": "",
+            "is_visible": True,
+        },
+    ]
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+        # The exact label wins even though its href is the wrong page; the right
+        # href with a different label comes next; the button never wins.
+        assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart"]') == 'a[href="/wrong.html"]'
+    finally:
+        monkeypatch.undo()
+
+
+def _multi_step_evidence(pkg: Path, steps: list[dict[str, object]], test: str = "test_01") -> Path:
+    out = pkg / "evidence" / f"{test}.evidence.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps({"test": {"name": test, "status": "failed"}, "steps": steps}),
+        encoding="utf-8",
+    )
+    return out
+
+
+def test_three_broken_locators_yield_exactly_one_candidate_the_first(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    stamp = {"failed_step": 1}
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "Cart", "result": {"status": "failed", "error": "Locator 'a[href=\"/cart\"]' not found"}},
+            {
+                "label": "Products",
+                "result": {"status": "failed", "error": "Locator '#p1' not found", "off_course": stamp},
+            },
+            {"label": "Email", "result": {"status": "failed", "error": "Locator '#e1' not found", "off_course": stamp}},
+        ],
+    )
+
+    candidates = adapt._evidence_repair_candidates(pkg)
+
+    assert len(candidates) == 1, candidates
+    assert 'a[href="/cart"]' in candidates[0]["message"]
+    assert "first failed step 1" in candidates[0]["reason"]
+    assert "off_course" in candidates[0]["reason"]
+
+
+def test_an_assertion_as_the_first_failure_yields_no_candidate(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "Summary", "result": {"status": "failed", "error": "AssertionError: expected text"}},
+            {
+                "label": "Cart",
+                "result": {
+                    "status": "failed",
+                    "error": "Locator 'a[href=\"/cart\"]' not found",
+                    "off_course": {"failed_step": 1},
+                },
+            },
+        ],
+    )
+
+    assert adapt._evidence_repair_candidates(pkg) == []
+
+
+def test_a_single_candidate_case_still_yields_one(tmp_path: Path) -> None:
+    pkg = _package(tmp_path)
+    _multi_step_evidence(
+        pkg,
+        [
+            {"label": "go to store", "result": {"status": "passed"}},
+            {"label": "Cart", "result": {"status": "failed", "error": "Locator '#cart' not found"}},
+        ],
+    )
+
+    candidates = adapt._evidence_repair_candidates(pkg)
+
+    assert len(candidates) == 1
+    assert "#cart" in candidates[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# j-0312 follow-up: the href tiers were dead code until the backreference was
+# restored, so each one gets a test of its own
+# ---------------------------------------------------------------------------
+
+
+def _element(selector: str, text: str, href: str = "", tag: str = "a", role: str = "a") -> dict[str, object]:
+    return {
+        "selector": selector,
+        "role": role,
+        "tag": tag,
+        "text": text,
+        "accessible_name": text,
+        "href": href,
+        "is_visible": True,
+    }
+
+
+def test_the_href_pattern_reads_the_target_out_of_a_locator() -> None:
+    """The one-character fault: a literal \x01 where the backreference belonged."""
+    assert adapt._target_href('a.wrongclass[href="/cart.html"]') == "cart"
+    assert adapt._target_href("a[href='https://site/cart.html?x=1']") == "cart"
+    assert adapt._target_href("#cart") == ""
+
+
+def test_a_locator_the_pattern_cannot_read_returns_no_target_rather_than_raising() -> None:
+    for locator in ("", "#cart", "a[href=/cart.html]", "text=Cart", 'a[href=""]'):
+        assert adapt._target_href(locator) == "", locator
+
+
+def test_href_and_label_together_beat_every_other_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 1 (both) - the strongest evidence there is."""
+    elements = [
+        _element("button.add-to-cart", "Add to cart", "", "button", "button"),
+        _element('a[href="/cart.html"]', "Cart overview", "http://x/cart.html"),
+        _element('a[href="/cart.html"].header', "Cart", "http://x/cart.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert (
+        find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/bogus.html"]') == 'a[href="/cart.html"].header'
+    )
+
+
+def test_an_exact_label_beats_a_wrong_href(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 2 (label) outranks tier 3 (href) - a right name is not stolen by a path."""
+    elements = [
+        _element('a[href="/cart.html"]', "Shopping bag", "http://x/cart.html"),
+        _element('a[href="/elsewhere.html"]', "Cart", "http://x/elsewhere.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"]') == 'a[href="/elsewhere.html"]'
+
+
+def test_an_href_match_alone_beats_a_merely_prominent_element(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tier 3 - the case that was silently dead: no label match, right page."""
+    elements = [
+        _element("button.btn-primary", "Continue", "", "button", "button"),
+        _element('a[href="/cart.html"]', "Your basket", "http://x/cart.html"),
+    ]
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: elements)
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"].old') == 'a[href="/cart.html"]'
+
+
+def test_a_same_page_link_with_the_label_in_another_field_beats_an_other_page_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """j-0312 review: a union of name fields invents a name the page never shows.
+
+    The right-page link carries ``aria-label='Cart'`` but visible text ``Proceed``;
+    the wrong-page link's visible text is ``Cart``. Per-field matching names the
+    first as ``Cart`` and the second as ``Cart`` too, so the href tier decides -
+    and the right page wins. The union used to read the first as "cart proceed",
+    lose its label, and hand the step to the wrong page.
+    """
+    right_page = {
+        "selector": 'a[href="/cart.html"]',
+        "role": "a",
+        "tag": "a",
+        "text": "Proceed",
+        "accessible_name": "Cart",
+        "aria_label": "Cart",
+        "href": "http://x/cart.html",
+        "is_visible": True,
+    }
+    wrong_page = _element('a[href="/elsewhere.html"]', "Cart", "http://x/elsewhere.html")
+    prominent = _element("button.btn-primary", "Continue", "", "button", "button")
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: [prominent, wrong_page, right_page])
+
+    assert find_replacement_locator("http://x", "CLICK", "Cart", 'a[href="/cart.html"].old') == 'a[href="/cart.html"]'
+
+
+def test_the_label_is_matched_per_field_not_across_them() -> None:
+    element = {
+        "selector": 'a[href="/cart.html"]',
+        "text": "Proceed",
+        "aria_label": "Cart",
+        "accessible_name": "Cart",
+    }
+    assert adapt._label_matches("Cart", element), "the aria-label names the element"
+    # The union of fields is not a name the page shows.
+    assert not adapt._label_matches("Cart Proceed", element)
