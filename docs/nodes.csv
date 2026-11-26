@@ -19,7 +19,7 @@ label,group,size,color
 ./SHARED_TASK_NOTES.md,Documentation,39,#F7DC6F
 ./action.yml,Configuration,169,#BB8FCE
 ./action/__init__.py,Other,0,#AEB6BF
-./action/adapt.py,Other,519,#AEB6BF
+./action/adapt.py,Other,652,#AEB6BF
 ./action/cache_key.py,Other,70,#AEB6BF
 ./action/entrypoint.sh,Configuration,751,#BB8FCE
 ./action/export_evidence_junit.py,Other,67,#AEB6BF
@@ -62,7 +62,7 @@ label,group,size,color
 ./docs/implementation/landing-asset-sources.json,Other,76,#AEB6BF
 ./docs/implementation/landing-build/tailwind.config.js,Other,21,#AEB6BF
 ./docs/implementation/landing-build/tailwind.input.css,Other,3,#AEB6BF
-./docs/implementation/pypi-first-release.md,Documentation,57,#F7DC6F
+./docs/implementation/pypi-first-release.md,Documentation,69,#F7DC6F
 ./docs/implementation/refactor_audit_2026-05-20.md,Documentation,132,#F7DC6F
 ./docs/implementation/tancat-pro-install-and-licence.html,Other,74,#AEB6BF
 ./docs/launch/lemon-squeezy-checklist.html,Other,186,#AEB6BF
@@ -1077,7 +1077,8 @@ label,group,size,color
 ./tests/test_b103_select_discovery.py,Other,125,#AEB6BF
 ./tests/test_browser_utils.py,Other,263,#AEB6BF
 ./tests/test_bug_evidence_generator.py,Other,272,#AEB6BF
-./tests/test_ci_adapt.py,Other,382,#AEB6BF
+./tests/test_ci_adapt.py,Other,603,#AEB6BF
+./tests/test_ci_adapt_cart_regression.py,Other,83,#AEB6BF
 ./tests/test_ci_cache_key.py,Other,73,#AEB6BF
 ./tests/test_ci_export_junit.py,Other,113,#AEB6BF
 ./tests/test_ci_flaky_history.py,Other,97,#AEB6BF
@@ -1239,7 +1240,7 @@ label,group,size,color
 ./tests/test_rag_retriever.py,Other,423,#AEB6BF
 ./tests/test_rag_store.py,Other,983,#AEB6BF
 ./tests/test_rag_switches.py,Other,516,#AEB6BF
-./tests/test_release_guards.py,Other,200,#AEB6BF
+./tests/test_release_guards.py,Other,203,#AEB6BF
 ./tests/test_release_workflows.py,Other,135,#AEB6BF
 ./tests/test_report_parity.py,Other,398,#AEB6BF
 ./tests/test_report_utils.py,Other,581,#AEB6BF

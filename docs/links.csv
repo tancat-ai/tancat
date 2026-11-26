@@ -1935,6 +1935,7 @@ source,target,type
 ./tests/test_bug_evidence_generator.py,./src/cli/evidence_generator.py,import
 ./tests/test_bug_evidence_generator.py,./src/pytest_output_parser.py,import
 ./tests/test_ci_adapt.py,./action/adapt.py,import
+./tests/test_ci_adapt_cart_regression.py,./action/adapt.py,import
 ./tests/test_ci_cache_key.py,./action/cache_key.py,import
 ./tests/test_ci_export_junit.py,./action/export_evidence_junit.py,import
 ./tests/test_ci_flaky_history.py,./action/flaky_history.py,import
