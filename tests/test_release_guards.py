@@ -45,7 +45,8 @@ def test_the_tag_must_match_the_packaged_version() -> None:
 def test_a_stale_tag_is_named_as_the_stale_half() -> None:
     """j-0313 review: the message must lead with what is actually wrong."""
     version = G.packaged_version(ROOT)
-    stale = "v0.9.0"
+    # Older than any 0.x release line: the packaged version is 0.1.0 or later.
+    stale = "v0.0.0"
     ok, message = G.tag_matches_version(stale, ROOT)
 
     assert not ok
@@ -197,4 +198,6 @@ def test_the_built_wheel_passes_the_products_own_identity_check(built_wheel: Pat
     }
 
     assert version_check.identity_matches(feed), feed
-    assert version_check.is_newer((fields.get("Version") or ["0"])[0], "0.9.0")
+    built = (fields.get("Version") or ["0"])[0]
+    assert not version_check.is_newer(built, built), "a version is not newer than itself"
+    assert version_check.is_newer(built, "0.0.1"), f"{built} should be newer than 0.0.1"

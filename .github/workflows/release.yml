@@ -18,10 +18,10 @@
 # then `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the version
 # or the guards refuse it (one source of truth).
 #
-# ONE SCHEME: `vX.Y.Z`, starting at `v1.0.0`. The first release is what customers
-# install, so it does not carry a 0.x "provisional" number; and `move-v1` only
-# fires on `v1.*`, so a 0.x first release would never create the floating `v1`
-# tag consumers pin. Bump `[project].version` to `1.0.0` before tagging.
+# ONE SCHEME: `vX.Y.Z`, and the number comes from [project].version. Releases are
+# 0.x while the product is pre-launch (0.1.0, 0.2.0, ...); launch day sets the
+# version to 1.0.0 and tags v1.0.0. `move-v1` only fires on `v1.*`, so the floating
+# `v1` tag consumers pin is created by the launch release and never before.
 #
 # GitHub Marketplace: YES — the Action is published to the Marketplace. It is a
 # Docker action with `branding`, so it is eligible. The listing is a one-time

@@ -3,7 +3,7 @@
 The workflow calls this once, after the build and before the upload, and each
 guard owns its message so a failure says exactly what is wrong:
 
-1. **the tag matches the packaged version** - ``v1.0.0`` for ``version = "1.0.0"``;
+1. **the tag matches the packaged version** - ``v0.1.0`` for ``version = "0.1.0"``;
 2. **no file is 100 MB or more** - PyPI's per-file limit, with the size printed;
    a long log is often the file that exceeded it, including one kept for the
    ``docs`` extra, and the totals are printed whether or not anything fails;
@@ -14,8 +14,8 @@ guard owns its message so a failure says exactly what is wrong:
 
 Usage::
 
-    python scripts/release_guards.py --tag v1.0.0 --dist dist
-    python scripts/release_guards.py --tag v1.0.0 --dist dist --repo-root .
+    python scripts/release_guards.py --tag v0.1.0 --dist dist
+    python scripts/release_guards.py --tag v0.1.0 --dist dist --repo-root .
 
 Exit code 0 when every guard passes, 1 on the first failure (with its message).
 """
@@ -39,7 +39,7 @@ def packaged_version(repo_root: Path) -> str:
 
 
 def _version_key(text: str) -> tuple[int, ...]:
-    """A comparable key: '1.0.0' -> (1, 0, 0); a suffix ends the numbers."""
+    """A comparable key: '0.1.0' -> (0, 1, 0); a suffix ends the numbers."""
     parts: list[int] = []
     for chunk in str(text).strip().lstrip("v").split("."):
         digits = ""
@@ -148,7 +148,7 @@ def run_guards(tag: str, dist: Path, repo_root: Path) -> tuple[bool, list[str]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refuse a tag that must not reach PyPI.")
-    parser.add_argument("--tag", required=True, help="The tag being released, e.g. v1.0.0")
+    parser.add_argument("--tag", required=True, help="The tag being released, e.g. v0.1.0")
     parser.add_argument("--dist", required=True, help="Directory holding the built wheel and sdist")
     parser.add_argument("--repo-root", default=".", help="Repository root (default: current directory)")
     args = parser.parse_args(argv)
