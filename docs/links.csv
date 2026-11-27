@@ -1533,6 +1533,8 @@ source,target,type
 ./src/licensing/entitlement.py,./src/secure_config.py,import
 ./src/licensing/license.py,./src/licensing/entitlement.py,import
 ./src/licensing/license.py,./src/licensing/tiers.py,import
+./src/licensing/license.py,./src/licensing/window.py,import
+./src/licensing/license.py,./src/version_info.py,import
 ./src/link_scoping.py,./src/placeholder_resolver.py,import
 ./src/llm_cache.py,./src/llm_client.py,import
 ./src/llm_cache.py,./src/storage.py,import
@@ -2082,6 +2084,9 @@ source,target,type
 ./tests/test_licence_key_activation.py,./src/licensing/license.py,import
 ./tests/test_licence_key_activation.py,./src/licensing/window.py,import
 ./tests/test_licence_key_activation.py,./src/version_info.py,import
+./tests/test_licence_window_tier.py,./src/licensing/license.py,import
+./tests/test_licence_window_tier.py,./src/licensing/window.py,import
+./tests/test_licence_window_tier.py,./src/usage_meter.py,import
 ./tests/test_license.py,./src/licensing/license.py,import
 ./tests/test_license.py,./src/licensing/tiers.py,import
 ./tests/test_llm_cache.py,./src/llm_cache.py,import
