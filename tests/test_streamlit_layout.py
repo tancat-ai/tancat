@@ -103,7 +103,7 @@ class TestSidebarWidgets:
         a restored second button (or a preset) still fails.
         """
         labels = [w.label for w in at.sidebar.button]
-        assert labels == [CHECK_LLM_BUTTON], f"Sidebar buttons changed. Got: {labels}"
+        assert labels == [CHECK_LLM_BUTTON, "Activate"], f"Sidebar buttons changed. Got: {labels}"
 
     def test_sidebar_has_consent_mode_selector(self, at: AppTest) -> None:
         """The Consent Handling selectbox is present (it drives consent mode)."""

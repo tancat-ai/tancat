@@ -1,19 +1,28 @@
-"""Licensing - the tier table, and one signed licence file verified offline.
+"""Licensing - the tier table, and licence keys activated once and cached.
 
-**One mechanism (j-0309):** a signed licence file we issue, or nothing (Free). There
-is no token format and no activation step. Everything here is purely local -
-**zero network calls**, enforced by the AST test over this package and by the egress
-audit gate.
+**One mechanism (owner, 2026-11-26):** a key the store issues with the order,
+activated once through our relay, then read from the cache. The product calls the
+relay at activation and at update, and at no other moment; there is no periodic check
+and no second verification route.
+
+``src/licensing/activation.py`` is the only file in the package that can reach the
+network, and it does so through our relay, never the store directly.
 """
 
+from src.licensing.activation import (
+    Activation,
+    ActivationResult,
+    ValidationResult,
+    activate,
+    deactivate,
+    validate,
+)
 from src.licensing.license import (
-    VENDORED_PUBLIC_KEY_B64,
     LicenseResult,
     LicenseStatus,
     effective_tier,
     feature_enabled,
     license_status,
-    vendor_public_key,
 )
 from src.licensing.tiers import (
     DEFAULT_TIERS,
@@ -29,10 +38,14 @@ from src.licensing.tiers import (
 __all__ = [
     "DEFAULT_TIERS",
     "FREE_TIER",
-    "VENDORED_PUBLIC_KEY_B64",
+    "Activation",
+    "ActivationResult",
     "LicenseResult",
     "LicenseStatus",
     "TierSpec",
+    "ValidationResult",
+    "activate",
+    "deactivate",
     "effective_tier",
     "feature_enabled",
     "feature_required_tier",
@@ -41,5 +54,5 @@ __all__ = [
     "limit_for",
     "tier_claims",
     "tier_label",
-    "vendor_public_key",
+    "validate",
 ]

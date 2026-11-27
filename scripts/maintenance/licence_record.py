@@ -323,7 +323,7 @@ inspecting the rebuilt PDF: it embeds only `Inter-Regular`, `Inter-Bold`,
 Rule: only `landing/tancat-pro-install-and-licence.pdf` is rendered to a shipped
 document. Any other page that is ever printed must use the bundled open faces
 under `docs/implementation/fonts/`, never a font the host happens to have -
-because `docs/launch/lemon-squeezy-checklist.html` and `docs/walkthrough.md`
+because `docs/launch/launch-checklist.html` and `docs/walkthrough.md`
 still declare host fonts in their CSS, and a headless render resolves those
 against the build machine.
 """

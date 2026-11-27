@@ -348,41 +348,31 @@ class TestWeOnlyLockWhatWeCreated:
     def test_a_licence_saved_before_the_first_run_still_works(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The buyer's sequence, end to end: make the folder, save the file, run."""
-        import base64
+        """The buyer's sequence, end to end: make the folder, activate, run."""
+        import json
 
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        from src.licensing import entitlement, signed_file
+        from src.licensing import entitlement
 
         home = tmp_path / "home"
         config = home / ".ai-test-gen"
         config.mkdir(parents=True)  # pre-created by the buyer, not by us
 
-        private = ed25519.Ed25519PrivateKey.generate()
-        raw = private.private_bytes(
-            serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
-        )
-        public = base64.b64encode(
-            private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-        ).decode()
-        monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
         monkeypatch.setattr(Path, "home", lambda: home)
         monkeypatch.delenv("AITEST_LICENCE_FILE", raising=False)
 
-        licence = config / "licence.signed.json"
+        licence = config / "licence.json"
         licence.write_text(
-            signed_file.signed_file_text(
+            json.dumps(
                 {
-                    "id": "TC-2026-000900",
-                    "product": "tancat",
-                    "buyer_ref": "order 900 / buyer@example.com",
-                    "purchased_at": "2026-11-01",
-                    "window_end": "2027-11-01",
-                    "tier": "pro",
-                },
-                raw,
+                    "key": "00000-00000-00000-00000-00000",
+                    "instance_id": "lki_testinstance000000000000",
+                    "instance_name": "this machine",
+                    "status": "active",
+                    "created_at": "2026-11-01T00:00:00+00:00",
+                    "expires_at": "",
+                    "activation_limit": 1,
+                    "last_checked": "2026-11-01T00:00:00+00:00",
+                }
             ),
             encoding="utf-8",
         )
@@ -390,7 +380,7 @@ class TestWeOnlyLockWhatWeCreated:
         # The first run reaches the config dir (through the licence path) and must
         # leave the buyer's folder and file exactly as they were.
         state = entitlement.resolve()
-        assert state.source == "signed"
+        assert state.source == "activated"
         assert licence.read_text(encoding="utf-8"), "the licence file must still be readable"
         assert licence.is_file()
         # And it can be replaced in place.
@@ -403,7 +393,7 @@ class TestAPermissionFailureIsExplained:
     def test_a_permission_error_names_the_fix_in_words(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from src.licensing import entitlement
 
-        licence = tmp_path / "licence.signed.json"
+        licence = tmp_path / "licence.json"
         licence.write_text("{}", encoding="utf-8")
         monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence))
 
@@ -416,10 +406,9 @@ class TestAPermissionFailureIsExplained:
 
         monkeypatch.setattr(Path, "read_text", read_text_denied)
 
-        result = entitlement.load_signed_licence()
+        result = entitlement.load_licence()
         assert result[0] is None
         problem = result[2]
         assert "no permission" in problem
-        assert "Move it to a new folder" in problem
-        assert "tancat licence status" in problem
+        assert "activate the key again" in problem
         assert "Errno" not in problem, "an errno is not an instruction"

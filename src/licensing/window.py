@@ -1,9 +1,10 @@
 """The update window: what it is, and whether a build is inside it (j-0309).
 
-Nothing here talks to a store or to the network. The window comes from the signed
-licence file's ``window_end`` (``signed_file.py``); this module holds the policy
-constants and the two decisions the product makes with them, at startup and before
-an upgrade.
+Nothing here talks to a store or to the network. The window comes from the licence
+key's **creation date**, recorded at activation (``activation.py``): the store creates
+the key seconds after the order, on the same UTC date, so the key's date is the
+purchase date. This module holds the policy constants, and the arithmetic that turns
+that date into the last build the licence covers.
 
 A build released after the window refuses to start, and names the window end and
 the version that keeps working. Nothing on disk is modified: the buyer's existing

@@ -8,8 +8,8 @@ Covers the three things that must hold after the retirement:
 
 - the landing page renders two pricing tiers and no Air-Gap card;
 - the code publishes exactly two tiers;
-- a licence already signed with the retired ``airgap`` key still verifies with
-  its own claims (it must NOT silently downgrade to free).
+- a stored licence already carrying the retired ``airgap`` key still reports its
+  own claims (it must NOT silently downgrade to free).
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-from src.licensing import signed_file
 from src.licensing.license import LicenseStatus, license_status
 from src.licensing.tiers import RETIRED_TIERS, is_published_tier, published_tiers, tier_claims
 
@@ -74,47 +73,34 @@ def test_pro_grants_the_support_the_page_promises() -> None:
     assert "private_network" in tier_claims("airgap")
 
 
-# -- backward compatibility of an already-issued licence ----------------------
+# -- backward compatibility of an already-activated licence -------------------
 
 
-def test_licence_with_retired_airgap_key_still_verifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A signed licence naming the retired key must NOT silently downgrade to free.
+def test_a_licence_with_a_retired_tier_key_still_reports_its_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stored licence naming the retired key must NOT silently downgrade to free.
 
-    An unknown tier is refused outright (``signed_file``) rather than demoted, and the
-    retired key stays resolvable, so a licence that named it still reports its own
-    claims.
+    The tier is not sent by the store; the product records it at activation and the
+    table keeps retired keys resolvable, so an already-activated deployment reports
+    its own claims rather than falling to free.
     """
-    import base64
-    from datetime import date
+    import json
 
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    private = Ed25519PrivateKey.generate()
-    raw = private.private_bytes(
-        serialization.Encoding.Raw,
-        serialization.PrivateFormat.Raw,
-        serialization.NoEncryption(),
-    )
-    public = base64.b64encode(
-        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    ).decode()
-    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
-
-    path = tmp_path / "licence.signed.json"
-    purchased = date(2026, 11, 1)
+    path = tmp_path / "licence.json"
     path.write_text(
-        signed_file.signed_file_text(
+        json.dumps(
             {
-                "id": "TC-TEST-AIRGAP",
-                "product": "tancat",
-                "buyer_ref": "test",
-                "period": purchased.isoformat(),
-                "purchased_at": purchased.isoformat(),
-                "window_end": "2099-01-01",
+                "key": "00000-00000-00000-00000-00000",
+                "instance_id": "lki_test",
+                "instance_name": "test",
+                "status": "active",
+                "created_at": "2026-11-01T00:00:00+00:00",
+                "expires_at": "",
+                "activation_limit": 1,
+                "last_checked": "2026-11-01T00:00:00+00:00",
                 "tier": "airgap",
-            },
-            raw,
+            }
         ),
         encoding="utf-8",
     )

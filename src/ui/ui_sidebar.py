@@ -455,18 +455,31 @@ class SidebarConfig:
 
     @staticmethod
     def _render_license_entry(status: Any) -> None:
-        """Where the licence file goes, and how to confirm it (j-0309).
+        """Activate a key, or show what this machine holds (owner, 2026-11-26).
 
-        There is nothing to paste: a licence is a signed file, verified offline. The
-        panel shows the path the product reads and the command that confirms it, so a
-        buyer is never sent looking for an activation step that does not exist.
+        The key is activated **once** here; after that every screen reads the stored
+        licence. The panel says when the update check happens, because that is the
+        only moment a disabled key would be noticed.
         """
-        from src.licensing.entitlement import default_signed_path
+        from src.licensing.entitlement import default_licence_path
 
-        path = default_signed_path()
+        path = default_licence_path()
         if getattr(status, "status", "") == "valid":
-            st.sidebar.caption(f"Licence file: {path}")
+            st.sidebar.caption(f"Licence: activated on this machine ({path.name}). Checked again when you update.")
             return
-        st.sidebar.caption(
-            f"No licence file at {path}. Save the signed licence we sent you there, then run: tancat licence status"
-        )
+
+        st.sidebar.caption("Have a licence key? Activate it once here; it is stored on this machine.")
+        # Inside a form, widgets are created on ``st`` (the form's context); the
+        # sidebar form is still where they render.
+        with st.sidebar.form("licence_activation", clear_on_submit=False):
+            key = st.text_input("Licence key", key="licence_key_input", placeholder="XXXX-XXXX-XXXX-XXXX-XXXX")
+            submitted = st.form_submit_button("Activate")
+        if submitted:
+            from src.licensing import activation as keys
+
+            result = keys.activate(key)
+            if result.ok:
+                st.sidebar.success(result.message)
+                st.rerun()
+            else:
+                st.sidebar.error(result.message)

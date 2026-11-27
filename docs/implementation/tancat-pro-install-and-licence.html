@@ -33,7 +33,7 @@
   <li>Updates released after that are not included and can be bought separately if you want them.</li>
   <li><strong>Nothing renews automatically.</strong> You will not be charged again unless you choose to buy.</li>
   <li>Security fixes and bug fixes for the version you hold are provided at no charge.</li>
-  <li>Not counted per user &mdash; your whole team may use it. Do not share or resell your licence file.</li>
+  <li>Not counted per user &mdash; your whole team may use it. Do not share or resell your licence key.</li>
 </ul>
 
 <h2>2. Requirements</h2>
@@ -49,23 +49,30 @@ cd tancat &amp;&amp; uv sync &amp;&amp; playwright install chromium</pre>
 <pre>bash launch_ui.sh      # Streamlit UI
 bash launch_cli.sh     # interactive CLI</pre>
 
-<h2>4. Add your licence file</h2>
-<p>Your licence arrives as a <strong>signed file</strong>. Save it where the product reads it and the signature is
-verified offline against a public key built into the product &mdash; nothing is switched on, and no call is made to us or
-to any store.</p>
+<h2>4. Activate your licence key</h2>
+<p>Your licence is a <strong>key issued with your order</strong>. Enter it once on the machine that will run TanCat:
+it is activated against your purchase, and it is stored here and read from here from then on.</p>
 <ul>
-  <li><strong>Where it goes:</strong> run <code>tancat licence status</code> and it prints the path, whether or not a file is
-    there yet. Save the file there as <code>licence.signed.json</code>.</li>
-  <li><strong>Or point at it</strong> (best for CI): <code>AITEST_LICENCE_FILE=/etc/tancat/licence.signed.json</code></li>
-  <li><strong>Confirm it:</strong> <code>tancat licence status</code> reports the source, licence id, buyer and window end.</li>
+  <li><strong>Activate:</strong> <code>tancat licence activate XXXX-XXXX-XXXX-XXXX-XXXX</code>, or the same field in the
+    sidebar&rsquo;s <em>License &amp; Usage</em> panel.</li>
+  <li><strong>Where it is stored:</strong> <code>tancat licence status</code> prints the path and what is stored. For CI,
+    keep that file and point at it: <code>AITEST_LICENCE_FILE=/etc/tancat/licence.json</code></li>
+  <li><strong>Confirm it:</strong> <code>tancat licence status</code> reports the instance, the activation date, the tier and
+    when the update window ends.</li>
 </ul>
-<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the file is missing or refused, the product keeps working on the free tier; it never locks you out of the free core.</div>
+<div class="box"><strong>When it is checked again.</strong> Only when you install a new version &mdash; never in between. Between those moments it works offline: the licence stored on this machine is read, not re-checked. If
+the store reports the key as revoked or expired, the upgrade is refused and the version you are running keeps working. If
+the check cannot be made, the upgrade goes ahead on the licence stored on your machine. A key the store disables is
+noticed at your next update, not before.</div>
+<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. An
+activated deployment reports unlimited runs and exports. A missing key, or one the service cannot confirm, leaves the
+product working on the free tier; it never locks you out of the free core, and it never asks you to pay again.</div>
 
 <h2>5. Where your data goes</h2>
-<p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint, <strong>your</strong> target site, and at most <strong>one version check a day</strong> to pypi.org if you leave the update check on &mdash; no telemetry. Licensing never touches the network: your licence file is verified offline against a public key built into the product. The version check sends nothing about you and settings turns it off. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
+<p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint, <strong>your</strong> target site, <strong>our licence service</strong> when you activate a key and again when you install an update (nothing in between), and at most <strong>one version check a day</strong> to pypi.org if you leave the update check on &mdash; no telemetry. The version check sends nothing about you and settings turns it off. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
 
 <h2>6. Updates</h2>
-<p>Updates are installable Python packages, released on the releases page (github.com/tancat-ai/tancat/releases). You choose when to upgrade, the way you upgrade any Python tool.</p>
+<p>Updates are installable Python packages, released on the releases page (github.com/tancat-ai/tancat/releases). You choose when to upgrade, the way you upgrade any Python tool. Installing one is the moment your licence key is checked again.</p>
 
 <h2>7. Support</h2>
 <p>Support is provided by email at <strong>hello@tancat.dev</strong>, by the developer who builds TanCat. You get help with installation, licensing, and defects in TanCat. We aim to reply within two working days, Monday to Friday, UK business hours. Support does not include custom development, third-party systems, or on-site work, and we do not offer telephone or out-of-hours support. A contractual service level is available on request.</p>

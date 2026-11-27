@@ -52,10 +52,14 @@ def test_the_updates_clause_describes_installable_packages_and_no_runtime_call()
     assert "installable Python packages" in page, "the updates clause does not say how updates arrive"
     assert "upgrade the way you upgrade any Python tool" in page, "the clause does not say how a customer upgrades"
     assert "delivered as files" not in page, "the clause still describes the old file delivery"
-    # j-0309: one automatic call (the version check); licensing is offline.
-    assert "exactly one automatic call" in page, "the clause does not state the one call it makes"
+    # 2026-11-26: the licence key is activated once and checked once per update. The
+    # clause must say both, and the version check, and must not claim licensing is
+    # offline-only (it is offline *between* those moments).
+    assert "activate it once" in page.lower(), "the clause does not say the key is activated once"
+    assert "only when you install a new version" in page.lower(), "the clause does not say when it is checked"
     assert "version check at most once a day" in page, "the clause does not state the daily version check"
-    assert "licensing never touches the network" in page.lower(), "the clause does not say licensing is offline"
+    assert "licensing never touches the network" not in page.lower(), "the clause claims licensing never calls out"
+    assert "next update, not before" in page.lower(), "the clause does not state the accepted trade"
     assert "choose when to install" in page, "the clause does not say the buyer chooses when to install"
 
 
@@ -244,8 +248,9 @@ def _sentences(path: Path) -> list[str]:
 
 
 def _is_version_check_sentence(sentence: str) -> bool:
-    """j-0306: sentences about the version check are not update-DELIVERY claims."""
-    return "version check" in sentence.lower()
+    """Sentences about the version check or the licence check are not DELIVERY claims."""
+    low = sentence.lower()
+    return "version check" in low or "licence service" in low or "licence key" in low or "not before" in low
 
 
 def _delivery_hits(sentence: str) -> list[str]:
@@ -308,12 +313,13 @@ def test_every_page_that_states_the_delivery_also_rules_out_both_shortcuts() -> 
         page = _text(path)
         if SETTLED_DELIVERY not in page:
             continue
-        # j-0306: the guarantees are now "one activation call" and "a version
-        # check at most once a day". A page that claims no vendor call at all, or
-        # leaves the version check out, is the false one.
-        if "activation" in page.lower():
-            problems.append(f"{path.relative_to(ROOT)}: still describes the removed activation call")
-        if "version check" not in page.lower():
+        # 2026-11-26: the guarantees are "activated once", "checked when you install
+        # an update" and "a version check at most once a day". A page that leaves
+        # either out is the false one.
+        low = page.lower()
+        if "activate" not in low or "licence key" not in low:
+            problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the licence key")
+        if "version check" not in low:
             problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the daily version check")
         if "automatic" not in page.lower():
             problems.append(f"{path.relative_to(ROOT)}: states the delivery but not the automatic-call policy")

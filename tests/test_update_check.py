@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -140,27 +140,43 @@ def test_the_manual_cli_check_prints_plainly(
     assert "tancat update" in out
 
 
+def _activation(created: date) -> Any:
+    """A stored licence, as the update gate reads it."""
+    from src.licensing.activation import Activation
+
+    return Activation(
+        key="00000-00000-00000-00000-00000",
+        instance_id="lki_test",
+        instance_name="test",
+        status="active",
+        created_at=f"{created.isoformat()}T00:00:00+00:00",
+        last_checked=f"{created.isoformat()}T00:00:00+00:00",
+    )
+
+
+def _valid() -> Any:
+    """The relay's answer at update time: still active."""
+    from src.licensing.activation import ValidationResult
+
+    return ValidationResult("ok", "ok", "")
+
+
 def test_the_upgrade_refuses_past_the_window_with_the_version_that_works(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from datetime import date
 
-    from src.licensing import entitlement, signed_file
+    from src.licensing import entitlement
 
     state = entitlement.LicenceState(
-        "signed",
+        "activated",
         "pro",
         date(2025, 1, 1),
-        licence=signed_file.SignedLicence(
-            id="TC-1",
-            product="tancat",
-            buyer_ref="x",
-            purchased_at=date(2024, 1, 1),
-            window_end=date(2025, 1, 1),
-            tier="pro",
-        ),
+        activation=_activation(date(2024, 1, 1)),
     )
     monkeypatch.setattr(entitlement, "resolve", lambda: state)
+    # The store says the key is fine; the window is what refuses here.
+    monkeypatch.setattr(entitlement.store, "validate", lambda: _valid())
 
     assert cli_main.main(["update"]) == 3
     err = capsys.readouterr().err
@@ -174,22 +190,16 @@ def test_the_upgrade_inside_the_window_prints_the_command_and_does_not_shell_out
 ) -> None:
     from datetime import date
 
-    from src.licensing import entitlement, signed_file
+    from src.licensing import entitlement
 
     state = entitlement.LicenceState(
-        "signed",
+        "activated",
         "pro",
         date(2099, 1, 1),
-        licence=signed_file.SignedLicence(
-            id="TC-1",
-            product="tancat",
-            buyer_ref="x",
-            purchased_at=date(2026, 1, 1),
-            window_end=date(2099, 1, 1),
-            tier="pro",
-        ),
+        activation=_activation(date(2098, 1, 1)),
     )
     monkeypatch.setattr(entitlement, "resolve", lambda: state)
+    monkeypatch.setattr(entitlement.store, "validate", lambda: _valid())
 
     assert cli_main.main(["update"]) == 0
     out = capsys.readouterr().out
@@ -380,14 +390,34 @@ def test_the_background_refresh_returns_before_the_fetch_completes(
 
 def test_a_source_run_reports_the_version_the_wheel_carries() -> None:
     """The fallback used to be a hardcoded 0.1.0, so a source checkout reported
-    a newer release as available against its own tree."""
+    a newer release as available against its own tree.
+
+    A developer machine may hold an OLD wheel (say 1.0.0) while the tree says 0.1.0.
+    Installed metadata wins, so that machine fails this assertion for a reason that
+    is not a regression. The check skips with both numbers named instead of turning
+    red - a stale local install must not look like a product bug (t-1505). The wheel
+    half below still runs, and CI (a clean environment) always measures the fallback.
+    """
     import subprocess
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as installed_metadata_version
 
     from src.version_info import installed_version, pyproject_version
 
     root = Path(__file__).resolve().parent.parent
     source_version = pyproject_version(root)
     assert source_version, "pyproject.toml has no [project].version"
+
+    try:
+        wheel_version = installed_metadata_version("tancat")
+    except PackageNotFoundError:
+        wheel_version = None
+    if wheel_version is not None and wheel_version != source_version:
+        pytest.skip(
+            f"this machine has tancat {wheel_version} installed while pyproject.toml says "
+            f"{source_version} - a stale local install, not a regression. "
+            "Reinstall the tree (uv sync --reinstall) to run this check."
+        )
 
     # A source run reads the same number (installed metadata, else pyproject).
     assert installed_version() == source_version

@@ -1,68 +1,58 @@
 ---
 purpose: >
-  The licence gate: one signed licence file (src/licensing/signed_file.py) verified offline
-  against a vendored ed25519 public key, or nothing (free tier). Reports the tier the
-  deployment runs under and answers the feature gates. No token format, no activation call,
-  no network.
-lines: ~150
+  The licence gate: the activated key in this machine's cache, the tier it grants,
+  and the feature gates the rest of the product asks. No network - activation and
+  the update check live in activation.py.
+lines: ~130
 created: "2026-09-05"
-updated: "2026-11-19"
+updated: "2026-11-26"
 ---
 
 # `src/licensing/license.py`
 
 ## High-Level Purpose
 
-**Open-core honesty:** this is *entitlement/support marking*, not DRM. A modified fork can strip
-it — accepted and documented. The licence's real value is ToS entitlement and honest tier
-enforcement for stock builds.
+**Open-core honesty:** this is *entitlement/support marking*, not DRM. A modified fork
+can strip it - accepted and documented. The value is honest tier enforcement for
+stock builds and an enforceable ToS.
 
-**One mechanism (j-0309 / t-1468).** The entitlement is a signed licence file or nothing:
+**One mechanism (owner, 2026-11-26).** The entitlement is a licence key the store
+issued with the order, activated once through our relay and then cached:
 
-- a valid signed file → `VALID`, with its tier and licence id;
-- a file that exists but does not verify → `INVALID`, with the reason from the verifier;
-- no file → `UNLICENSED` (free tier — open core stays usable).
+- an activated key in the cache -> `VALID`, with its tier and masked key;
+- a cache file that exists but cannot be used -> `INVALID`, with the reason;
+- no cache -> `UNLICENSED` (free tier - open core stays usable).
 
-The token format (`payload_b64.signature_b64`), its env vars (`AITEST_LICENSE_KEY`,
-`AITEST_LICENSE_FILE`), `scripts/license_gen.py` and the UI paste box are **deleted**. There is
-no grace period and no `expires_at`; the only date a licence carries is `window_end`, the last
-day a *build* released inside the purchase window may run (the version the buyer holds keeps
-working).
+The signed-file mechanism (`signed_file.py`, the vendored public key, the signer) is
+**deleted**, not dormant. A test asserts no second verification route exists.
 
-**Zero network calls:** this module imports no network code; the AST test over
-`src/licensing/` and the egress audit both enforce it.
-
-## Public API
-
-### `VENDORED_PUBLIC_KEY_B64`, `vendor_public_key() -> str`
-
-The trust root the signed file is verified against. Not customer-settable (B-050); rotation ships
-with a product release.
-
-### `class LicenseStatus`
+## `LicenseStatus`
 
 String constants: `UNLICENSED`, `VALID`, `INVALID`.
 
-### `class LicenseResult`
+## `LicenseResult`
 
-`status`, `tier`, `claims` (frozenset), `licence_id`, `reason`. Properties: `usable` (valid or
-unlicensed) and `headline` (the one-line banner the UI shows).
+`status`, `tier`, `claims`, `licence_id` (the masked key), `reason`, `window_end`,
+plus:
 
-### `license_status() -> LicenseResult`
+- `usable` - true for a valid licence and for the free tier;
+- `headline` - the sentence the sidebar shows.
 
-One call to `src.licensing.entitlement.resolve()` - the single place the precedence lives.
+## Functions
 
-### `effective_tier() -> str`
+- `license_status() -> LicenseResult` - read the cache (never the network).
+- `effective_tier() -> str` - the tier the deployment runs under, `free` when none.
+- `feature_enabled(feature, tier=None) -> bool` - `feature in tier_claims(tier)`.
 
-The tier the deployment runs under (free when unlicensed or refused).
+## What it does not do
 
-### `feature_enabled(feature, tier=None) -> bool`
+- It does not validate the key: `activation.validate()` does that, at update time.
+- It does not write anything: the cache belongs to `activation.py`.
+- It never blocks the free core - only CI/headless runs are withheld when
+  `AITEST_ENFORCE_LICENSING=1` and no activated key is present.
 
-True when the tier's claims include `feature`; the OSS core claims are free.
+## Related
 
-## Where the rest lives
-
-- `src/licensing/signed_file.py` — the file format, signing and verification.
-- `src/licensing/entitlement.py` — where the file is looked for (`AITEST_LICENCE_FILE`, else the
-  settings directory), and the update-window checks.
-- `src/licensing/window.py` — the release date, the 12-month window, and the refusal wording.
+- `src/licensing/activation.py` - the calls and the cache.
+- `src/licensing/entitlement.py` - `resolve()`, which this reads.
+- `src/usage_meter.py` - the caps, which follow this tier.

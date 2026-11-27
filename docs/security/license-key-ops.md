@@ -1,149 +1,95 @@
-# Licence Signing Key Operations
+# Licence Operations
 
-**Created:** 2026-09-06 (audit follow-up — BACKLOG B-053)
-**Owner:** Cat Tan Operations Ltd (company number 17576111; single-operator signing key holder)
-**Scope:** operational security of the ed25519 licence signing key. For the validation code, see `src/licensing/signed_file.py` and `src/licensing/license.py`; for the tier table, `src/licensing/tiers.py`.
+**Created:** 2026-09-06 as signing-key operations; rewritten 2026-11-26 for licence keys.
+**Owner:** Cat Tan Operations Ltd (company number 17576111)
+**Scope:** the secret that makes licensing work, and the two moments the product uses it.
+Code: `src/licensing/activation.py` (the product side), `services/licence-relay/` (the
+relay), `src/licensing/tiers.py` (the tier table).
 
 ---
 
 ## 1. What exists today
 
-- **Offline ed25519 signing.** A licence file is signed by `python scripts/maintenance/issue_licence.py`, which reads the private key from outside the repository. **No network calls are involved in validation** — the licensing path imports no network module and the egress audit reports zero flagged call sites.
-- **Vendored public key.** `src/licensing/license.py` ships `VENDORED_PUBLIC_KEY_B64`; it is the trust root for all stock builds and is **not overridable by the customer** (B-050, resolved: the customer-settable trust root was removed). The trust root must not be customer-settable — otherwise a stock build could self-sign its way into paid tier without a fork. Rotation ships with a product release (§5).
-- **The licence file:** JSON with `format`, a `payload` (`id`, `product`, `buyer_ref`, `purchased_at`, `window_end`, `tier`) and a base64 `signature` over the canonical payload. It is the only licence mechanism — there is no token format and no activation call (j-0309).
+- **A key the store issues with the order.** The store's licence-key feature creates one key
+  per purchase, with an activation limit (1) and no expiry. The buyer sees it on the
+  confirmation page, in the receipt and in the customer portal.
+- **One activation, at the prompt.** The buyer runs `tancat licence activate <KEY>` (or
+  uses the sidebar field). The product sends the key and an instance name to our relay;
+  the relay holds the store's **merchant API key** and answers. The product never holds
+  the merchant key and never addresses the store directly.
+- **One check, at update.** When a new version is installed, the product asks the relay
+  to validate the stored key and instance. A revoked or expired key refuses the upgrade;
+  an unreachable relay lets it proceed on the cached licence.
+- **Nothing in between.** Startup, runs and premium features read
+  `~/.ai-test-gen/licence.json` (or `AITEST_LICENCE_FILE`). There is no periodic check.
+- **No signed file, no vendored key, no signer.** The Ed25519 mechanism was deleted on
+  2026-11-26; `scripts/maintenance/issue_licence.py` and `signed_file.py` are gone.
 
-## 1a. Signing, verifying, recovering - the whole loop
+## 1a. The store's error codes, as observed
 
-**Sign a licence** (the key stays outside the repository; the script refuses a key or an
-output inside it):
+Read this, not the reference page's table: the store does not use the statuses its
+docs imply. Observed on the live test API on **2026-11-26**:
 
-```bash
-TANCAT_LICENCE_SIGNING_KEY_FILE=~/keys/tancat-licence-signing.key   python scripts/maintenance/issue_licence.py   --id TC-2026-000123 --buyer "order 4821 / buyer@example.com"   --purchased 2026-11-18 --out ~/licences/TC-2026-000123.json
-```
+| What happened | Status | Body |
+|---|---|---|
+| the single activation was already used | **400** (not 403) | `{"status":400,"error":"Bad Request","message":"Activation limit reached"}` |
+| the instance was already released | **400** (not 409) | `{"status":400,"error":"Bad Request","message":"License key instnace is already deactivated"}` - their spelling |
 
-**The payload** the file carries - these six fields, and nothing else:
+The relay therefore classifies on the **message** as well as the status, and answers
+`{"error": code}` only, never the store's text. The recorded bodies are replayed
+through the Worker by `tests/test_licence_relay_contract.py`
+(`tests/fixtures/relay/store-error-bodies.json`), so a change in their wording shows
+up as a failing test rather than as a wrong sentence to a buyer.
 
-| field | meaning |
-|---|---|
-| `id` | licence id, your own numbering (`TC-2026-000123`) |
-| `product` | always `tancat`; a licence for anything else is refused |
-| `buyer_ref` | the order id, the buyer's email, or both |
-| `purchased_at` | purchase date, `YYYY-MM-DD` |
-| `window_end` | the last day a build released inside the window may run (purchase + 12 months) |
-| `tier` | `pro`, or another key in `src/licensing/tiers.py` |
+## 2. The one secret
 
-Plus `format` (`tancat-licence/1`) and `signature` (base64url ed25519 over the canonical
-payload: sorted keys, no whitespace). A changed byte anywhere fails verification.
+The **merchant API key** is the whole security boundary. It lives:
 
-**Verify it**: `tancat licence status` prints the source, licence id, buyer, tier and
-window end; a refused file prints the path and the reason.
+- in the store's dashboard, under Settings -> API;
+- in the relay only, as a Cloudflare secret (`npx wrangler secret put API_KEY`);
+- on this machine as a backup in the password manager, never in the repository.
 
-**Recover a key**: restore the private half on a clean machine, sign a test licence, and
-check it against the vendored public key (`tancat licence status`, or the acceptance test
-in `tests/test_signed_licence_file.py`). An untested backup is a hope, not a backup.
+It is **not** in the product, not in a config file, not in CI and not in a wheel.
 
-**Where the key lives**: outside the repository. Today it is
-`%USERPROFILE%\.clowder\secrets\tancat-licence-signing.key` on the owner's machine, with
-his note beside it. `issue_licence.py` refuses to read a key from inside the repo and
-refuses to write a buyer's licence there.
+Rotate it: create a new key in the store, `wrangler secret put API_KEY`, deploy, then
+revoke the old one. A rotation needs no product release, because the product never had
+the key.
 
-## 2. The single-operator risk (why this doc exists)
+If the key leaks, an attacker can activate and deactivate keys. They cannot change what
+a deployment already holds, because the product reads its own cache between updates.
 
-| Event | Consequence |
-|-------|-------------|
-| Signing key **lost** | No new licenses can be issued until a new keypair ships (rotation = product release, §5). Existing unexpired licenses keep working. |
-| Signing key **leaked** | Anyone can mint valid licenses for any tier, forever, for all stock builds. Offline validation means no revocation mechanism exists (§6). |
+## 3. The relay
 
-Both are existential for the licensing revenue model — this is the highest-value secret in the operation.
+`services/licence-relay` (Cloudflare Worker). Three endpoints - `activate`, `validate`,
+`deactivate` - each a thin, named translation of the store's answer into our codes. The
+README holds the deploy steps and the smoke test.
 
-## 3. Key generation & storage
+Why it exists: the store's licence API needs the merchant key, and a key in a shipped
+package is a key in every customer's hands.
 
-1. Generate on an offline machine, e.g. `openssl genpkey -algorithm ed25519 -out tancat-licence-signing.key`, and keep the public half as base64 raw bytes for `VENDORED_PUBLIC_KEY_B64`.
-2. The **private key never enters the repo, cloud storage, or a chat transcript.** Store it in a secrets manager, or on encrypted offline media (LUKS/BitLocker volume, hardware token if available).
-3. Record (outside the key material): key ID, creation date, which deployment pubkey it corresponds to, and who holds it. Single-operator today — name a secondary holder *before* launch (even a sealed escrow copy with a lawyer or a co-founder).
+## 4. A buyer's two moments
 
-## 4. Backup
+| Moment | What is sent | What happens on failure |
+|---|---|---|
+| Activation | key + instance name | one sentence naming the reason; the cache is untouched; the product stays on the free tier |
+| Update | key + instance id | revoked/expired/unknown refuses the upgrade and names the version that keeps working; no answer proceeds on the cached licence |
 
-- Keep **at least two backups on separate media in separate locations** (e.g. one encrypted USB off-site, one secrets-manager entry).
-- **Test recovery**, not just backup: on a clean machine, restore the key, sign a test licence file with `issue_licence.py`, and verify it against the vendored public key (`tancat licence status`, or the acceptance test in `tests/test_signed_licence_file.py`). An untested backup is a hope, not a backup.
-- Re-test recovery after any change to the signed-file format.
+## 5. Moving a machine
 
-## 5. Rotation (planned key compromise or periodic hygiene)
+`tancat licence release` asks the relay to free the instance, then deletes the cache. A
+failed *activation* never deletes a working cache; a release deletes it whichever way the
+relay answers, because a buyer moving machines must not be stuck.
 
-Rotation is a **product release**, not just a key ceremony:
+## 6. The accepted trade, stated plainly
 
-1. Generate a new keypair; add the new public key to the vendored key(s) in `src/licensing/license.py` (today the code verifies exactly one key — rotation support for a transition window is a small code change; do it *before* you ever need emergency rotation).
-2. Ship the release; issue new licenses signed by the new key.
-3. Retire the old key after the transition window; update this doc + `VENDORED_PUBLIC_KEY_B64`.
+There is no periodic check. A key the store disables today is noticed at the buyer's next
+update, not before. That is the price of a product that works offline, and the buyer
+documents say so.
 
-Because the public key is vendored, customers must update the product to trust a new key — **plan an annual or biennial rotation cadence** so it is routine rather than emergency-driven.
+## 7. What this does not protect against
 
-## 6. What is NOT possible (and why that is accepted)
-
-The licence is a signed file verified offline. Three things a hosted licensing service
-would give you are deliberately absent:
-
-- **No revocation.** There is no CRL, no OCSP, no phone-home. A licence you signed stays
-  valid until the end of its update window, and a buyer can keep running the version they
-  hold for ever. Refunds are handled commercially, not by switching a licence off.
-- **No grace period.** There is no `expires_at` and no `GRACE_DAYS`. The only date in a
-  licence is `window_end`: the last day a **build** released inside the purchase window
-  may run. The version the buyer holds never stops working.
-- **No token, no activation call.** There is one mechanism. The older
-  `payload.signature` token format, its env vars (`AITEST_LICENSE_KEY`,
-  `AITEST_LICENSE_FILE`), `scripts/license_gen.py` and the UI paste box were deleted
-  (t-1468); `src/licensing/signed_file.py` is the only thing that reads a licence.
-
-If a **signing key** leaks, only rotation (§5) restores security for stock builds - which
-is why the backup and rotation plan exists before launch, not after.
-
-## 7. Related items
-
-- **B-050** — RESOLVED: the `AITEST_LICENSE_PUBKEY` customer-settable trust root was removed; the trust root is always the vendored key. If per-customer signing keypairs are needed, the on-book path is server-issued offline-verified (a separate item), not a customer-settable key.
-- **B-051** — free-tier metering is local and resettable; document honestly.
-- Spec: `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4 (license design contract).
-
-## 8a. Key ceremony 2026-11-18 - the signed-licence pair (current)
-
-The trust root signs **licence files** (``src/licensing/signed_file.py``) - the only licence mechanism
-(t-1468). The 2026-09-28 pair signed the retired token format and is **retired as the shipped root**;
-the constant now holds the pair minted on 2026-11-18.
-
-- **Generated:** 2026-11-18 by the owner, outside the repository.
-- **Private half:** `%USERPROFILE%\.clowder\secrets\tancat-licence-signing.key` (PKCS8 PEM) on the owner's
-  machine, with the owner's note beside it in the same directory. **The product and the repository carry
-  only the public half**; the issuing script (`scripts/maintenance/issue_licence.py`) refuses to read a
-  key from inside the repo and refuses to write a buyer's file there.
-- **Public half (the vendored trust root, `VENDORED_PUBLIC_KEY_B64`):**
-
-  ```
-  8E9jcDty0vLC8W6jzovJE9m/aHTFcLYtOEno/00b/S4=
-  ```
-
-- **Fingerprint:** `1cae241af435d02f` - the first 16 hex characters of the SHA-256 of the raw 32-byte
-  public key.
-- **Acceptance test passed (2026-11-18):** a `pro` licence file with the 12-month window
-  (2026-11-18 -> 2027-11-18) was signed with the private half and verified against the vendored
-  constant - `valid`; a file signed with a throwaway key was `invalid`. The test suite re-runs the
-  acceptance check on this machine and skips it elsewhere.
-
-## 8. Key ceremony record 2026-09-28 - the retired pair (historical)
-
-Recorded 2026-09-29.
-
-- **Keypair generated:** 2026-09-28, offline (this pair signed the older token format and is retired; see §8a for the current pair).
-  The private half was copied into the owner's password manager; it lives there and **is not on
-  this machine**.
-- **Acceptance test passed:** 2026-09-29. A 7-day `pro` token (`deployment_id` `owner-trust-test`)
-  signed with the private half was accepted by the running app, which showed
-  `License valid — pro tier (deployment owner-trust-test).` The vendored public key and the
-  private half are therefore a matching pair.
-- **Public half (the vendored trust root, `VENDORED_PUBLIC_KEY_B64`):**
-
-  ```
-  2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8=
-  ```
-
-- **Fingerprint:** `79f90d48d41002c6` - the first 16 hex characters of the SHA-256 of the raw
-  32-byte public key (the base64 above, decoded), computed as
-  `hashlib.sha256(base64.b64decode(pub)).hexdigest()[:16]`.
+- A fork of the source can delete the check or write its own cache file. This is
+  entitlement marking, not DRM.
+- A buyer with the store's activation limit raised can activate on more machines.
+- Anyone holding the merchant key can activate anything. That is why it is a secret and
+  not a constant.

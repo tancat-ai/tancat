@@ -15,10 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from src.licensing import signed_file as _signed_file
 from src.usage_meter import FreeTierLimitError, UsageMeter, monthly_window
 
 
@@ -139,34 +136,29 @@ def test_enforcement_off_disables_cap(tmp_path: Path) -> None:
 
 
 def _paid_license(monkeypatch: pytest.MonkeyPatch, tier: str = "pro") -> None:
-    """A signed licence file in force, verified against a throwaway key (j-0309)."""
-    import base64
+    """An activated licence key cached on this machine (2026-11-26).
+
+    No network: the meter reads the cache, and a paid deployment must never need the
+    relay to count its runs.
+    """
+    import json
     from datetime import date
 
-    private = ed25519.Ed25519PrivateKey.generate()
-    raw = private.private_bytes(
-        serialization.Encoding.Raw,
-        serialization.PrivateFormat.Raw,
-        serialization.NoEncryption(),
-    )
-    public = base64.b64encode(
-        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    ).decode()
-    monkeypatch.setattr(_signed_file, "VENDORED_PUBLIC_KEY_B64", public)
-
-    path = Path(tempfile.mkdtemp()) / "licence.signed.json"
-    purchased = date.today()
+    path = Path(tempfile.mkdtemp()) / "licence.json"
+    created = date.today().isoformat()
     path.write_text(
-        _signed_file.signed_file_text(
+        json.dumps(
             {
-                "id": "TC-TEST-0001",
-                "product": "tancat",
-                "buyer_ref": "test",
-                "purchased_at": purchased.isoformat(),
-                "window_end": (purchased + timedelta(days=365)).isoformat(),
+                "key": "00000-00000-00000-00000-00000",
+                "instance_id": "lki_test",
+                "instance_name": "test",
+                "status": "active",
+                "created_at": f"{created}T00:00:00+00:00",
+                "expires_at": "",
+                "activation_limit": 1,
+                "last_checked": f"{created}T00:00:00+00:00",
                 "tier": tier,
-            },
-            raw,
+            }
         ),
         encoding="utf-8",
     )

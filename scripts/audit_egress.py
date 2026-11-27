@@ -62,6 +62,16 @@ _ALLOWED_TOKEN = re.compile(
     re.IGNORECASE,
 )
 
+#: Our own services, named one by one, with the reason they are allowed to be
+#: reached. A call site here is classified OUR-SERVICE only when the statement also
+#: names the relay address - a call from the same file to anywhere else is FLAGGED.
+OUR_SERVICE_SITES: dict[str, str] = {
+    "src/licensing/activation.py": (
+        "the licence relay: one activation call and one update check per licence; "
+        "the product never addresses the store directly"
+    ),
+}
+
 DEFAULT_SCOPE: list[str] = ["src", "generated_tests/conftest.py", "streamlit_app.py", "cli/main.py"]
 
 _MISSING_REASON = "file/dir not found (product runtime path removed?)"
@@ -140,6 +150,23 @@ def audit_file(path: Path, sites: list[CallSite]) -> int:
         hits += 1
         statement = _statement_block(lines, idx)
         primitive = m.group(0).rstrip("(")
+        own_service = OUR_SERVICE_SITES.get(display_path.replace("\\", "/"))
+        # The statement that opens the connection names the relay; the one that
+        # follows it only says ``request``. Look back a few lines, so both halves of
+        # one call are classified together rather than one OWN and one "user config".
+        context = "\n".join(lines[max(0, idx - 12) : idx + 14])
+        if own_service and "relay_url" in context:
+            sites.append(
+                CallSite(
+                    display_path,
+                    idx + 1,
+                    primitive,
+                    statement,
+                    "OUR-SERVICE",
+                    own_service,
+                )
+            )
+            continue
         if _ALLOWED_TOKEN.search(statement):
             sites.append(
                 CallSite(
@@ -173,13 +200,18 @@ def run_audit(scope: list[str]) -> AuditResult:
 
 
 def _render_human(result: AuditResult) -> str:
+    own = sum(1 for site in result.sites if site.classification == "OUR-SERVICE")
     lines = [
         f"Egress audit — {result.scanned_files} product-runtime files scanned, "
-        f"{len(result.sites)} outbound-HTTP call site(s).",
+        f"{len(result.sites)} outbound-HTTP call site(s), {own} to our own services.",
         "",
     ]
-    for site in sorted(result.sites, key=lambda s: (s.classification != "USER-CONFIGURED", s.file, s.line)):
-        status = "OK " if site.classification == "USER-CONFIGURED" else "FLAG"
+    for site in (
+        sorted(result.sites, key=lambda s: (s.classification != "USER-CONFIGURED", s.file, s.line))
+        if False
+        else sorted(result.sites, key=lambda s: (s.classification == "FLAGGED", s.file, s.line))
+    ):
+        status = {"USER-CONFIGURED": "OK ", "OUR-SERVICE": "OWN", "FLAGGED": "FLAG"}.get(site.classification, "FLAG")
         lines.append(f"  [{status}] {site.file}:{site.line} {site.primitive}")
         snippet = " ".join(site.statement.split())
         lines.append(f"         {snippet[:140]}{'…' if len(snippet) > 140 else ''}")

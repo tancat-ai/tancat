@@ -9,6 +9,14 @@ everything else. Nothing to install, nothing to type.
   IS the release version - the tag must equal it, or the guards refuse the publish.
 - **No 1.0 tag until launch day.** Launching on a 1.4 looks careless, so the first number a customer
   sees as 1.0 is the launch itself.
+**Local trap, not a regression (t-1505).** `src/version_info.py` prefers *installed*
+package metadata over `pyproject.toml`. A machine that installed an earlier wheel -
+say `1.0.0` - while the tree says `0.1.0` will report `1.0.0` everywhere, and
+`tests/test_update_check.py::test_a_source_run_reports_the_version_the_wheel_carries`
+would fail for that reason alone. That test now **skips** with both numbers named
+rather than turning red; `uv sync --reinstall` (or uninstalling `tancat`) makes it
+run again. CI is always a clean environment, so the check is never skipped there.
+
 - **On launch day** the version is set to `1.0.0` in `pyproject.toml`, merged to main, then tagged
   `v1.0.0`. That tag is the launch.
 - **The floating `v1` tag** (what `uses: tancat-ai/tancat@v1` resolves to for the Action) is created

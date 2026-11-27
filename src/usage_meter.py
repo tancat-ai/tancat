@@ -289,8 +289,8 @@ class UsageMeter:
     # -- summary + gates -------------------------------------------------------
     def summary(self) -> UsageSummary:
         now = self._now or datetime.now(UTC)
-        # The licence has no clock: its status comes from a signed file (j-0309), so
-        # only the usage window is measured against *now*.
+        # The licence has no clock of its own: its status comes from the stored key
+        # (2026-11-26), so only the usage window is measured against *now*.
         status = license_status()
         tier = effective_tier()
         start, end = monthly_window(now)

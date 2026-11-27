@@ -5,9 +5,12 @@ settled position (2026-11-06, currency set 2026-11-12) is in
 ``src/licensing/pricing.py``; these tests hold the pricing card, the terms, the
 install page and the docs to it, and forbid the claims he rejected.
 
-The store charges in **pounds**, so a price line that carries a dollar sign is a
-wrong price even when the number is right. The scan therefore reads amounts with
-either symbol and fails on the dollar one.
+**The currency is a decision, not a default** (owner, 2026-11-24): the product is
+sold in US dollars at $499 with a $125 renewal. So a price line that carries a
+pound sign is a wrong price even when the number is right, and a dollar price whose
+digits are not 0, 499 or 125 is wrong too. The scan reads amounts with either
+symbol, fails on the pound one, and holds every amount to the three the constant
+allows - the same shape as before, pointed the other way.
 """
 
 from __future__ import annotations
@@ -48,18 +51,22 @@ SETTLED_SENTENCES = (
 #: Every amount any landing page may show: the free tier, the price, the renewal.
 ALLOWED_AMOUNTS = {0, PRICE_PER_DEPLOYMENT, RENEWAL_PER_YEAR}
 
-#: A price with either symbol, in a page a buyer reads.
-MONEY = re.compile(r"([$" + re.escape(CURRENCY_SYMBOL) + r"])\s?([\d][\d,]*)")
+#: The currency the store does NOT charge in. A price in this currency is wrong even
+#: when the digits are right, so the scan looks for it by name rather than assuming
+#: the symbol cannot appear.
+WRONG_CURRENCY_SYMBOL = "\N{POUND SIGN}"
 
-#: A dollar sign in front of a number: a wrong currency, whatever the digits say.
-DOLLAR_PRICE = re.compile(r"\$\s?\d")
+#: A price with either symbol, in a page a buyer reads.
+MONEY = re.compile(r"([" + re.escape(CURRENCY_SYMBOL) + re.escape(WRONG_CURRENCY_SYMBOL) + r"])\s?([\d][\d,]*)")
+
+#: A pound sign in front of a number: a price in the currency we left behind.
+POUND_PRICE = re.compile(re.escape(WRONG_CURRENCY_SYMBOL) + r"\s?\d")
 
 #: Claims the owner refused: an introductory price with no honest end date, a
 #: list price he never charged, and a launch offer.
 FORBIDDEN_CLAIMS = (
     "introductory",
     "was $",
-    "was £",
     "limited time",
     "launch offer",
     "special price",
@@ -94,8 +101,8 @@ def _pdf_text(path: Path = INSTALL_PDF) -> str:
 def _flat(path: Path) -> str:
     """The page as one line of collapsed whitespace, entities decoded.
 
-    Decoded, because the HTML writes the pound sign as ``&pound;`` and the buyer
-    reads ``£``. A check on the raw source would pass a page that renders wrong.
+    Decoded, because the HTML may write a symbol as an entity and the buyer reads
+    the character. A check on the raw source would pass a page that renders wrong.
     """
     return " ".join(html.unescape(path.read_text(encoding="utf-8")).split())
 
@@ -109,9 +116,14 @@ def _amounts(text: str) -> dict[str, set[int]]:
 
 
 def test_the_currency_is_stated_once_and_no_name_carries_it() -> None:
-    """The symbol cannot be left behind: the constant names are currency-neutral."""
-    assert CURRENCY == "GBP", "the store charges in pounds"
-    assert CURRENCY_SYMBOL == "\N{POUND SIGN}", "the symbol a page prints must be the pound sign"
+    """The symbol cannot be left behind: the constant names are currency-neutral.
+
+    The currency is a decision, not a default (owner, 2026-11-24): US dollars, $499
+    a deployment, $125 a year. If this assertion fails the decision changed - move
+    every surface with it, do not edit this line alone.
+    """
+    assert CURRENCY == "USD", "the store charges in US dollars"
+    assert CURRENCY_SYMBOL == "$", "the symbol a page prints must be the dollar sign"
 
     offenders = [name for name in vars(pricing) if re.search(r"usd|gbp|dollar|pound", name, re.IGNORECASE)]
     assert offenders == [], (
@@ -129,8 +141,8 @@ def test_the_terms_carry_the_price_from_the_one_source() -> None:
     page = _flat(TERMS)
     assert f"{CURRENCY_SYMBOL}{PRICE_PER_DEPLOYMENT} per deployment" in page, "the terms do not state the settled price"
     # And no second number that could pass for a price.
-    pounds = _amounts(page).get(CURRENCY_SYMBOL, set())
-    assert pounds == {PRICE_PER_DEPLOYMENT}, f"the terms quote more than one price: {sorted(pounds)}"
+    prices = _amounts(page).get(CURRENCY_SYMBOL, set())
+    assert prices == {PRICE_PER_DEPLOYMENT}, f"the terms quote more than one price: {sorted(prices)}"
 
 
 def test_the_card_and_the_terms_define_a_deployment_the_same_way() -> None:
@@ -139,14 +151,15 @@ def test_the_card_and_the_terms_define_a_deployment_the_same_way() -> None:
 
 
 def test_every_page_that_states_a_price_states_the_settled_one() -> None:
-    """The install page shipped the price unguarded - changing it to $499 passed.
+    """The install page once shipped the price unguarded - changing the number passed.
 
     Any amount on any landing page must be the free tier's zero, the settled
-    price, or the renewal, **in pounds**; and the page that ships with the order
-    must state the price itself, not merely avoid a wrong one.
+    price, or the renewal, **in US dollars**; and the page that ships with the
+    order must state the price itself, not merely avoid a wrong one. The free
+    tier's ``$0`` is an amount, not an exception: it is in ALLOWED_AMOUNTS.
     """
     wrong: dict[str, dict[str, set[int]]] = {}
-    dollars: dict[str, str] = {}
+    pounds: dict[str, str] = {}
     for path in sorted(LANDING.glob("*.html")):
         page = _flat(path)
         found = _amounts(page)
@@ -154,24 +167,24 @@ def test_every_page_that_states_a_price_states_the_settled_one() -> None:
         unexpected = {symbol: amounts for symbol, amounts in unexpected.items() if amounts}
         if unexpected:
             wrong[path.name] = unexpected
-        if DOLLAR_PRICE.search(page):
-            dollars[path.name] = DOLLAR_PRICE.search(page).group(0)  # type: ignore[union-attr]
+        if POUND_PRICE.search(page):
+            pounds[path.name] = POUND_PRICE.search(page).group(0)  # type: ignore[union-attr]
 
     assert wrong == {}, f"page(s) quoting a price the constant does not hold: {wrong}"
-    assert dollars == {}, f"page(s) pricing in dollars, but the store charges in {CURRENCY}: {dollars}"
+    assert pounds == {}, f"page(s) pricing in pounds, but the store charges in {CURRENCY}: {pounds}"
 
     assert f"{CURRENCY_SYMBOL}{PRICE_PER_DEPLOYMENT} per deployment" in _flat(INSTALL), (
         "the install page does not state the settled price"
     )
 
 
-def test_the_docs_state_the_price_in_pounds() -> None:
+def test_the_docs_state_the_price_in_dollars() -> None:
     """The reference page is the one docs surface that prints the number."""
     page = _flat(DOCS_LICENSING)
     assert f"{CURRENCY_SYMBOL}{PRICE_PER_DEPLOYMENT} per deployment" in page, (
         "the licensing reference does not state the settled price"
     )
-    assert not DOLLAR_PRICE.search(page), "the licensing reference prices in dollars"
+    assert not POUND_PRICE.search(page), "the licensing reference still prices in pounds"
 
 
 def test_the_card_states_the_update_window_from_the_one_source() -> None:
@@ -228,7 +241,7 @@ def test_the_order_pdf_carries_the_settled_sentences_verbatim() -> None:
 
 
 def test_the_order_pdf_price_matches_the_one_source() -> None:
-    """If the order PDF states a price, it states the settled one in pounds."""
+    """If the order PDF states a price, it states the settled one in US dollars."""
     text = _pdf_text()
     if not MONEY.search(text):
         return  # this document carries no price at all, so it cannot carry a wrong one
