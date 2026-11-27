@@ -426,8 +426,13 @@ class SidebarConfig:
         # j-0309/t-1472: two live states only - a verified file, or the free tier
         # (a refused file reports as invalid with the reason). The grace/blocked
         # branches went with the token format.
-        if status.status == "valid":
+        if status.status == "valid" and status.tier != "free":
             st.sidebar.success(status.headline)
+        elif status.status == "valid":
+            # j-0317 review: a valid licence whose update window has closed (or
+            # whose key the store no longer calls active) is NOT success - it is
+            # the free tier with a reason. Informational, not green.
+            st.sidebar.info(status.headline)
         elif status.status == "invalid":
             st.sidebar.error(status.headline)
         else:

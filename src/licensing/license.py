@@ -113,10 +113,14 @@ def license_status(build_date: date | None = None) -> LicenseResult:
         build = build_date or RELEASE_DATE
         stored_status = str(state.activation.status or "").strip().lower()
         window_end = state.window_end.isoformat() if state.window_end else ""
-        if stored_status in {"expired", "disabled"}:
+        # The SAME rule as activation (activation.py: only "active" passes): an
+        # allow-list of bad words is a list, not a rule - "inactive", "revoked" or
+        # a word this build has never seen would otherwise read as permission.
+        if stored_status != "active":
+            said = f"'{stored_status}'" if stored_status else "(no status)"
             why = (
-                f"This licence key is {stored_status} - running on the free tier with the free limits. "
-                f"Email hello@tancat.dev and we will sort it out."
+                f"The store says this licence key is {said} - running on the free tier with the free "
+                f"limits. Email hello@tancat.dev and we will sort it out."
             )
             return LicenseResult(
                 LicenseStatus.VALID,

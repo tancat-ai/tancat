@@ -116,15 +116,38 @@ class TestPastTheWindow:
         assert meter.exports_limit == 10
 
 
-class TestStatusHole:
-    @pytest.mark.parametrize("status", ["expired", "disabled"])
-    def test_an_expired_or_disabled_key_drops_the_tier(self, licence: Path, status: str) -> None:
+class TestStatusRule:
+    """Only "active" preserves the tier - the same rule activation applies.
+
+    The first version of this fix listed "expired" and "disabled". That is a list,
+    not a rule: "inactive", "revoked", "quarantined", an unknown word or an empty
+    status all still granted Pro with no limits (j-0317 review).
+    """
+
+    @pytest.mark.parametrize("status", ["expired", "disabled", "inactive", "revoked", "quarantined", "weird-word"])
+    def test_any_status_but_active_drops_the_tier(self, licence: Path, status: str) -> None:
         _write(licence, created_at=_inside_window_start(), status=status)
 
         result = license_status()
 
+        assert result.tier == "free", f"status {status!r} still granted pro"
+        assert status in result.headline.lower(), "the sentence must say what the store said"
+
+    def test_an_empty_status_drops_the_tier(self, licence: Path) -> None:
+        """No status at all is not permission."""
+        _write(licence, created_at=_inside_window_start(), status="")
+
+        result = license_status()
+
         assert result.tier == "free"
-        assert status in result.headline.lower()
+        assert "(no status)" in result.headline
+
+    def test_active_inside_the_window_keeps_pro(self, licence: Path) -> None:
+        _write(licence, created_at=_inside_window_start(), status="active")
+
+        result = license_status()
+
+        assert result.tier == "pro"
 
     def test_a_missing_licence_is_free_with_free_limits(self, licence: Path) -> None:
         from src.usage_meter import UsageMeter
@@ -141,3 +164,46 @@ def result_end(licence: Path) -> str:
     data = json.loads(licence.read_text(encoding="utf-8"))
     start = date.fromisoformat(str(data["created_at"])[:10])
     return add_months(start, WINDOW_MONTHS).isoformat()
+
+
+def test_the_sidebar_does_not_draw_a_closed_window_as_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """j-0317 review: green is for a licence that is actually Pro."""
+    from src.ui import ui_sidebar
+
+    calls: list[tuple[str, str]] = []
+
+    class FakeSidebar:
+        def divider(self) -> None:
+            return None
+
+        def subheader(self, text: str) -> None:
+            return None
+
+        def success(self, text: str) -> None:
+            calls.append(("success", text))
+
+        def info(self, text: str) -> None:
+            calls.append(("info", text))
+
+        def error(self, text: str) -> None:
+            calls.append(("error", text))
+
+        def warning(self, text: str) -> None:
+            return None
+
+        def caption(self, text: str) -> None:
+            return None
+
+    class FakeStreamlit:
+        sidebar = FakeSidebar()
+
+    monkeypatch.setattr(ui_sidebar, "st", FakeStreamlit)
+    monkeypatch.setattr(ui_sidebar.SidebarConfig, "_render_license_entry", staticmethod(lambda status: None))
+
+    from src.licensing.license import LicenseResult
+
+    closed = LicenseResult("valid", tier="free", reason="Your update window ended on 2026-10-13. ...")
+    monkeypatch.setattr("src.licensing.license.license_status", lambda *a, **k: closed)
+    ui_sidebar.SidebarConfig.render_license_usage()
+
+    assert calls and calls[0][0] == "info", calls

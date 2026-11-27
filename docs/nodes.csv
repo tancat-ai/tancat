@@ -938,7 +938,7 @@ label,group,size,color
 ./src/licensing/__init__.py,Other,58,#AEB6BF
 ./src/licensing/activation.py,Other,532,#AEB6BF
 ./src/licensing/entitlement.py,Other,188,#AEB6BF
-./src/licensing/license.py,Other,119,#AEB6BF
+./src/licensing/license.py,Other,183,#AEB6BF
 ./src/licensing/merchant.py,Other,27,#AEB6BF
 ./src/licensing/pricing.py,Other,51,#AEB6BF
 ./src/licensing/tiers.py,Other,194,#AEB6BF
@@ -1019,7 +1019,7 @@ label,group,size,color
 ./src/ui/ui_run_comparison.py,Other,117,#AEB6BF
 ./src/ui/ui_run_results.py,Other,1375,#AEB6BF
 ./src/ui/ui_saved_packages.py,Other,411,#AEB6BF
-./src/ui/ui_sidebar.py,Other,485,#AEB6BF
+./src/ui/ui_sidebar.py,Other,490,#AEB6BF
 ./src/ui_pipeline.py,interface,515,#FF6B6B
 ./src/url_guard.py,Other,350,#AEB6BF
 ./src/url_inference.py,refinement,49,#FFEAA7
@@ -1183,6 +1183,7 @@ label,group,size,color
 ./tests/test_licence_key_activation.py,Other,503,#AEB6BF
 ./tests/test_licence_record.py,Other,94,#AEB6BF
 ./tests/test_licence_relay_contract.py,Other,532,#AEB6BF
+./tests/test_licence_window_tier.py,Other,209,#AEB6BF
 ./tests/test_license.py,Other,161,#AEB6BF
 ./tests/test_licensing_cli.py,Other,187,#AEB6BF
 ./tests/test_licensing_docs.py,Other,92,#AEB6BF
