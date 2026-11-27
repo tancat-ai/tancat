@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +24,9 @@ except ImportError:
     pass
 
 from src.llm_client import LLMClient
+from src.model_probe import probe_models
 from src.project import apply_rag_scope, project_workspace
 from src.provider_config import (
-    LOCAL_MODEL_LIST_TIMEOUT,
     api_key_env_var,
     get_provider_defaults,
     provider_requires_openai_api_key,
@@ -183,15 +184,29 @@ provider_base_url = st.sidebar.text_input(
 # Propagate user-selected provider to ALL fallback LLMClient() instances
 LLMClient.set_session_provider(provider, provider_base_url)
 
-# Attempt to fetch models from the provider
-available_models: list[str] = []
-try:
-    temp_client = LLMClient(provider=provider, base_url=provider_base_url)
-    # t-0715: 2s was shorter than llama.cpp's first /v1/models answer (~7s on a
-    # cold load), so the dropdown rendered empty. Use the shared realistic cap.
-    available_models = temp_client.list_models(timeout=LOCAL_MODEL_LIST_TIMEOUT)
-except Exception:
-    pass
+# Attempt to fetch models from the provider - bounded (t-1509).
+#
+# This used to construct an LLMClient and call list_models(timeout=15) inline. With no
+# LLM running that cost ~24s on Windows (auto-detect, _detect_local_url per port, two
+# loaded-model probes, then the list), so the browser showed half a page and the
+# licence panel never appeared. The probe now has a hard deadline, is remembered for
+# this session per (provider, base_url), and reports its failure on the page.
+_probe_key = (provider, provider_base_url)
+_probe_now = time.monotonic()
+_cached_probe = st.session_state.get("_model_probe")
+probe: dict[str, Any] = _cached_probe if isinstance(_cached_probe, dict) else {}
+_probe_stale = (
+    not probe
+    or probe.get("key") != _probe_key
+    # A server started after the page loaded must be pickable up by a reload.
+    or (_probe_now - float(probe.get("at", 0.0))) > 60.0
+)
+if _probe_stale:
+    probe = {"key": _probe_key, "at": _probe_now, "result": probe_models(provider, provider_base_url)}
+    st.session_state["_model_probe"] = probe
+available_models: list[str] = list(probe["result"].models)
+if not available_models:
+    st.sidebar.warning(probe["result"].message(provider_base_url or "the default endpoint"))
 
 if available_models:
     model_option = st.sidebar.selectbox("Select Model", ["-- Enter manually --"] + available_models)

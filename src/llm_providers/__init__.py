@@ -356,7 +356,7 @@ class OpenAIProvider(LLMProvider):
             headers={"Authorization": f"Bearer {self._api_key}", "User-Agent": BROWSER_USER_AGENT},
         )
 
-    def _detect_local_url(self, timeout: float = 2.0) -> str:
+    def _detect_local_url(self, timeout: float = 0.5) -> str:
         """Probe common local OpenAI-compatible ports and return the first responsive one.
 
         Checks ports: 8080 (llama.cpp), 8000 (vLLM), 5000 (text-gen-webui).
