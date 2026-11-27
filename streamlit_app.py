@@ -24,7 +24,7 @@ except ImportError:
     pass
 
 from src.llm_client import LLMClient
-from src.model_probe import probe_models
+from src.model_probe import ProbeResult, keep_previous_models, probe_models
 from src.project import apply_rag_scope, project_workspace
 from src.provider_config import (
     api_key_env_var,
@@ -202,7 +202,10 @@ _probe_stale = (
     or (_probe_now - float(probe.get("at", 0.0))) > 60.0
 )
 if _probe_stale:
-    probe = {"key": _probe_key, "at": _probe_now, "result": probe_models(provider, provider_base_url)}
+    previous = probe.get("result") if isinstance(probe.get("result"), ProbeResult) else None
+    # An unfinished probe is not a verdict: keep what the last one found (t-1514).
+    fresh = keep_previous_models(probe_models(provider, provider_base_url), previous)
+    probe = {"key": _probe_key, "at": _probe_now, "result": fresh}
     st.session_state["_model_probe"] = probe
 available_models: list[str] = list(probe["result"].models)
 if not available_models:

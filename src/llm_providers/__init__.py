@@ -58,6 +58,13 @@ def generation_max_tokens() -> int:
         return 4096
 
 
+#: How long each localhost port may take before auto-detect moves on. It was shortened
+#: to 0.5s while the probe ran on the render thread; the probe is now bounded off-thread
+#: (t-1509), so the cost is paid in the background and a server that answers in a second
+#: or two is found again (t-1514). Keep this at 2.0s unless the probe path changes.
+LOCAL_DETECT_TIMEOUT = 2.0
+
+
 class LLMProvider(ABC):
     """Abstract base class for all LLM providers.
 
@@ -356,7 +363,7 @@ class OpenAIProvider(LLMProvider):
             headers={"Authorization": f"Bearer {self._api_key}", "User-Agent": BROWSER_USER_AGENT},
         )
 
-    def _detect_local_url(self, timeout: float = 0.5) -> str:
+    def _detect_local_url(self, timeout: float = LOCAL_DETECT_TIMEOUT) -> str:
         """Probe common local OpenAI-compatible ports and return the first responsive one.
 
         Checks ports: 8080 (llama.cpp), 8000 (vLLM), 5000 (text-gen-webui).

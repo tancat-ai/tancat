@@ -110,7 +110,13 @@ def test_a_fresh_install_draws_the_licence_panel_within_five_seconds(
             page.get_by_role("button", name="Activate").first.wait_for(timeout=1_000)
 
             # And the visible "no model" state, not silence.
-            warning = page.get_by_text("No model is configured yet").or_(page.get_by_text("No answer from"))
+            # An unfinished probe says "Still checking" (t-1514): a slow model is not
+            # "no model". Either sentence is a visible state; silence is the failure.
+            warning = (
+                page.get_by_text("Still checking")
+                .or_(page.get_by_text("No model is configured yet"))
+                .or_(page.get_by_text("No answer from"))
+            )
             warning.first.wait_for(timeout=int(WAIT_SECONDS * 1000))
 
             elapsed = time.perf_counter() - started

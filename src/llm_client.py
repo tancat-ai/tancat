@@ -274,6 +274,21 @@ class LLMClient:
             "system_instruction_length": len(self.system_instruction),
         }
 
+    def close(self) -> None:
+        """Close the provider's HTTP client, if it opened one.
+
+        A client holds a connection pool. The startup probe builds one off-thread and
+        may abandon it, so it calls this in a finally rather than leaving the pool to
+        the garbage collector (t-1514).
+        """
+        client = getattr(self._provider, "_client", None)
+        close = getattr(client, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:  # pragma: no cover - closing must never raise
+                pass
+
     def list_models(self, timeout: int = 30) -> list[str]:
         """List models exposed by the current provider."""
         return self._provider.list_models(timeout=timeout)

@@ -29,12 +29,19 @@ from dataclasses import dataclass, field
 __all__ = [
     "PROBE_BUDGET_SECONDS",
     "ProbeResult",
+    "keep_previous_models",
     "probe_models",
 ]
 
 #: The whole probe may take this long, including client construction. A page must
 #: draw inside five seconds (t-1509), and this leaves room for the rest of the render.
-PROBE_BUDGET_SECONDS = 1.5
+#:
+#: A probe that overruns is NOT a verdict: llama.cpp's first ``/v1/models`` answer took
+#: about 7s for the owner (t-0715), and a slow local model must never be reported as
+#: "no model" (t-1514). An unfinished probe says "still checking" and keeps the models
+#: it already had. 0.8s is chosen against the page budget: Streamlit's own boot costs
+#: ~3.5s on the owner's machine, and the whole page must draw inside 5s (t-1509).
+PROBE_BUDGET_SECONDS = 0.8
 
 
 @dataclass(frozen=True)
@@ -45,20 +52,26 @@ class ProbeResult:
     finished: bool = True
     elapsed: float = 0.0
     error: str = ""
+    budget: float = PROBE_BUDGET_SECONDS
 
     @property
     def reachable(self) -> bool:
         return bool(self.models)
 
     def message(self, endpoint: str) -> str:
-        """The sentence the sidebar shows. Empty when models were found."""
+        """The sentence the sidebar shows. Empty when models were found.
+
+        An unfinished probe is **not** a verdict: a slow model answers after the
+        deadline, and telling that buyer they have no model is the t-0715 mistake
+        (t-1514). Only a probe that finished may say "no model is configured yet".
+        """
         if self.models:
             return ""
         where = endpoint or "the configured endpoint"
         if not self.finished:
             return (
-                f"No answer from {where} within {PROBE_BUDGET_SECONDS:.1f}s - no model is configured yet. "
-                "Start your LLM server and reload, or set Provider Base URL to the server you use."
+                f"Still checking {where} - the page works meanwhile, and a model that is still "
+                f"loading will be picked up on the next reload (the check stopped after {self.budget:.1f}s)."
             )
         if self.error:
             return (
@@ -86,6 +99,7 @@ def probe_models(
     failure: list[str] = []
 
     def _work() -> None:
+        client = None
         try:
             from src.llm_client import LLMClient
 
@@ -93,6 +107,15 @@ def probe_models(
             found.extend(str(model) for model in client.list_models(timeout=max(1, int(budget))))
         except Exception as exc:  # the endpoint is down, or the provider refused
             failure.append(f"{type(exc).__name__}: {exc}"[:160])
+        finally:
+            # The client owns an httpx pool; an abandoned probe thread must not leave it
+            # open (t-1514).
+            close = getattr(client, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # pragma: no cover
+                    pass
 
     started = time.perf_counter()
     worker = threading.Thread(target=_work, name="tancat-model-probe", daemon=True)
@@ -100,5 +123,18 @@ def probe_models(
     worker.join(budget)
     elapsed = time.perf_counter() - started
     if worker.is_alive():
-        return ProbeResult(models=[], finished=False, elapsed=elapsed, error="")
-    return ProbeResult(models=found, finished=True, elapsed=elapsed, error=failure[0] if failure else "")
+        return ProbeResult(models=[], finished=False, elapsed=elapsed, error="", budget=budget)
+    return ProbeResult(models=found, finished=True, elapsed=elapsed, error=failure[0] if failure else "", budget=budget)
+
+
+def keep_previous_models(result: ProbeResult, previous: ProbeResult | None) -> ProbeResult:
+    """Keep the models a previous probe found when this one ran out of time.
+
+    An unfinished probe has no verdict to give, so replacing a known-good list with an
+    empty one would turn a slow model into "no model" (t-1514).
+    """
+    if result.finished or previous is None or not previous.models:
+        return result
+    from dataclasses import replace
+
+    return replace(result, models=list(previous.models))
