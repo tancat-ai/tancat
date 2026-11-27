@@ -954,6 +954,7 @@ label,group,size,color
 ./src/locator_fallback.py,refinement,206,#FFEAA7
 ./src/locator_repair.py,refinement,875,#FFEAA7
 ./src/locator_scorer.py,refinement,321,#FFEAA7
+./src/model_probe.py,Other,104,#AEB6BF
 ./src/navigation_target.py,Other,173,#AEB6BF
 ./src/ocr_backends.py,intelligence,921,#45B7D1
 ./src/orchestrator.py,orchestration,1334,#4ECDC4
@@ -1032,7 +1033,7 @@ label,group,size,color
 ./src/version_check.py,Other,370,#AEB6BF
 ./src/version_info.py,Other,49,#AEB6BF
 ./src/vision_enricher.py,intelligence,307,#45B7D1
-./streamlit_app.py,interface,997,#FF6B6B
+./streamlit_app.py,interface,1012,#FF6B6B
 ./tests/__init__.py,Other,1,#AEB6BF
 ./tests/adversarial/__init__.py,Other,0,#AEB6BF
 ./tests/adversarial/test_overlay_and_error_pages.py,Other,146,#AEB6BF
@@ -1155,6 +1156,7 @@ label,group,size,color
 ./tests/test_failure_classifier.py,Other,176,#AEB6BF
 ./tests/test_failure_reporter.py,Other,250,#AEB6BF
 ./tests/test_flow_memory.py,Other,878,#AEB6BF
+./tests/test_fresh_install_page.py,Other,119,#AEB6BF
 ./tests/test_gantt_utils.py,Other,73,#AEB6BF
 ./tests/test_gitleaks_scan.py,Other,58,#AEB6BF
 ./tests/test_global_best_resolution.py,Other,201,#AEB6BF

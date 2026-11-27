@@ -1541,6 +1541,7 @@ source,target,type
 ./src/locator_fallback.py,./src/locator_scorer.py,import
 ./src/locator_repair.py,./src/gantt_utils.py,import
 ./src/locator_repair.py,./src/rag_learn.py,import
+./src/model_probe.py,./src/llm_client.py,import
 ./src/ocr_backends.py,./src/pdf_ingest.py,import
 ./src/ocr_backends.py,./src/settings_store.py,import
 ./src/orchestrator.py,./src/agents/pipeline_graph.py,import
@@ -1772,6 +1773,7 @@ source,target,type
 ./streamlit_app.py,./src/gantt_utils.py,import
 ./streamlit_app.py,./src/llm_client.py,import
 ./streamlit_app.py,./src/llm_health.py,import
+./streamlit_app.py,./src/model_probe.py,import
 ./streamlit_app.py,./src/pipeline_artifact_manager.py,import
 ./streamlit_app.py,./src/pipeline_models.py,import
 ./streamlit_app.py,./src/project.py,import
