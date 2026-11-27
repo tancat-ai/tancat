@@ -2104,6 +2104,7 @@ source,target,type
 ./tests/test_manual_fix_learns.py,./src/rag_store.py,import
 ./tests/test_manual_fix_learns.py,./tests/test_locator_repair_codegen.py,import
 ./tests/test_manual_fix_learns.py,./tests/test_rag_retriever.py,import
+./tests/test_model_probe.py,./src/llm_client.py,import
 ./tests/test_multi_model_providers.py,./src/cli/session.py,import
 ./tests/test_multi_model_providers.py,./src/llm_client.py,import
 ./tests/test_multi_model_providers.py,./src/provider_config.py,import

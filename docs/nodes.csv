@@ -1156,7 +1156,7 @@ label,group,size,color
 ./tests/test_failure_classifier.py,Other,176,#AEB6BF
 ./tests/test_failure_reporter.py,Other,250,#AEB6BF
 ./tests/test_flow_memory.py,Other,878,#AEB6BF
-./tests/test_fresh_install_page.py,Other,119,#AEB6BF
+./tests/test_fresh_install_page.py,Other,123,#AEB6BF
 ./tests/test_gantt_utils.py,Other,73,#AEB6BF
 ./tests/test_gitleaks_scan.py,Other,58,#AEB6BF
 ./tests/test_global_best_resolution.py,Other,201,#AEB6BF
@@ -1200,6 +1200,7 @@ label,group,size,color
 ./tests/test_locator_scorer.py,Other,208,#AEB6BF
 ./tests/test_manual_fix_learns.py,Other,359,#AEB6BF
 ./tests/test_map_3d_indexes.py,Other,120,#AEB6BF
+./tests/test_model_probe.py,Other,73,#AEB6BF
 ./tests/test_multi_model_providers.py,Other,162,#AEB6BF
 ./tests/test_navigation_target.py,Other,124,#AEB6BF
 ./tests/test_no_live_network_in_default_suite.py,Other,165,#AEB6BF
