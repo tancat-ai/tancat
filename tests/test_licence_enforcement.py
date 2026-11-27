@@ -1,127 +1,113 @@
-"""j-0309 / t-1470: what AITEST_ENFORCE_LICENSING=1 means now.
+"""WHAT AITEST_ENFORCE_LICENSING=1 means, with licence keys (2026-11-26).
 
-The setting used to test a status that no longer exists, so it could never fire. It
-now means one thing: **a run needs a valid signed licence for this build**. Missing,
-refused, or past the update window all refuse, each with a reason and the command that
-checks it. Unset or ``0`` refuses nothing - the free tier is a legitimate way to run.
+One meaning: **a run needs an activated licence key for this build**. No key on this
+machine, a cache that cannot be used, or a build past the update window all refuse,
+each with a reason and the command that checks it. Unset or ``0`` refuses nothing -
+the free tier is a legitimate way to run.
 
 The gate's decision is ``_licence_refusal()``: a string when the run may not proceed.
+The gate reads the cache. A paid CI job that has activated once and then lost the
+network must still run, so nothing here calls the relay.
 """
 
 from __future__ import annotations
 
-import base64
-import os
+import json
 from pathlib import Path
-from typing import Any
 
 import pytest
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from src.cli import headless
-from src.licensing import entitlement, signed_file
+from src.licensing import activation as keys
+from src.licensing import entitlement
 
 
-def _keypair() -> tuple[bytes, str]:
-    private = ed25519.Ed25519PrivateKey.generate()
-    raw = private.private_bytes(
-        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
-    )
-    public = base64.b64encode(
-        private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    ).decode()
-    return raw, public
-
-
-def _write(path: Path, private: bytes, *, window_end: str, purchased: str = "2026-01-01") -> None:
+def _write_licence(path: Path, *, created_at: str = "2026-11-26T00:04:47.460Z") -> None:
     path.write_text(
-        signed_file.signed_file_text(
+        json.dumps(
             {
-                "id": "TC-2026-000555",
-                "product": "tancat",
-                "buyer_ref": "order 555 / buyer@example.com",
-                "purchased_at": purchased,
-                "window_end": window_end,
-                "tier": "pro",
-            },
-            private,
+                "key": "00000-00000-00000-00000-00000",
+                "instance_id": "lki_testinstance000000000000",
+                "instance_name": "ci-runner",
+                "status": "active",
+                "created_at": created_at,
+                "expires_at": "",
+                "activation_limit": 1,
+                "last_checked": created_at,
+            }
         ),
         encoding="utf-8",
     )
 
 
 @pytest.fixture
-def licence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    private, public = _keypair()
-    monkeypatch.setattr(signed_file, "VENDORED_PUBLIC_KEY_B64", public)
+def licence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = tmp_path / "licence.json"
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
     monkeypatch.setattr(entitlement, "default_last_run_path", lambda: tmp_path / "last_run.json")
-    return {"private": private, "public": public, "path": tmp_path / "licence.signed.json", "dir": tmp_path}
+    return path
 
 
-def test_no_file_refuses_when_enforced(licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))  # absent
+def test_no_key_refuses_when_enforced(licence: Path) -> None:
     refusal = headless._licence_refusal()
-    assert "no signed licence file" in refusal
+    assert "no activated licence key" in refusal
 
 
-def test_a_tampered_file_refuses_when_enforced(licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    _write(licence["path"], licence["private"], window_end="2027-11-01")
-    licence["path"].write_text(
-        licence["path"].read_text(encoding="utf-8").replace("TC-2026-000555", "TC-2026-999999"), encoding="utf-8"
-    )
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
+def test_a_damaged_cache_refuses_when_enforced(licence: Path) -> None:
+    licence.write_text("{not json", encoding="utf-8")
 
     refusal = headless._licence_refusal()
     assert "could not be used" in refusal
-    assert "signature does not verify" in refusal
+    assert "activate the key again" in refusal
 
 
-def test_a_valid_file_inside_its_window_passes(licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    _write(licence["path"], licence["private"], window_end="2099-01-01")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
+def test_an_activated_key_inside_its_window_passes(licence: Path) -> None:
+    _write_licence(licence)
     assert headless._licence_refusal() == ""
 
 
 def test_a_build_past_the_window_refuses_and_names_the_version_that_works(
-    licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    licence: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The refusal names a version, like the upgrade path does (t-1470)."""
-    _write(licence["path"], licence["private"], window_end="2026-06-01")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
+    _write_licence(licence, created_at="2025-01-01T00:00:00+00:00")
     entitlement.record_running_version("1.4.2")
 
     refusal = headless._licence_refusal()
-    assert "after your update window ended on 2026-06-01" in refusal
+    assert "update window ended on 2026-01-01" in refusal
     assert "Version 1.4.2 keeps working" in refusal
 
 
-def test_unset_or_zero_never_refuses(licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_gate_makes_no_network_call(licence: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A paid CI runner that has activated once must not need the relay to run."""
+    _write_licence(licence)
+
+    def _explode(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the enforcement gate must read the cache only")
+
+    monkeypatch.setattr(keys.urllib.request, "urlopen", _explode)
+    assert headless._licence_refusal() == ""
+
+
+def test_unset_or_zero_never_refuses(licence: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The setting decides; without it, nothing refuses - even with no licence."""
     monkeypatch.delenv("AITEST_ENFORCE_LICENSING", raising=False)
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
     # The reported state is still honest...
     assert headless._license_usage_section()["license"]["status"] == "unlicensed"
     assert headless._license_usage_section()["license"]["licence_valid"] is False
-    # ...and the gate is only consulted when the setting is on.
-    assert os.environ.get("AITEST_ENFORCE_LICENSING", "0") != "1"
 
 
-def test_the_json_field_is_named_for_what_it_means(licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_json_field_is_named_for_what_it_means(licence: Path) -> None:
     """'token_present' meant "valid"; the field is now licence_valid."""
-    _write(licence["path"], licence["private"], window_end="2099-01-01")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
+    _write_licence(licence)
     section = headless._license_usage_section()["license"]
     assert "token_present" not in section
     assert section["licence_valid"] is True
 
 
-def test_a_past_window_still_checks_out_with_the_recorded_version(
-    licence: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_past_window_still_checks_out_with_the_recorded_version(licence: Path) -> None:
     """No record on the machine: the message keeps its generic wording."""
-    _write(licence["path"], licence["private"], window_end="2026-06-01")
-    monkeypatch.setenv("AITEST_LICENCE_FILE", str(licence["path"]))
+    _write_licence(licence, created_at="2025-01-01T00:00:00+00:00")
     refusal = headless._licence_refusal()
     assert "after your update window ended" in refusal
     assert "keeps working" in refusal

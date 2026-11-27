@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TanCat launch checklist (owner)</title>
+<style>
+  :root { --ink:#111827; --muted:#4b5563; --line:#e5e7eb; --bg:#f9fafb; --card:#ffffff; --accent:#b45309; --good:#047857; --warn:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:36px 20px 72px; background:var(--bg); color:var(--ink);
+         font:16px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing:-0.3px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 19px; margin: 34px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  p, li { color: var(--ink); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
+  .warn { border-color: #fca5a5; background: #fef2f2; }
+  .good { border-color: #a7f3d0; background: #ecfdf5; }
+  .note { border-color: #fcd34d; background: #fffbeb; }
+  code, pre { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  code { background:#f3f4f6; padding:1px 5px; border-radius:4px; }
+  pre { background:#111827; color:#e5e7eb; padding:12px 14px; border-radius:8px; overflow-x:auto; }
+  ul.check { list-style: none; padding-left: 0; }
+  ul.check li { margin: 4px 0; }
+  input[type=checkbox] { margin-right: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px 6px; vertical-align: top; }
+  .footer { margin-top: 40px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>TanCat launch checklist</h1>
+<p class="sub">Owner: Cat Tan Operations Ltd (company number 17576111). Free + Pro only. Pro is <strong>$499 per deployment</strong>, one-off, with a <strong>$125 a year</strong> renewal for optional later updates that nobody is charged automatically. The store account is in review and <strong>not approved</strong>: nothing here names it, and no buyer page does either.</p>
+
+<div class="box note">
+  <strong>The design, in four lines.</strong> The store issues a licence key with the order. The buyer activates it once, through our relay. It is checked again only when they install a new version. In between, the product reads the key stored on the machine and works offline - so a key the store disables is noticed at the next update, not before.
+</div>
+
+<h2>What must be true before the first sale</h2>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> The store is approved, and its name is set in <code>src/licensing/merchant.py</code> (one constant). Until then every page says "our merchant of record".</li>
+    <li><input type="checkbox"/> The product sells as one one-off at <strong>$499</strong> in <strong>USD</strong> - not a subscription, and with no automatic renewal item.</li>
+    <li><input type="checkbox"/> The product has a <strong>licence-key feature</strong>: one key per purchase, activation limit 1, no expiry.</li>
+    <li><input type="checkbox"/> The relay is deployed (<code>services/licence-relay</code>), its merchant API key is a secret, and <code>POST /activate</code> answers for a real test key.</li>
+    <li><input type="checkbox"/> The buyer learns where the key is: confirmation page, receipt and customer portal.</li>
+    <li><input type="checkbox"/> Every price on every surface matches <code>src/licensing/pricing.py</code> (parity check below).</li>
+    <li><input type="checkbox"/> A test purchase has been made, activated, checked, released and refunded.</li>
+    <li><input type="checkbox"/> The landing page's <code>checkoutUrl</code> is set and <strong>Buy Pro</strong> opens the live checkout.</li>
+    <li><input type="checkbox"/> Terms, privacy and DPA are live and name no provider.</li>
+  </ul>
+</div>
+
+<h2>The checklist</h2>
+
+<h3>1. Store and product</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> Store created in the right country and currency: <strong>USD</strong>. The price is set in US dollars; any other currency makes the page wrong.</li>
+    <li><input type="checkbox"/> Store activated: identity, business/tax details, payout account.</li>
+    <li><input type="checkbox"/> Product <code>TanCat Pro Deployment</code>, one-off, <strong>$499</strong>, no renewal item.</li>
+    <li><input type="checkbox"/> Licence-key feature on: activation limit <strong>1</strong>, no expiry. The feature's id is what the relay returns as <code>activation_limit</code>.</li>
+    <li><input type="checkbox"/> Feature list pasted: unlimited runs and evidence exports, POM mode, CI/CD Action, email support and setup help (two working days), perpetual licence with 12 months of updates, one deployment. Add nothing that is not in <code>src/licensing/tiers.py</code>.</li>
+  </ul>
+</div>
+
+<h3>2. Relay</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> <code>cd services/licence-relay &amp;&amp; npx wrangler login</code></li>
+    <li><input type="checkbox"/> <code>npx wrangler secret put API_KEY</code> - the merchant API key, pasted, never committed.</li>
+    <li><input type="checkbox"/> <code>API_BASE</code> in <code>wrangler.toml</code> set to the store's API base for this environment (test or live). The shipped placeholder fails closed on purpose.</li>
+    <li><input type="checkbox"/> <code>npx wrangler deploy</code>, then the three calls in the relay README answer: activate, validate, deactivate.</li>
+    <li><input type="checkbox"/> The product points at it: <code>AITEST_LICENCE_RELAY_URL</code> set, or the custom route matches the default in <code>src/licensing/activation.py</code>.</li>
+  </ul>
+</div>
+
+<h3>3. Price parity</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> <code>pytest tests/test_landing_price.py -q</code> green: the pages carry <code>$0</code>, <code>$499</code> and <code>$125</code>, and no pound sign.</li>
+    <li><input type="checkbox"/> <code>python scripts/maintenance/make_landing_assets.py</code> then <code>landing_assets_guard.py --check</code> - the price is inside the preview images.</li>
+    <li><input type="checkbox"/> Read the card, the install page, the terms row and <code>docs/user/reference/licensing.md</code>: all say <strong>$499</strong> and <strong>$125 a year</strong>.</li>
+    <li><input type="checkbox"/> Read the order PDF (<code>landing/tancat-pro-install-and-licence.pdf</code>): it is the licence document and carries <strong>no price at all</strong> - check that it neither states nor implies one, and that it still names <code>tancat licence activate</code>.</li>
+  </ul>
+</div>
+
+<h3>4. The buyer's path, end to end</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> Set <code>checkoutUrl</code> in <code>landing/index.html</code>; <strong>Buy Pro</strong> opens the checkout in a new tab. An empty value falls back to the contact section, so a half-finished launch cannot take money.</li>
+    <li><input type="checkbox"/> Test purchase: the order completes and the key appears on the confirmation page and in the receipt.</li>
+    <li><input type="checkbox"/> Activate: <code>tancat licence activate &lt;KEY&gt;</code> succeeds, and <code>tancat licence status</code> reports the instance, the activation date and the window end.</li>
+    <li><input type="checkbox"/> The window is 12 months from the <strong>key's creation date</strong>, not from the install date. Check the date in the status output.</li>
+    <li><input type="checkbox"/> Offline: after activation, disconnect the network and start the product. It runs on the paid tier, because it reads the stored licence.</li>
+    <li><input type="checkbox"/> Update: <code>tancat update</code> checks the key once. With the network down it proceeds and says the check could not be made.</li>
+    <li><input type="checkbox"/> Release: <code>tancat licence release</code> frees the instance; re-activating the same key then works.</li>
+    <li><input type="checkbox"/> Refund the test order and delete it.</li>
+  </ul>
+</div>
+
+<h3>5. Go live</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> Test mode off; buy one for real, activate, then refund.</li>
+    <li><input type="checkbox"/> <a href="https://tancat.dev/#pricing">tancat.dev/#pricing</a> shows <strong>$499</strong> and <strong>$125 a year</strong>.</li>
+    <li><input type="checkbox"/> The install page names <code>tancat licence activate</code>, <code>tancat licence status</code> and <code>AITEST_LICENCE_FILE</code>, and no dead route.</li>
+    <li><input type="checkbox"/> Terms, privacy and DPA say "our merchant of record" and name no provider.</li>
+    <li><input type="checkbox"/> <code>python scripts/audit_egress.py</code> reports the relay as OUR-SERVICE and nothing flagged.</li>
+  </ul>
+</div>
+
+<h3>6. After the first sale</h3>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> Keep the merchant API key backed up and rotate it in the store, then update the relay secret. A rotation needs no product release.</li>
+    <li><input type="checkbox"/> Keep the order &rarr; key ledger (the store's portal shows it); diarise window ends so an update can be offered.</li>
+    <li><input type="checkbox"/> Run the licence and price batches after any change: <code>pytest tests/test_licence_key_activation.py tests/test_licensing_outbound_wording.py tests/test_landing_price.py -q</code>.</li>
+  </ul>
+</div>
+
+<h2>Definition of done</h2>
+<div class="box good">
+  A stranger can click <strong>Buy Pro</strong>, pay <strong>$499</strong>, receive a licence key, activate it once, and see <code>tancat licence status</code> report the key and its window - then run the product with the network off. No provider is named on any page they read, and no server of ours holds anything but the merchant key.
+</div>
+
+<div class="footer">
+  Related: <a href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md">Licence operations</a> &middot;
+  <a href="https://github.com/tancat-ai/tancat/blob/main/services/licence-relay/README.md">Relay README</a> &middot;
+  <a href="https://github.com/tancat-ai/tancat/blob/main/src/licensing/pricing.py">pricing.py</a>
+</div>
+
+</div>
+</body>
+</html>

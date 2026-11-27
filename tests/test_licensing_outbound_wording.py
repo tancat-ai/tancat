@@ -1,10 +1,14 @@
-"""j-0304 / j-0306: the site must state the two calls it makes, and no other.
+"""The buyer copy must state the licensing moments, and no other (2026-11-26).
 
-TanCat makes two kinds of outbound call: one activation request, and a version
-check at most once a day that can be switched off. These tests hold every buyer
-document - pages, the PDF source, the order PDF itself and the user docs - to that
-truth, and fail on any document that claims there is no outbound call at all or
-leaves the version check out.
+A licence is a key from the store: activated **once** when it is entered, checked
+**again** when a new version is installed, and read from this machine's cache at
+every other moment. The product also makes a version check at most once a day that
+can be switched off.
+
+These tests hold every buyer document - pages, the PDF source, the order PDF itself
+and the user docs - to that truth, and fail on any document that claims licensing
+never calls out, that leaves the update check out, or that describes the deleted
+signed-file mechanism.
 """
 
 from __future__ import annotations
@@ -60,6 +64,9 @@ BENIGN = (
     "settings turns it off",
     "turn the update check off",
     "if you leave the update check on",
+    # The accepted trade: the licence is checked at the next update, and the copy
+    # says "not before" to mean "not sooner" - not that checking never happens.
+    "next update, not before",
 )
 
 #: How far either side of the check phrase a cue counts. A short window, not the
@@ -119,12 +126,14 @@ def _user_docs() -> list[Path]:
     return sorted(DOCS.rglob("*.md"))
 
 
-def test_the_activation_path_is_gone() -> None:
-    """j-0309: licensing is offline, so no page may claim an activation call."""
-    assert not (REPO_ROOT / "src" / "licensing" / "activation.py").exists()
+def test_the_signed_file_mechanism_is_gone() -> None:
+    """2026-11-26: the key from the store replaced the file we signed."""
+    assert (REPO_ROOT / "src" / "licensing" / "activation.py").exists(), "the activation module is missing"
+    assert not (REPO_ROOT / "src" / "licensing" / "signed_file.py").exists(), "the signed-file module is still here"
+    assert not (REPO_ROOT / "scripts" / "maintenance" / "issue_licence.py").exists(), "the signer is still here"
     source = " ".join(p.read_text(encoding="utf-8", errors="replace") for p in (REPO_ROOT / "src").rglob("*.py"))
-    assert "api.lemonsqueezy.com" not in source.lower()
-    assert "licenses/activate" not in source.lower()
+    assert "VENDORED_PUBLIC_KEY" not in source, "a vendored trust root survived the deletion"
+    assert "ed25519" not in source.lower(), "signature code survived the deletion"
 
 
 def _pdf_text(path: Path) -> str:
@@ -200,13 +209,17 @@ def test_no_page_claims_no_outbound_traffic() -> None:
     assert offenders == {}, f"document(s) still claim no vendor traffic while activation calls out: {offenders}"
 
 
-def test_the_order_pdf_carries_the_one_call_truth() -> None:
+def test_the_order_pdf_carries_the_licensing_truth() -> None:
     """The PDF is regenerated from its source; the shipped text must say so too."""
     text = _pdf_text(ORDER_PDF)
-    assert "licensing service" not in text, "the shipped PDF still says there is a licensing call"
-    assert "one version check a day" in text, "the shipped PDF does not state the daily version check"
-    assert "verified offline" in text, "the shipped PDF does not say licensing is offline"
-    assert "installable Python packages" in text, "the shipped PDF describes update delivery the old way"
+    lowered = text.lower()
+    assert "activate your licence key" in lowered, "the shipped PDF does not tell the buyer to activate a key"
+    assert "only when you install a new version" in lowered, "the shipped PDF does not say when the check happens"
+    assert "works offline" in lowered, "the shipped PDF does not say it works offline between checks"
+    assert "not before" in lowered, "the shipped PDF does not state the accepted trade"
+    assert "one version check a day" in lowered, "the shipped PDF does not state the daily version check"
+    assert "signed" not in lowered, "the shipped PDF still describes the deleted signed file"
+    assert "installable python packages" in lowered, "the shipped PDF describes update delivery the old way"
 
 
 def test_each_document_names_the_one_automatic_call() -> None:
@@ -214,16 +227,17 @@ def test_each_document_names_the_one_automatic_call() -> None:
     assert missing == [], f"document(s) that do not mention the one automatic call: {missing}"
 
 
-def test_no_document_mentions_an_activation_call() -> None:
-    """The removed path must not survive in copy a buyer can read."""
-    offenders: dict[str, str] = {}
-    for name, text in _scanned_documents():
-        low = text.lower()
-        for stale in ("activation", "licensing service", "two kinds of call", "lemon squeezy"):
-            if stale in low:
-                offenders[name] = stale
-                break
-    assert offenders == {}, f"document(s) still describe the removed activation path: {offenders}"
+def test_every_licensing_document_names_the_key_flow() -> None:
+    """A document that discusses licensing says what a licence is, and when it is checked."""
+    offenders: dict[str, list[str]] = {}
+    for path in LICENSING_DOCUMENTS:
+        low = _flat(path).lower()
+        missing = [phrase for phrase in (KEY_PHRASE, "activate") if phrase not in low]
+        if "licence service" not in low and "offline" not in low:
+            missing.append("neither the service nor offline")
+        if missing:
+            offenders[str(path.relative_to(REPO_ROOT))] = missing
+    assert offenders == {}, f"document(s) that do not describe the key flow: {offenders}"
 
 
 def test_the_privacy_notice_names_the_one_automatic_call() -> None:
@@ -237,35 +251,40 @@ def test_the_privacy_notice_names_the_one_automatic_call() -> None:
 def test_the_install_footer_says_paid_once() -> None:
     page = _flat(LANDING / "install.html")
     assert "paid once" in page
-    assert "£399 per deployment, one price" not in page.replace("&pound;", "£")
+    # t-1495: the price is the one in src/licensing/pricing.py, and this footer must
+    # not add a second claim beside it ("one price" style offers live on the card).
+    assert "one price" not in page.lower()
 
 
-def test_the_terms_say_one_automatic_call_and_that_licensing_is_offline() -> None:
+def test_the_terms_state_the_two_moments_and_the_version_check() -> None:
     page = _flat(LANDING / "terms.html")
-    assert "exactly one automatic call" in page
-    assert "version check at most once a day" in page
-    assert "licensing never touches the network" in page.lower()
-    assert "two kinds of outbound call" not in page
+    low = page.lower()
+    assert "activate it once" in low, "the terms do not say the key is activated once"
+    assert "only when you install a new version" in low, "the terms do not say when the check happens"
+    assert "version check at most once a day" in low, "the terms dropped the daily version check"
+    assert "licensing never touches the network" not in low, "the terms still claim licensing never calls out"
+    assert "next update, not before" in low, "the terms do not state the accepted trade"
 
 
 # ---------------------------------------------------------------------------
 # t-1466: the dead key flow, as a CLASS of words, and every provider name
 # ---------------------------------------------------------------------------
 
-#: Words and variables that belong to the removed store-key path. A buyer document
-#: may contain none of them - not even in a negation, because the reader sees the
-#: noun and assumes it is a step.
+#: Words that belong to the deleted signed-file mechanism. A buyer document may
+#: contain none of them: they describe a route the product no longer has.
 DEAD_KEY_WORDS = (
-    "activate",
-    "activation",
-    "licence key",
-    "license key",
+    "signed licence",
+    "signed file",
+    "licence.signed.json",
+    "public key",
+    "ed25519",
     "AITEST_LICENSE_KEY",
     "AITEST_LICENSE_FILE",
+    "issue_licence",
 )
 
 #: The truth every buyer document must state instead.
-SIGNED_FILE_PHRASE = "signed licence"
+KEY_PHRASE = "licence key"
 
 
 def _buyer_documents() -> list[tuple[str, str]]:
@@ -273,14 +292,14 @@ def _buyer_documents() -> list[tuple[str, str]]:
     return _scanned_documents()
 
 
-def test_no_buyer_document_teaches_the_dead_key_flow() -> None:
+def test_no_buyer_document_teaches_the_deleted_signed_file_flow() -> None:
     offenders: dict[str, list[str]] = {}
     for name, text in _buyer_documents():
         low = text.lower()
         found = [word for word in DEAD_KEY_WORDS if word.lower() in low]
         if found:
             offenders[name] = found
-    assert offenders == {}, f"document(s) still teach the removed key flow: {offenders}"
+    assert offenders == {}, f"document(s) still teach the deleted signed-file flow: {offenders}"
 
 
 #: The documents that discuss licensing, and so must describe the real flow.
@@ -295,15 +314,17 @@ LICENSING_DOCUMENTS = (
 )
 
 
-def test_every_licensing_document_states_the_signed_file() -> None:
+def test_every_licensing_document_states_the_key() -> None:
     """A page that talks about the licence must say what a licence is."""
-    missing = [str(path.relative_to(REPO_ROOT)) for path in LICENSING_DOCUMENTS if "signed" not in _flat(path).lower()]
-    assert missing == [], f"document(s) that do not mention the signed licence file: {missing}"
-    assert "signed" in _pdf_text(ORDER_PDF).lower(), "the shipped PDF does not say the licence is signed"
+    missing = [
+        str(path.relative_to(REPO_ROOT)) for path in LICENSING_DOCUMENTS if KEY_PHRASE not in _flat(path).lower()
+    ]
+    assert missing == [], f"document(s) that do not mention the licence key: {missing}"
+    assert KEY_PHRASE in _pdf_text(ORDER_PDF).lower(), "the shipped PDF does not say the licence is a key"
 
 
-def test_a_planted_key_instruction_is_caught() -> None:
-    """Prove the rule on the real document: plant the old sentence, watch it fail.
+def test_a_planted_signed_file_sentence_is_caught() -> None:
+    """Prove the rule on the real document: plant the deleted mechanism, watch it fail.
 
     The PDF source is the one a buyer follows step by step, so it is where a stale
     instruction does the most damage.
@@ -313,15 +334,15 @@ def test_a_planted_key_instruction_is_caught() -> None:
     try:
         target.write_text(
             original.replace(
-                "&mdash; nothing is switched on, and no call is made to us or",
-                "by pasting your licence key &mdash; nothing is switched on, and no call is made to us or",
+                "Your licence is a <strong>key issued with your order</strong>.",
+                "Your licence arrives as a <strong>signed licence file</strong>.",
                 1,
             ),
             encoding="utf-8",
         )
         found = [word for word in DEAD_KEY_WORDS if word.lower() in _flat(target).lower()]
         assert found, "the plant did not land - the test would pass vacuously"
-        assert "licence key" in found
+        assert "signed licence" in found
     finally:
         target.write_text(original, encoding="utf-8")
 

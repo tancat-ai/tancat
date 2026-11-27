@@ -1,0 +1,62 @@
+{
+  "recorded": "2026-11-26",
+  "source": "the live test API, by the owner, while testing the deployed relay",
+  "note": "These are the bodies the store actually returned. They are not what its reference page implies: a spent activation limit answers 400, not 403, and an already-released instance answers 400, not 409. The store misspells 'instance' in the deactivation message; that spelling is kept verbatim here on purpose.",
+  "cases": [
+    {
+      "what": "the single activation is already used",
+      "operation": "activate",
+      "status": 400,
+      "body": {
+        "status": 400,
+        "error": "Bad Request",
+        "message": "Activation limit reached"
+      },
+      "expect": "activation_limit"
+    },
+    {
+      "what": "the instance was already released",
+      "operation": "deactivate",
+      "status": 400,
+      "body": {
+        "status": 400,
+        "error": "Bad Request",
+        "message": "License key instnace is already deactivated"
+      },
+      "expect": "already_released"
+    },
+    {
+      "what": "the key does not exist (reference shape)",
+      "operation": "activate",
+      "status": 404,
+      "body": {
+        "status": 404,
+        "error": "Not Found",
+        "message": "License key not found"
+      },
+      "expect": "not_recognised"
+    },
+    {
+      "what": "the key was revoked or has expired (reference shape)",
+      "operation": "validate",
+      "status": 410,
+      "body": {
+        "status": 410,
+        "error": "Gone",
+        "message": "License key is expired"
+      },
+      "expect": "revoked_or_expired"
+    },
+    {
+      "what": "a failure we cannot classify",
+      "operation": "activate",
+      "status": 500,
+      "body": {
+        "status": 500,
+        "error": "Internal Server Error",
+        "message": "Something went wrong"
+      },
+      "expect": "upstream_error"
+    }
+  ]
+}

@@ -53,6 +53,10 @@ class _FakeSidebar:
         self.calls.append(("text_area", args[0] if args else ""))
         return self._token
 
+    def text_input(self, *args: Any, **kwargs: Any) -> str:  # noqa: ARG002
+        self.calls.append(("text_input", args[0] if args else ""))
+        return self._token
+
     def form_submit_button(self, *args: Any, **kwargs: Any) -> bool:  # noqa: ARG002
         self.calls.append(("form_submit_button", args[0] if args else ""))
         return self._submitted
@@ -79,6 +83,14 @@ class _FakeSt:
 
     def warning(self, text: str) -> None:
         self.sidebar.calls.append(("warning", text))
+
+    def text_input(self, *args: Any, **kwargs: Any) -> str:  # noqa: ARG002
+        self.sidebar.calls.append(("text_input", args[0] if args else ""))
+        return str(kwargs.get("value", "") or "")
+
+    def form_submit_button(self, *args: Any, **kwargs: Any) -> bool:  # noqa: ARG002
+        self.sidebar.calls.append(("form_submit_button", args[0] if args else ""))
+        return False
 
 
 def _seeded_store(path: Path) -> FlowMemoryStore:
@@ -127,8 +139,8 @@ def test_render_flow_memory_degrades_when_empty(monkeypatch: Any, tmp_path: Path
 # ---------------------------------------------------------------------------
 
 
-def test_the_licence_panel_shows_the_path_and_the_command(monkeypatch: Any) -> None:
-    """There is nothing to paste: the panel names the file and the check command."""
+def test_the_licence_panel_offers_activation_once(monkeypatch: Any) -> None:
+    """No licence: one field, one button, and the sentence that says it is once."""
     from src.licensing.license import LicenseResult, LicenseStatus
 
     fake = _FakeSt()
@@ -137,22 +149,26 @@ def test_the_licence_panel_shows_the_path_and_the_command(monkeypatch: Any) -> N
     SidebarConfig._render_license_entry(LicenseResult(LicenseStatus.UNLICENSED))
 
     captions = [t for kind, t in fake.sidebar.calls if kind == "caption"]
-    assert any("licence.signed.json" in c for c in captions)
-    assert any("tancat licence status" in c for c in captions)
-    assert not [c for c in fake.sidebar.calls if c[0] in ("button", "form", "text_area")], "no paste flow may remain"
+    assert any("Activate it once" in c for c in captions), captions
+    assert ("text_input", "Licence key") in fake.sidebar.calls
+    assert ("form_submit_button", "Activate") in fake.sidebar.calls
 
 
 def test_the_licence_panel_is_quiet_when_a_licence_is_valid(monkeypatch: Any) -> None:
+    """Valid: state what is stored and when it is checked again. No form."""
     from src.licensing.license import LicenseResult, LicenseStatus
 
     fake = _FakeSt()
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
 
-    SidebarConfig._render_license_entry(LicenseResult(LicenseStatus.VALID, tier="pro", licence_id="TC-1"))
+    SidebarConfig._render_license_entry(LicenseResult(LicenseStatus.VALID, tier="pro", licence_id="00000-...-00000"))
 
     captions = [t for kind, t in fake.sidebar.calls if kind == "caption"]
-    assert any("Licence file" in c for c in captions)
-    assert not any("tancat licence status" in c for c in captions), "a valid licence needs no instruction"
+    assert any("activated on this machine" in c for c in captions), captions
+    assert any("Checked again when you update" in c for c in captions), captions
+    assert not [c for c in fake.sidebar.calls if c[0] in ("form", "text_input", "form_submit_button")], (
+        "a licence already in force must not ask for the key again"
+    )
 
 
 # ---------------------------------------------------------------------------

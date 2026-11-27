@@ -170,3 +170,6 @@ ai-test-workspace/
 # screenshots under docs/user/assets/ are tracked despite the global *.png rule.
 site/
 !docs/user/assets/*.png
+
+# Wrangler deploy cache (t-1505: a live test left services/licence-relay/.wrangler/)
+services/licence-relay/.wrangler/

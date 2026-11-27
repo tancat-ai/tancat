@@ -1,6 +1,6 @@
 ---
 purpose: >
-  Per-deployment tier configuration (Phase 6e, spec §5.5): one data-driven table mapping a tier
+  Per-deployment tier configuration: one data-driven table mapping a tier
   key (free / self-serve / pro / airgap) to its label, additive feature claims, and usage
   limits. The feature toggles the tier gates are enforcement points that already exist in the
   code (POM flag, Jira export, self-heal, RAG) — this table is the entitlement side.
@@ -59,5 +59,6 @@ contain the feature — the "requires X tier" message source.
 ### Internal utilities
 - `_tiers()` — the hardcoded default table the override layer merges with.
 
-A licence naming an unknown tier is **refused** by `signed_file.py` rather than
-demoted; the retired keys stay in the table so an older signed licence still reports its claims.
+A licence naming an unknown tier is **refused** at activation rather than demoted;
+the retired keys stay in the table so an already-activated licence that carries one
+still reports its own claims (`tests/test_tier_retirement.py`).

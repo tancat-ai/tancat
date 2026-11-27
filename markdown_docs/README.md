@@ -93,8 +93,10 @@ Test packages produced by the tool. Each package contains:
 
 | Module | Role |
 |--------|------|
-| `src/licensing/license.py` | Offline ed25519 license sign/verify, 7-day grace, vendored public key, `feature_enabled` |
-| `src/licensing/tiers.py` | Data-driven free/self-serve/pro/airgap tier table (claims + limits, env-overridable) |
+| `src/licensing/license.py` | The licence gate: an activated key in the cache, its tier, `feature_enabled` |
+| `src/licensing/activation.py` | Activate / validate / release a licence key through our relay; the cache in between |
+| `src/licensing/entitlement.py` | The stored licence, the update window, and the two gates built on them |
+| `src/licensing/tiers.py` | Data-driven free/pro tier table (claims + limits, env-overridable; retired keys resolvable) |
 | `src/usage_meter.py` | 30-day runs/exports meter on run_results.sqlite + ledger; free-tier cap + upgrade prompt |
 | `src/llm_health.py` | BYO-LLM first-run health probe (reachability → key → model → capability) |
 | `src/llm_cache.py` | Disk TTL cache for expensive deterministic LLM calls (resolution ranking) |

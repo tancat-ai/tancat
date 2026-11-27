@@ -112,10 +112,12 @@ the version you hold are free. Updates are released as installable Python packag
 [releases page](https://github.com/tancat-ai/tancat/releases), and you upgrade the
 way you upgrade any Python tool. You choose when to install one.
 
-TanCat makes **exactly one automatic call, and no others** - a version check at most once a day if
-you leave it on (nothing about you is sent; settings turns it off). Licensing never touches the
-network: your signed licence file is verified offline. No automatic upgrade - you choose when to install
-one.
+TanCat calls our licence service at two moments only: when you activate your licence key, and when
+you install a new version. Between those it works offline. It also makes a version check at most once
+a day if you leave it on (nothing about you is sent; settings turns it off). No automatic upgrade -
+you choose when to install one.
+
+To activate a key, see [Activate your licence key](../reference/licensing.md#activate-your-licence-key).
 
 From a source checkout:
 

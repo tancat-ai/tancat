@@ -1,9 +1,18 @@
 # Egress Audit — "no data leaves your deployment"
 
 **Claim under audit:** the product's **runtime** makes outbound HTTP calls only to
-(i) the **customer's own LLM endpoint** (BYO-LLM, decision D1) and (ii) the
-**customer's own target site** being scraped (which is itself SSRF-guarded).
-No telemetry, no update checks, no PyPI/uv calls, no third-party beacons.
+(i) the **customer's own LLM endpoint** (BYO-LLM, decision D1), (ii) the
+**customer's own target site** being scraped (itself SSRF-guarded), (iii) **our
+licence relay** - once when a key is activated and once when a new version is
+installed, never in between (section 3, OUR-SERVICE), and (iv) **one PyPI version
+check a day** if the update check is left on, which can be switched off and carries
+nothing about the customer (`src/version_check.py`). No telemetry and no
+third-party beacons.
+
+The table in section 3 lists every call site the gate can see, and that **includes**
+the version check (`src/version_check.py`): it is a hand-built `urllib` request, which
+the gate matches like any other primitive. The relay rows are the only call sites
+marked OUR-SERVICE.
 
 **Caveat - model weights (see section 6).** Two optional components fetch model
 weights from Hugging Face on first use: the RAG embedder, and the optional GPU
@@ -13,7 +22,7 @@ the default OCR path (RapidOCR/PP-OCRv6 on the PyTorch engine) is offline - its
 models are vendored in `src/data/ocr/` and pinned by SHA256, so it never
 downloads anything.
 
-**Verified:** 2026-08-17 · **Gate:** `python scripts/audit_egress.py` — wired into
+**Verified:** 2026-11-26 · **Gate:** `python scripts/audit_egress.py` — wired into
 `scripts/smoke.py` (Gate 0) and CI; **fails** if an unrecognised outbound call
 site is added to the product runtime.
 
@@ -42,30 +51,46 @@ guarded separately by `src/url_guard.py`).
 
 Classification: a call site is **USER-CONFIGURED** when its statement references a
 user-configurable or target-derived address (any `*_url` identifier, `endpoint`,
-`base_url`, `candidate`, `probe_url`, env reads, `localhost` literals). Anything
-else is **FLAGGED** and fails the gate.
+`base_url`, `candidate`, `probe_url`, env reads, `localhost` literals);
+**OUR-SERVICE** when it is the one named file/address pair in `OUR_SERVICE_SITES` (the
+licence relay); anything else is **FLAGGED** and fails the gate.
 
-## 3. Verified call sites (2026-08-17 run — 143 files, 13 sites, 0 flagged)
+## 3. Verified call sites (2026-11-26 run — 175 files, 19 sites, 0 flagged)
 
-| File | Line | Call | Target provenance | Classification |
-|------|------|------|-------------------|----------------|
-| `src/cli/menu_renderer.py` | 300 | `httpx.get(f"{provider_url}/api/tags")` | **User-configured provider URL** (LLM model listing in the CLI) | USER-CONFIGURED |
-| `src/cli/menu_renderer.py` | 304 | `httpx.get(f"{provider_url}/v1/models")` | same | USER-CONFIGURED |
-| `src/cli/menu_renderer.py` | 308 | `httpx.get(f"{provider_url}/v1/models")` | same | USER-CONFIGURED |
-| `src/journey_scraper.py` | 483 | `httpx.head(candidate)` | Journey-inferred URL — same host as the **SSRF-guarded** base URL; guarded again by `UrlGuard` before probing | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 127 | `httpx.Client(base_url=self._base_url)` | **User-configured LLM endpoint** | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 193 | `httpx.Client(base_url=f"{self._base_url}/v1")` | same | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 266 | `httpx.Client(base_url=f"{self._base_url}/v1")` | same | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 327 | `httpx.Client(base_url=self._base_url)` | same | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 342 | `httpx.get(f"{candidate}/models")` | Provider auto-detect candidates (localhost defaults / user-config) | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 432 | `httpx.Client(base_url=self._base_url)` | **User-configured LLM endpoint** | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 481 | `httpx.get(probe_url)` | Auto-detect probe (localhost defaults) | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 490 | `httpx.get(lm_url)` | Auto-detect probe (localhost defaults) | USER-CONFIGURED |
-| `src/llm_providers/__init__.py` | 499 | `httpx.get(ollama_url)` | Auto-detect probe (localhost defaults) | USER-CONFIGURED |
+Run: `python scripts/audit_egress.py` at the licence-key change (2026-11-26). The line
+numbers below are the ones the run printed; re-run the gate rather than editing them.
 
-All 13 call sites target the customer's own LLM endpoint (provider/base URL from
-config or env) or the customer's own target site. **No hardcoded third-party
-hosts, no telemetry, no update checks.**
+| File | Line | Call | Classification |
+|------|------|------|----------------|
+| `src/cli/menu_renderer.py` | 358 | `response = httpx.get(f"{provider_url}/api/tags", timeout=LOCAL_MODE...` | USER-CONFIGURED |
+| `src/cli/menu_renderer.py` | 362 | `response = httpx.get(f"{provider_url}/v1/models", timeout=LOCAL_MOD...` | USER-CONFIGURED |
+| `src/cli/menu_renderer.py` | 366 | `response = httpx.get(f"{provider_url}/v1/models", timeout=LOCAL_MOD...` | USER-CONFIGURED |
+| `src/cli/menu_renderer.py` | 394 | `response = httpx.get(f"{provider_url.rstrip('/')}/models", timeout=...` | USER-CONFIGURED |
+| `src/licensing/activation.py` | 350 | `request = urllib.request.Request( # The relay address, in the state...` | OUR-SERVICE |
+| `src/licensing/activation.py` | 364 | `with urllib.request.urlopen(request, timeout=timeout) as response: ...` | OUR-SERVICE |
+| `src/llm_providers/__init__.py` | 143 | `self._client = httpx.Client( base_url=self._base_url, timeout=timeo...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 212 | `self._client = httpx.Client(base_url=f"{self._base_url}/v1", timeou...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 292 | `with httpx.Client(base_url=f"{self._base_url}/v1", timeout=timeout)...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 353 | `self._client = httpx.Client( base_url=self._base_url, timeout=300, ...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 370 | `resp = httpx.get(f"{candidate}/models", timeout=timeout)` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 470 | `with httpx.Client( base_url=self._base_url, timeout=timeout, header...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 536 | `self._client = httpx.Client( base_url=self._base_url, timeout=300, ...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 612 | `with httpx.Client( base_url=self._base_url, timeout=timeout, header...` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 659 | `resp = httpx.get(probe_url, timeout=1.0)` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 668 | `resp = httpx.get(lm_url, timeout=1.0)` | USER-CONFIGURED |
+| `src/llm_providers/__init__.py` | 677 | `resp = httpx.get(ollama_url, timeout=1.0)` | USER-CONFIGURED |
+| `src/version_check.py` | 225 | `request = urllib.request.Request(url, headers={"Accept": "applicati...` | USER-CONFIGURED |
+| `src/version_check.py` | 226 | `with urllib.request.urlopen(request, timeout=timeout) as response: ...` | USER-CONFIGURED |
+
+2 of these are **OUR-SERVICE**: the licence relay, reached when a buyer activates
+a key and again when they install a new version. That file is named in
+`OUR_SERVICE_SITES` in the audit, with its reason; a call from the same file to any
+other address is still FLAGGED. The rest target the customer's own LLM endpoint
+(provider/base URL from config or env) or the customer's own target site.
+
+**The version check is in this table** (the `src/version_check.py` rows above): it is
+a hand-built `urllib` request, and the gate sees it like any other. It runs at most
+once a day, can be switched off in settings, and carries nothing about the customer.
 
 ## 4. The other half: inbound (what the scraper may *reach*)
 

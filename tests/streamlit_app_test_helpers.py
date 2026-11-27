@@ -80,8 +80,19 @@ def expected_selectbox_labels(*, with_models: bool = False) -> set[str]:
 
 
 def expected_text_input_labels(*, with_models: bool = False) -> set[str]:
-    """The exact sidebar text_input label set for this build."""
-    return {"Provider Base URL", "Model Name" if with_models else "Model", "Project", "Starting URL"}
+    """The exact sidebar text_input label set for this build.
+
+    ``Licence key`` is the activation field (2026-11-26). It renders whenever no
+    licence is stored on this machine, and ``build_sidebar_app`` forces that state so
+    the inventory is build-shaped rather than machine-shaped.
+    """
+    return {
+        "Provider Base URL",
+        "Model Name" if with_models else "Model",
+        "Project",
+        "Starting URL",
+        "Licence key",
+    }
 
 
 def build_sidebar_app(models: list[str] | None = None) -> AppTest:
@@ -111,6 +122,10 @@ def build_sidebar_app(models: list[str] | None = None) -> AppTest:
         # Never read or write this machine's saved settings.
         patch("src.settings_store._load_settings", return_value={}),
         patch("src.settings_store._save_settings"),
+        # The licence panel renders an activation form only when nothing is stored.
+        # This machine may hold one, so force "none": the inventory must describe the
+        # build, not the developer's disk (same reason as the settings patch above).
+        patch("src.licensing.activation.load", return_value=(None, None, "")),
         # Saved-package widgets depend on generated_tests/ contents, not layout.
         patch("src.pipeline_artifact_manager.find_existing_packages", return_value=[]),
         # The RAG/flow "Prune learned ..." buttons render only when THIS machine's

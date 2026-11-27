@@ -7,7 +7,7 @@
     "cli/"
   ],
   "date": "2026-10-02",
-  "total": 171,
+  "total": 176,
   "completed": 171,
   "pending": 0,
   "refreshed": 111,
@@ -1389,6 +1389,46 @@
       "symbols_added": 7,
       "helpers_added": 1,
       "parse": "ast"
+    },
+    {
+      "source": "src/licensing/activation.py",
+      "doc": "markdown_docs/src/licensing/activation.py.md",
+      "status": "completed",
+      "symbols_added": 0,
+      "helpers_added": 0,
+      "parse": "ast-sanitized"
+    },
+    {
+      "source": "src/licensing/entitlement.py",
+      "doc": "markdown_docs/src/licensing/entitlement.py.md",
+      "status": "completed",
+      "symbols_added": 0,
+      "helpers_added": 0,
+      "parse": "ast-sanitized"
+    },
+    {
+      "source": "src/licensing/window.py",
+      "doc": "markdown_docs/src/licensing/window.py.md",
+      "status": "completed",
+      "symbols_added": 0,
+      "helpers_added": 0,
+      "parse": "ast-sanitized"
+    },
+    {
+      "source": "src/licensing/merchant.py",
+      "doc": "markdown_docs/src/licensing/merchant.py.md",
+      "status": "completed",
+      "symbols_added": 0,
+      "helpers_added": 0,
+      "parse": "ast-sanitized"
+    },
+    {
+      "source": "src/licensing/pricing.py",
+      "doc": "markdown_docs/src/licensing/pricing.py.md",
+      "status": "completed",
+      "symbols_added": 0,
+      "helpers_added": 0,
+      "parse": "ast-sanitized"
     }
   ],
   "not_yet_documented": [

@@ -1,0 +1,27 @@
+# TanCat licence relay - deploy with: npx wrangler deploy
+#
+# Secrets (never in this file, never in git):
+#   npx wrangler secret put API_KEY    # the store's merchant API key
+#
+# Vars below are public configuration, not secrets.
+
+name = "tancat-licence-relay"
+main = "src/index.js"
+compatibility_date = "2026-11-25"
+
+# The relay's public address. Put it in the product's AITEST_LICENCE_RELAY_URL only
+# if it differs from the default in src/licensing/activation.py.
+workers_dev = true
+
+[vars]
+# The store's API base. Test mode uses its test host; live mode its live host.
+# Kept here (not in the product) so switching environments is a relay deploy.
+# Deliberately not a real host: an unconfigured deploy fails closed (503, "could not
+# reach") instead of sending a live request. Set this before you deploy.
+API_BASE = "https://test-api.example.invalid"
+# The only browser origin allowed to call this Worker. The product is not a
+# browser, so this exists solely for the docs site's activation helper.
+ALLOWED_ORIGIN = "https://tancat.dev"
+
+[observability]
+enabled = true

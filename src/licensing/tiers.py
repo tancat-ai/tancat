@@ -13,7 +13,7 @@ pricing page. Enterprise and regulated buyers are still served, but as a
 The ``airgap`` (and legacy ``self-serve``) keys are **retired but still
 resolvable**: they stay in the table so a licence already signed against them
 keeps verifying with its own claims, instead of silently downgrading to free
-(a licence naming an unknown tier is refused outright by ``signed_file``, not demoted).
+(a licence naming an unknown tier is refused outright at activation, not demoted).
 They are unpublished: see :data:`RETIRED_TIERS` and :func:`published_tiers`.
 
 | Published tier | Claims (additive)                              | Limits                  |
@@ -77,9 +77,9 @@ FREE_TIER = "free"
 
 #: Tiers that are no longer published: not sold, no price, absent from the
 #: pricing page and the decision record. They REMAIN in the tier table so a
-#: licence already signed against them still verifies with its own claims
-#: (an unknown tier in a signed licence is refused, so deleting
-#: a key would silently downgrade a paying deployment).
+#: licence already activated against them still reports its own claims
+#: (an unknown tier at activation is refused, so deleting a key
+#: would silently downgrade a paying deployment).
 RETIRED_TIERS: frozenset[str] = frozenset({"self-serve", "airgap"})
 
 
@@ -108,7 +108,7 @@ def _tiers() -> dict[str, TierSpec]:
             "pro", "Pro", frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs", "support"})
         ),
         # Retired 2026-10-03 (owner): no longer a published tier. Kept resolvable
-        # so a licence already signed with this key still verifies with its own
+        # so a licence already activated with this key still reports its own
         # claims instead of silently downgrading to free.
         "airgap": TierSpec(
             "airgap",

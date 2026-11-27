@@ -149,15 +149,15 @@ def _license_usage_section() -> dict[str, Any]:
 
 
 def _licence_file_present() -> bool:
-    """True when a signed licence file is in force and verifies.
+    """True when an activated licence key is cached on this machine.
 
-    j-0309/t-1470: there is no token and no grace period. "Present" here means the
-    file exists, the signature verifies, the product matches and the tier is known.
+    One mechanism (2026-11-26): the key was activated once and stored; nothing here
+    re-checks it, because an enforcing run must not depend on the network.
     """
     try:
         from src.licensing.entitlement import resolve
 
-        return resolve().source == "signed"
+        return resolve().source == "activated"
     except Exception:  # pragma: no cover - defensive
         return False
 
@@ -165,16 +165,16 @@ def _licence_file_present() -> bool:
 def _licence_refusal() -> str:
     """Why an enforcing run may not proceed, or "" when the licence is good.
 
-    Three ways to fail, each with its own sentence: no file, a file that does not
-    verify (the reason comes from the verifier), or a build outside the update window.
+    Two ways to fail, each with its own sentence: no activated key on this machine,
+    or a build released after the update window.
     """
     from src.licensing.entitlement import resolve, startup_check
 
     state = resolve()
-    if state.source != "signed":
+    if state.source != "activated":
         if state.problem:
-            return f"the licence file could not be used - {state.problem}"
-        return "no signed licence file was found"
+            return f"the stored licence could not be used - {state.problem}"
+        return "no activated licence key was found on this machine"
     decision = startup_check()
     if not decision.allowed:
         return decision.message
@@ -379,7 +379,7 @@ def run(args: argparse.Namespace) -> int:
     # Report-only by default: the free tier is a legitimate way to run, so a
     # deployment without a licence is never refused unless it asks to be.
     #
-    # AITEST_ENFORCE_LICENSING=1 means: a run needs a VALID signed licence for this
+    # AITEST_ENFORCE_LICENSING=1 means: a run needs an activated licence key for this
     # build. Missing, refused, or past the update window all refuse, with the reason
     # and the command that checks it. 0 or unset: nothing refuses.
     license_section = _license_usage_section()

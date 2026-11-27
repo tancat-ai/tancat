@@ -611,7 +611,9 @@ Usage:
   tancat                     Start the interactive session (the default).
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
+  tancat licence activate K  Activate your licence key on this machine (once).
   tancat licence status      Show the licence and its update window.
+  tancat licence release     Release this machine from the key.
   tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
@@ -733,33 +735,59 @@ def _run_interactive() -> int:
 
 
 def _licence_command(argv: list[str]) -> int:
-    """``tancat licence status`` - what this deployment holds, and its window.
+    """``tancat licence`` - activate, show, or release the licence key.
 
-    One source: a signed licence file we issued, verified offline; otherwise Free.
-    There is no activation step and nothing to paste (j-0309).
+    One mechanism (owner, 2026-11-26): the key is activated **once**, checked again
+    when a new version is installed, and read from the cache at every other moment.
+    Activation and the update check are the only calls, and both go to our relay.
     """
+    from src.licensing import activation as keys
     from src.licensing import entitlement
 
     action = argv[0] if argv else "status"
+
+    if action == "activate":
+        if len(argv) < 2 or not argv[1].strip():
+            print("Usage: tancat licence activate <KEY>", file=sys.stderr)
+            return 2
+        result = keys.activate(argv[1], argv[2] if len(argv) > 2 else "")
+        print(result.message)
+        if result.ok and result.activation is not None:
+            licence = result.activation
+            print(f"Licence key:  {licence.masked_key}")
+            print(f"Instance:     {licence.instance_name} ({licence.instance_id})")
+            print(f"Updates to:   {licence.window_end.isoformat() if licence.window_end else '(unknown)'}")
+            print()
+            print("Nothing else to do: the product reads this machine's stored licence from now on.")
+            return 0
+        return 1
+
+    if action == "release":
+        ok, message = keys.deactivate()
+        print(message)
+        return 0 if ok else 1
+
     if action == "status":
         state = entitlement.resolve()
         if state.problem:
-            print(f"Licence file: could not be used - {state.problem}")
+            print(f"Stored licence: could not be used - {state.problem}")
         if state.source == "none":
             print("No licence in force: running as Free Community.")
-            if state.path is not None:
-                print(f"Signed licence file: {state.path} (present, but refused)")
-                print(f"Refused because: {state.problem}")
-            else:
-                print(f"Signed licence file: {entitlement.default_signed_path()} (not present)")
+            target = state.path or entitlement.default_licence_path()
+            suffix = "(present, but could not be used)" if state.path else "(not present)"
+            print(f"Licence file:  {target} {suffix}")
+            print()
+            print("To activate: run 'tancat licence activate <KEY>' with the key from your order email.")
             return 0
-        print(f"Source:       signed licence file ({state.path})")
-        assert state.licence is not None
-        print(f"Licence id:   {state.licence.id}")
-        print(f"Buyer:        {state.licence.buyer_ref}")
-        print(f"Purchased:    {state.licence.purchased_at.isoformat()}")
+        activation = state.activation
+        assert activation is not None
+        print(f"Source:       activated licence key ({state.path})")
+        print(f"Licence key:  {activation.masked_key}")
+        print(f"Instance:     {activation.instance_name} ({activation.instance_id})")
+        print(f"Activated:    {activation.activated_on.isoformat() if activation.activated_on else '(unknown)'}")
         print(f"Tier:         {state.tier}")
-        print(f"Window ends:  {state.window_end.isoformat() if state.window_end else '(unknown)'}")
+        print(f"Updates to:   {state.window_end.isoformat() if state.window_end else '(unknown)'}")
+        print(f"Last checked: {activation.last_checked or '(never since activation)'}")
         build = entitlement.RELEASE_DATE
         print(f"This build:   {build.isoformat()} - {'inside' if state.allows_build(build) else 'AFTER'} the window")
         if not state.allows_build(build):
@@ -767,7 +795,7 @@ def _licence_command(argv: list[str]) -> int:
             print(entitlement.startup_check().message)
         return 0
 
-    print("Usage: tancat licence [status]", file=sys.stderr)
+    print("Usage: tancat licence [activate <KEY> | status | release]", file=sys.stderr)
     return 2
 
 
@@ -782,7 +810,7 @@ def _startup_backstop() -> int | None:
 
     decision = startup_check()
     if decision.allowed:
-        if resolve().source == "signed":
+        if resolve().source == "activated":
             from src import version_check
 
             record_running_version(version_check.current_version())
@@ -795,10 +823,12 @@ def _update_command(argv: list[str]) -> int:
     """``tancat update [--check]`` - the manual check, and the gated upgrade.
 
     ``--check`` asks the feed on demand (bypassing the daily cache) and prints the
-    answer plainly. Without it, the upgrade runs through the same 12-month window
-    as everything else: past the window it refuses with the message naming the
-    version that keeps working, and inside it prints the exact command rather than
-    shelling out from inside the process.
+    answer plainly. Without it, the upgrade passes the two gates that matter: the
+    store's answer about the key (the only moment a disabled key surfaces), then the
+    12-month update window. A refusal names the version that still works; if the
+    store cannot be reached the upgrade proceeds on the stored licence and says so.
+    Inside both, it prints the exact command rather than shelling out from inside the
+    process.
     """
     from src import version_check
     from src.licensing.entitlement import upgrade_check
@@ -822,6 +852,10 @@ def _update_command(argv: list[str]) -> int:
     if not decision.allowed:
         print(f"ERROR: {decision.message}", file=sys.stderr)
         return 3
+    if decision.message:
+        # The check could not be made: proceeding is the right answer, and the
+        # buyer is told rather than left to wonder.
+        print(decision.message)
     print(f"Upgrade TanCat {version_check.current_version()} with:")
     print(f"  {version_check.upgrade_command()}")
     print("Then run 'tancat --version' to confirm.")

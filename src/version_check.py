@@ -2,11 +2,13 @@
 
 The owner approved this on 2026-11-14, with conditions. Read them as the spec:
 
-- **The product still works fully offline.** TanCat makes exactly one automatic
-  call and no others: a **version check at most once a day**, if you leave it on.
-  Licensing is verified offline from a signed license file, so it never touches the
-  network (j-0309). The check carries no test data, file names, usage or anything
-  else about the customer - it sends the request itself and nothing more.
+- **The product still works fully offline.** TanCat makes one automatic call and no
+  others: a **version check at most once a day**, if you leave it on. Licensing calls
+  our relay exactly twice in a licence's life - once when the key is activated and
+  once when a new version is installed - and reads the stored licence at every other
+  moment, so a deployment with no update to install makes no licensing call at all.
+  The check carries no test data, file names, usage or anything else about the
+  customer - it sends the request itself and nothing more.
 - **On by default, with an off switch.** The setting is ``update_check`` in the
   same store as the other preferences; its default is **on** (``True``). When it
   is off there is no call and no notice, ever.
