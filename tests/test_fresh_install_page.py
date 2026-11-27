@@ -24,6 +24,10 @@ import pytest
 playwright_api = pytest.importorskip("playwright.sync_api", reason="playwright is a dev dependency")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: A browser + a real server is timing-sensitive under xdist on a loaded machine, so
+#: this file is marked slow and runs in its own pass (`pytest tests/test_fresh_install_page.py`).
+pytestmark = pytest.mark.slow
 WAIT_SECONDS = 5.0
 
 
