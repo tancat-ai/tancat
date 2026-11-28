@@ -385,7 +385,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | scipy | 1.18.0 | BSD License | https://scipy.org/ |
 | send2trash | 2.1.0 | BSD-3-Clause | https://github.com/arsenetar/send2trash |
 | sentence-transformers | 6.3.0 | Apache-2.0 | https://www.SBERT.net |
-| setuptools | 83.0.0 | MIT | https://github.com/pypa/setuptools |
+| setuptools | 84.2.1 | MIT | https://github.com/pypa/setuptools |
 | shapely | 2.1.2 | BSD License | https://github.com/shapely/shapely |
 | shellingham | 1.5.4 | ISC License (ISCL) | https://github.com/sarugaku/shellingham |
 | six | 1.17.0 | MIT License | https://github.com/benjaminp/six |
