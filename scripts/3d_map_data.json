@@ -566,7 +566,7 @@
       "label": "./docs/licenses/DEPENDENCIES.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 429,
+      "size": 428,
       "color": "#F7DC6F"
     },
     {
@@ -9526,7 +9526,7 @@
       "label": "./tests/test_licence_record.py",
       "group": "Other",
       "type": "test",
-      "size": 94,
+      "size": 102,
       "color": "#AEB6BF"
     },
     {

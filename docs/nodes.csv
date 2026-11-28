@@ -67,7 +67,7 @@ label,group,size,color
 ./docs/implementation/refactor_audit_2026-05-20.md,Documentation,132,#F7DC6F
 ./docs/implementation/tancat-pro-install-and-licence.html,Other,81,#AEB6BF
 ./docs/launch/launch-checklist.html,Other,139,#AEB6BF
-./docs/licenses/DEPENDENCIES.md,Documentation,429,#F7DC6F
+./docs/licenses/DEPENDENCIES.md,Documentation,428,#F7DC6F
 ./docs/licenses/DOCUMENT_READER_LICENSES.md,Documentation,133,#F7DC6F
 ./docs/parity.md,Documentation,142,#F7DC6F
 ./docs/plans/AI-035_B036_P3_plan.md,Documentation,224,#F7DC6F
@@ -1187,7 +1187,7 @@ label,group,size,color
 ./tests/test_licence_elections.py,Other,210,#AEB6BF
 ./tests/test_licence_enforcement.py,Other,113,#AEB6BF
 ./tests/test_licence_key_activation.py,Other,546,#AEB6BF
-./tests/test_licence_record.py,Other,94,#AEB6BF
+./tests/test_licence_record.py,Other,102,#AEB6BF
 ./tests/test_licence_relay_contract.py,Other,532,#AEB6BF
 ./tests/test_licence_secrets.py,Other,103,#AEB6BF
 ./tests/test_licence_window_tier.py,Other,209,#AEB6BF
