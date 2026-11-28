@@ -1337,7 +1337,7 @@ label,group,size,color
 ./tests/test_ui_run_comparison.py,Other,83,#AEB6BF
 ./tests/test_ui_saved_packages.py,Other,58,#AEB6BF
 ./tests/test_ui_sidebar.py,Other,588,#AEB6BF
-./tests/test_update_check.py,Other,488,#AEB6BF
+./tests/test_update_check.py,Other,490,#AEB6BF
 ./tests/test_url_guard.py,Other,287,#AEB6BF
 ./tests/test_url_inference.py,Other,139,#AEB6BF
 ./tests/test_url_resolver.py,Other,308,#AEB6BF
