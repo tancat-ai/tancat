@@ -308,7 +308,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | mypy-extensions | 1.1.0 | MIT | https://github.com/python/mypy_extensions |
 | narwhals | 2.24.0 | MIT | https://github.com/narwhals-dev/narwhals |
 | nbclient | 0.11.0 | BSD License | https://jupyter.org |
-| nbconvert | 7.17.1 | BSD License | https://jupyter.org |
+| nbconvert | 7.17.2 | BSD License | https://jupyter.org |
 | nbformat | 5.10.4 | BSD License | https://jupyter.org |
 | nest-asyncio | 1.6.0 | BSD License | https://github.com/erdewit/nest_asyncio |
 | nest-asyncio2 | 1.7.2 | BSD License | https://github.com/Chaoses-Ib/nest-asyncio2 |
