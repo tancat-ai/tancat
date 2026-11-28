@@ -226,7 +226,7 @@ jobs:
           python-version: "3.14"
 
       - name: Fetch the run's report (if it was produced)
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: run-existing-artifacts
