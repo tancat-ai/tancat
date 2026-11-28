@@ -44,61 +44,61 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
-| playwright | 1.63.0 | Apache-2.0 |  |
+| playwright | 1.65.2 | Apache-2.0 |  |
 | pytest-playwright | 0.10.0 | Apache Software License |  |
 | python-dotenv | 1.2.4 | BSD-3-Clause |  |
-| streamlit | 1.66.1 | Apache-2.0 |  |
+| streamlit | 1.67.0 | Apache-2.0 |  |
 | httpx | 0.28.1 | BSD License |  |
 | beautifulsoup4 | 4.15.0 | MIT License |  |
-| plotly | 7.1.0 | MIT |  |
-| pandas | 3.0.6 | BSD License |  |
+| plotly | 7.2.0 | MIT |  |
+| pandas | 3.1.1 | BSD-3-Clause |  |
 | pillow | 13.0.0 | MIT-CMU | Note |
-| pyyaml | 6.0.3 | MIT License |  |
+| pyyaml | 6.0.4 | MIT License |  |
 | pytest-timeout | 2.4.0 | DFSG approved; MIT License |  |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause |  |
 | pymilvus | 3.0.0 | Apache Software License |  |
-| sentence-transformers | 6.1.0 | Apache-2.0 |  |
-| milvus-lite | 3.2.1 | Apache Software License |  |
-| langgraph | 1.2.14 | MIT |  |
-| torch | 2.14.1+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT |  |
+| sentence-transformers | 6.3.0 | Apache-2.0 |  |
+| milvus-lite | 3.2.2 | Apache Software License |  |
+| langgraph | 1.2.24 | MIT |  |
+| torch | 2.15.0+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib |  |
 
 ### PDF extra (`[project.optional-dependencies].pdf`)
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
-| pypdfium2 | 5.14.0 | BSD-3-Clause, Apache-2.0, dependency licenses | Note |
-| pdfplumber | 0.11.10 | MIT License |  |
+| pypdfium2 | 5.15.2 | BSD-3-Clause, Apache-2.0, dependency licenses | Note |
+| pdfplumber | 0.11.11 | MIT License |  |
 
 ### OCR extra (`[project.optional-dependencies].ocr`)
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
 | rapidocr | 3.10.0 | Apache-2.0 |  |
-| opencv-python-headless | 5.0.0.93 | Apache Software License |  |
+| opencv-python-headless | 5.1.0.95 | Apache Software License |  |
 
 ### Docs group (`[dependency-groups].docs`)
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
-| mkdocs-material | 9.7.7 | MIT |  |
+| mkdocs-material | 9.8.2 | MIT |  |
 
 ### Dev group (`[dependency-groups].dev`)
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
-| ruff | 0.17.0 | MIT |  |
-| mypy | 2.4.0 | MIT |  |
-| pytest | 9.1.1 | MIT |  |
+| ruff | 0.17.6 | MIT |  |
+| mypy | 2.4.1 | MIT |  |
+| pytest | 9.2.0 | MIT |  |
 | pytest-cov | 7.1.0 | MIT |  |
 | pytest-xdist | 3.8.0 | MIT |  |
-| pre-commit | 4.6.2 | MIT |  |
-| pandas-stubs | 3.0.5.260914 | BSD-3-Clause |  |
+| pre-commit | 4.7.0 | MIT |  |
+| pandas-stubs | 3.1.0.261029 | BSD-3-Clause |  |
 | types-PyYAML | 6.0.12.20260906 | Apache-2.0 |  |
 | jupyter | 1.1.1 | BSD License |  |
 | ipykernel | 7.4.0 | BSD-3-Clause |  |
 | nest-asyncio | 1.6.0 | BSD License |  |
-| pytest-asyncio | 1.4.0 | Apache-2.0 |  |
-| coverage | 7.16.2 | Apache-2.0 |  |
+| pytest-asyncio | 1.5.0 | Apache-2.0 |  |
+| coverage | 7.17.5 | Apache-2.0 |  |
 
 ## Flagged: non-permissive or unclear
 
@@ -198,7 +198,7 @@ against the build machine.
 therefore cannot carry a hand-written note), so this originality record lives
 here instead.
 
-## Appendix: full locked set (222 entries)
+## Appendix: full locked set (221 entries)
 
 The complete resolved environment, including transitive dependencies, for
 completeness. TanCat itself is described at the top of this file. Sorted by name.
@@ -230,7 +230,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | colorama | 0.4.6 | BSD License | https://github.com/tartley/colorama |
 | colorlog | 6.12.0 | MIT License | https://github.com/borntyping/python-colorlog |
 | comm | 0.2.3 | BSD License | https://github.com/ipython/comm |
-| coverage | 7.16.2 | Apache-2.0 | https://github.com/coveragepy/coveragepy |
+| coverage | 7.17.5 | Apache-2.0 | https://github.com/coveragepy/coveragepy |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
 | debugpy | 1.8.21 | MIT License | https://aka.ms/debugpy |
 | decorator | 5.3.1 | BSD-2-Clause | UNKNOWN |
@@ -284,9 +284,9 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | jupyterlab-widgets | 3.0.16 | BSD License | https://github.com/jupyter-widgets/ipywidgets |
 | langchain-core | 1.5.2 | MIT License | https://docs.langchain.com/ |
 | langchain-protocol | 0.0.18 | MIT License | https://github.com/langchain-ai/agent-protocol/tree/main/streaming |
-| langgraph | 1.2.14 | MIT | https://docs.langchain.com/oss/python/langgraph/overview |
-| langgraph-checkpoint | 4.1.1 | MIT | https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint |
-| langgraph-prebuilt | 1.1.0 | MIT | https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt |
+| langgraph | 1.2.24 | MIT | https://docs.langchain.com/oss/python/langgraph/overview |
+| langgraph-checkpoint | 4.3.2 | MIT | https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint |
+| langgraph-prebuilt | 1.1.3 | MIT | https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt |
 | langgraph-sdk | 0.4.6 | MIT | https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py |
 | langsmith | 0.10.12 | MIT | https://smith.langchain.com/ |
 | lark | 1.3.1 | MIT License | https://github.com/lark-parser/lark |
@@ -297,14 +297,14 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | matplotlib-inline | 0.2.2 | BSD-3-Clause | https://github.com/ipython/matplotlib-inline |
 | mdurl | 0.1.2 | MIT License | https://github.com/executablebooks/mdurl |
 | mergedeep | 1.3.4 | MIT License | https://github.com/clarketm/mergedeep |
-| milvus-lite | 3.2.1 | Apache Software License | https://github.com/milvus-io/milvus-lite |
+| milvus-lite | 3.2.2 | Apache Software License | https://github.com/milvus-io/milvus-lite |
 | mistune | 3.3.4 | BSD License | https://github.com/lepture/mistune |
 | mkdocs | 1.6.1 | BSD-2-Clause | https://github.com/mkdocs/mkdocs |
 | mkdocs-get-deps | 0.2.2 | MIT | https://github.com/mkdocs/get-deps |
-| mkdocs-material | 9.7.7 | MIT | https://github.com/squidfunk/mkdocs-material |
+| mkdocs-material | 9.8.2 | MIT | https://github.com/squidfunk/mkdocs-material |
 | mkdocs-material-extensions | 1.3.1 | MIT | https://github.com/facelessuser/mkdocs-material-extensions |
 | mpmath | 1.3.0 | BSD License | http://mpmath.org/ |
-| mypy | 2.4.0 | MIT | https://www.mypy-lang.org/ |
+| mypy | 2.4.1 | MIT | https://www.mypy-lang.org/ |
 | mypy-extensions | 1.1.0 | MIT | https://github.com/python/mypy_extensions |
 | narwhals | 2.24.0 | MIT | https://github.com/narwhals-dev/narwhals |
 | nbclient | 0.11.0 | BSD License | https://jupyter.org |
@@ -318,25 +318,25 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | notebook-shim | 0.2.4 | BSD License | UNKNOWN |
 | numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://numpy.org |
 | omegaconf | 2.4.0 | BSD License | https://github.com/hydra-ecosystem/omegaconf |
-| opencv-python-headless | 5.0.0.93 | Apache Software License | https://github.com/opencv/opencv-python |
+| opencv-python-headless | 5.1.0.95 | Apache Software License | https://github.com/opencv/opencv-python |
 | orjson | 3.11.9 | MPL-2.0 AND (Apache-2.0 OR MIT) | https://github.com/ijl/orjson |
 | ormsgpack | 1.12.2 | Apache-2.0 OR MIT | https://github.com/ormsgpack/ormsgpack |
 | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
 | paginate | 0.5.7 | MIT License | https://github.com/Signum/paginate |
-| pandas | 3.0.6 | BSD License | https://pandas.pydata.org |
-| pandas-stubs | 3.0.5.260914 | BSD-3-Clause | https://pandas.pydata.org |
+| pandas | 3.1.1 | BSD-3-Clause | https://pandas.pydata.org |
+| pandas-stubs | 3.1.0.261029 | BSD-3-Clause | https://pandas.pydata.org |
 | pandocfilters | 1.5.1 | BSD License | http://github.com/jgm/pandocfilters |
 | parso | 0.8.7 | MIT License | https://github.com/davidhalter/parso |
 | pathspec | 1.1.1 | Mozilla Public License 2.0 (MPL 2.0) | https://python-path-specification.readthedocs.io/en/latest/index.html |
 | pdfminer-six | 20260107 | MIT | https://github.com/pdfminer/pdfminer.six |
-| pdfplumber | 0.11.10 | MIT License | https://github.com/jsvine/pdfplumber |
+| pdfplumber | 0.11.11 | MIT License | https://github.com/jsvine/pdfplumber |
 | pexpect | 4.9.0 | ISC License (ISCL) | https://pexpect.readthedocs.io/ |
 | pillow | 13.0.0 | MIT-CMU | https://python-pillow.org |
 | platformdirs | 4.11.0 | MIT | https://github.com/tox-dev/platformdirs |
-| playwright | 1.63.0 | Apache-2.0 | https://github.com/Microsoft/playwright-python |
-| plotly | 7.1.0 | MIT | https://plotly.com/python/ |
+| playwright | 1.65.2 | Apache-2.0 | https://github.com/Microsoft/playwright-python |
+| plotly | 7.2.0 | MIT | https://plotly.com/python/ |
 | pluggy | 1.6.0 | MIT License | UNKNOWN |
-| pre-commit | 4.6.2 | MIT | https://github.com/pre-commit/pre-commit |
+| pre-commit | 4.7.0 | MIT | https://github.com/pre-commit/pre-commit |
 | prometheus-client | 0.26.0 | Apache-2.0 AND BSD-2-Clause | https://github.com/prometheus/client_python |
 | prompt-toolkit | 3.0.53 | BSD License | https://github.com/prompt-toolkit/python-prompt-toolkit |
 | protobuf | 7.35.1 | 3-Clause BSD License | https://developers.google.com/protocol-buffers/ |
@@ -349,13 +349,12 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | pydantic | 2.13.5 | MIT | https://github.com/pydantic/pydantic |
 | pydantic-core | 2.46.5 | MIT | https://github.com/pydantic |
 | pydeck | 0.9.3 | Apache License 2.0 | https://github.com/visgl/deck.gl/tree/master/bindings/pydeck |
-| pyee | 13.0.1 | MIT License | https://github.com/jfhbrook/pyee |
 | pygments | 2.20.0 | BSD-2-Clause | https://pygments.org |
 | pymdown-extensions | 12.1 | MIT | https://github.com/facelessuser/pymdown-extensions |
 | pymilvus | 3.0.0 | Apache Software License | https://github.com/milvus-io/pymilvus |
-| pypdfium2 | 5.14.0 | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
-| pytest | 9.1.1 | MIT | https://docs.pytest.org/en/latest/ |
-| pytest-asyncio | 1.4.0 | Apache-2.0 | https://github.com/pytest-dev/pytest-asyncio |
+| pypdfium2 | 5.15.2 | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
+| pytest | 9.2.0 | MIT | https://docs.pytest.org/en/latest/ |
+| pytest-asyncio | 1.5.0 | Apache-2.0 | https://github.com/pytest-dev/pytest-asyncio |
 | pytest-cov | 7.1.0 | MIT | https://pytest-cov.readthedocs.io/en/latest/changelog.html |
 | pytest-playwright | 0.10.0 | Apache Software License | https://github.com/microsoft/playwright-pytest |
 | pytest-timeout | 2.4.0 | DFSG approved; MIT License | https://github.com/pytest-dev/pytest-timeout |
@@ -367,7 +366,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | python-multipart | 0.0.32 | Apache-2.0 | https://github.com/Kludex/python-multipart |
 | python-slugify | 8.0.4 | MIT License | https://github.com/un33k/python-slugify |
 | pywinpty | 3.0.5 | MIT License | https://github.com/andfoy/pywinpty |
-| pyyaml | 6.0.3 | MIT License | https://pyyaml.org/ |
+| pyyaml | 6.0.4 | MIT License | https://pyyaml.org/ |
 | pyyaml-env-tag | 1.1 | MIT | https://github.com/waylan/pyyaml-env-tag |
 | pyzmq | 27.1.0 | BSD License | https://pyzmq.readthedocs.org |
 | rapidocr | 3.10.0 | Apache-2.0 | https://github.com/RapidAI/RapidOCR/releases |
@@ -380,12 +379,12 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | rfc3987-syntax | 1.1.0 | MIT | https://github.com/willynilly/rfc3987-syntax |
 | rich | 15.0.0 | MIT License | https://github.com/Textualize/rich |
 | rpds-py | 2026.6.3 | MIT | https://github.com/crate-py/rpds |
-| ruff | 0.17.0 | MIT | https://docs.astral.sh/ruff |
+| ruff | 0.17.6 | MIT | https://docs.astral.sh/ruff |
 | safetensors | 0.8.0 | Apache Software License | https://github.com/huggingface/safetensors |
 | scikit-learn | 1.9.0 | BSD-3-Clause | https://scikit-learn.org |
 | scipy | 1.18.0 | BSD License | https://scipy.org/ |
 | send2trash | 2.1.0 | BSD-3-Clause | https://github.com/arsenetar/send2trash |
-| sentence-transformers | 6.1.0 | Apache-2.0 | https://www.SBERT.net |
+| sentence-transformers | 6.3.0 | Apache-2.0 | https://www.SBERT.net |
 | setuptools | 83.0.0 | MIT | https://github.com/pypa/setuptools |
 | shapely | 2.1.2 | BSD License | https://github.com/shapely/shapely |
 | shellingham | 1.5.4 | ISC License (ISCL) | https://github.com/sarugaku/shellingham |
@@ -394,7 +393,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | soupsieve | 4.0 | MIT | https://github.com/facelessuser/soupsieve |
 | stack-data | 0.6.3 | MIT License | http://github.com/alexmojaki/stack_data |
 | starlette | 1.3.1 | BSD-3-Clause | https://github.com/Kludex/starlette |
-| streamlit | 1.66.1 | Apache-2.0 | https://streamlit.io |
+| streamlit | 1.67.0 | Apache-2.0 | https://streamlit.io |
 | sympy | 1.14.0 | BSD License | https://sympy.org |
 | tenacity | 9.1.4 | Apache Software License | https://github.com/jd/tenacity |
 | terminado | 0.18.1 | BSD License | https://github.com/jupyter/terminado |
@@ -402,8 +401,8 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | threadpoolctl | 3.6.0 | BSD License | https://github.com/joblib/threadpoolctl |
 | tinycss2 | 1.5.1 | BSD License | https://www.courtbouillon.org/tinycss2 |
 | tokenizers | 0.23.2 | Apache Software License | https://github.com/huggingface/tokenizers |
-| torch | 2.14.1 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
-| torch | 2.14.1+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
+| torch | 2.15.0 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | https://pytorch.org |
+| torch | 2.15.0+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND ISC AND MIT AND Zlib | https://pytorch.org |
 | tornado | 6.6.1 | Apache Software License | http://www.tornadoweb.org/ |
 | tqdm | 4.70.0 | MPL-2.0 AND MIT | https://tqdm.github.io |
 | traitlets | 5.15.1 | BSD License | https://github.com/ipython/traitlets |
