@@ -341,6 +341,18 @@ class UsageMeter:
         from src.licensing.license import feature_enabled
 
         if format_name.lower() not in ("jira",):
+            # j-0311: the 10-a-month Free cap is a real cap, not a sentence. A Free
+            # deployment that has spent it is refused every further export; a paid
+            # tier has no limit here.
+            summary = self.summary()
+            if summary.exports_limit is not None and summary.exports_used >= summary.exports_limit:
+                raise FreeTierLimitError(
+                    f"Free tier evidence-export limit reached "
+                    f"({summary.exports_used}/{summary.exports_limit} exports in the current 30-day window). "
+                    f"{_UPGRADE_PROMPT}",
+                    run_remaining=summary.runs_remaining or 0,
+                    export_remaining=0,
+                )
             return
         if feature_enabled("jira_export"):
             return

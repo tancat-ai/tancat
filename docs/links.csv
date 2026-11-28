@@ -61,6 +61,7 @@ source,target,type
 ./cli/evidence_cli.py,./src/evidence_export.py,import
 ./cli/evidence_cli.py,./src/evidence_index.py,import
 ./cli/evidence_cli.py,./src/storage.py,import
+./cli/evidence_cli.py,./src/usage_meter.py,import
 ./cli/main.py,./src/cli/main.py,import
 ./docs/ARCHITECTURE.md,./cli/main.py,references
 ./docs/ARCHITECTURE.md,./src/llm_client.py,proximity
@@ -1740,6 +1741,7 @@ source,target,type
 ./src/ui/ui_saved_packages.py,./src/ui/ui_results.py,import
 ./src/ui/ui_saved_packages.py,./src/ui/ui_sidebar.py,import
 ./src/ui/ui_sidebar.py,./src/flow_memory.py,import
+./src/ui/ui_sidebar.py,./src/licensing/activation.py,import
 ./src/ui/ui_sidebar.py,./src/licensing/entitlement.py,import
 ./src/ui/ui_sidebar.py,./src/licensing/license.py,import
 ./src/ui/ui_sidebar.py,./src/ocr_backends.py,import
@@ -1802,6 +1804,7 @@ source,target,type
 ./tests/cli/test_orchestrator.py,./src/cli/input_parser.py,import
 ./tests/cli/test_orchestrator.py,./src/config.py,import
 ./tests/cli/test_orchestrator.py,./src/scraper.py,import
+./tests/conftest.py,./src/usage_meter.py,import
 ./tests/contract/test_mock_contracts.py,./scripts/mock_server.py,import
 ./tests/integration/test_learning_loop_e2e.py,./scripts/mock_server.py,import
 ./tests/integration/test_learning_loop_e2e.py,./src/flow_memory.py,import
@@ -2019,6 +2022,10 @@ source,target,type
 ./tests/test_evidence_export.py,./src/evidence_export.py,import
 ./tests/test_evidence_export.py,./src/evidence_index.py,import
 ./tests/test_evidence_export.py,./src/sqlite_persistence.py,import
+./tests/test_evidence_export.py,./src/usage_meter.py,import
+./tests/test_evidence_export_cli_cap.py,./cli/evidence_cli.py,import
+./tests/test_evidence_export_cli_cap.py,./src/evidence_export.py,import
+./tests/test_evidence_export_cli_cap.py,./src/usage_meter.py,import
 ./tests/test_evidence_image_format.py,./src/analyzer.py,import
 ./tests/test_evidence_image_format.py,./src/cli/evidence_generator.py,import
 ./tests/test_evidence_image_format.py,./src/config.py,import
@@ -2304,6 +2311,8 @@ source,target,type
 ./tests/test_stateful_scraper.py,./src/journey_scraper.py,import
 ./tests/test_stateful_scraper.py,./src/stateful_scraper.py,import
 ./tests/test_storage.py,./src/storage.py,import
+./tests/test_streamlit_evidence_exports.py,./src/ui/ui_evidence.py,import
+./tests/test_streamlit_evidence_exports.py,./src/usage_meter.py,import
 ./tests/test_streamlit_layout.py,./tests/streamlit_app_test_helpers.py,import
 ./tests/test_streamlit_widgets.py,./src/provider_config.py,import
 ./tests/test_streamlit_widgets.py,./tests/streamlit_app_test_helpers.py,import
@@ -2389,6 +2398,7 @@ source,target,type
 ./tests/test_ui_sidebar.py,./src/flow_memory.py,import
 ./tests/test_ui_sidebar.py,./src/licensing/license.py,import
 ./tests/test_ui_sidebar.py,./src/ui/ui_sidebar.py,import
+./tests/test_ui_sidebar.py,./src/usage_meter.py,import
 ./tests/test_update_check.py,./src/licensing/activation.py,import
 ./tests/test_update_check.py,./src/version_info.py,import
 ./tests/test_url_guard.py,./src/url_guard.py,import

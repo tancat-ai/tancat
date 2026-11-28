@@ -442,3 +442,47 @@ def test_an_unknown_current_version_never_looks_outdated() -> None:
 
     assert not V.is_newer("1.0.0", "unknown")
     assert not V.is_newer("unknown", "1.0.0")
+
+
+# ---------------------------------------------------------------------------
+# t-1521: the switch has three routes - saved setting, CLI, environment
+# ---------------------------------------------------------------------------
+
+
+def test_the_environment_turns_the_check_off_and_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src import version_check
+
+    monkeypatch.setenv(version_check.UPDATE_CHECK_ENV, "0")
+    assert version_check.env_override() is False
+    monkeypatch.setenv(version_check.UPDATE_CHECK_ENV, "off")
+    assert version_check.env_override() is False
+    monkeypatch.setenv(version_check.UPDATE_CHECK_ENV, "1")
+    assert version_check.env_override() is True
+    monkeypatch.setenv(version_check.UPDATE_CHECK_ENV, "perhaps")
+    # A typo is ignored, not taken as "off".
+    assert version_check.env_override() is None
+    monkeypatch.delenv(version_check.UPDATE_CHECK_ENV)
+    assert version_check.env_override() is None
+
+
+def test_the_cli_sets_the_same_switch_the_ui_uses(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from src import settings_store, version_check
+    from src.cli import main as cli_main
+
+    saved: dict[str, object] = {}
+    monkeypatch.setattr(settings_store, "save_setting", lambda key, value: saved.__setitem__(key, value))
+    monkeypatch.setattr(settings_store, "load_setting", lambda key, default=None: saved.get(key, default))
+    # This file isolates the switch; make the effective value follow the saved one.
+    monkeypatch.setattr(version_check, "enabled", lambda: bool(saved.get(version_check.UPDATE_CHECK_SETTING, True)))
+
+    assert cli_main.main(["config", "set", "update_check", "off"]) == 0
+    assert saved == {version_check.UPDATE_CHECK_SETTING: False}
+    capsys.readouterr()
+
+    assert cli_main.main(["config", "get", "update_check"]) == 0
+    assert "effective: off" in capsys.readouterr().out
+
+    assert cli_main.main(["config", "set", "update_check", "sideways"]) == 2
+    assert saved == {version_check.UPDATE_CHECK_SETTING: False}

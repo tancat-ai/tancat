@@ -28,6 +28,8 @@ from src.licensing.window import RELEASE_DATE, RENEWAL_COPY, WindowDecision
 
 __all__ = [
     "LicenceState",
+    "held_version_sentence",
+    "install_command",
     "default_last_run_path",
     "default_licence_path",
     "last_running_version",
@@ -119,14 +121,30 @@ def resolve() -> LicenceState:
     return LicenceState("none", "free", None, problem=problem, path=path)
 
 
+def install_command(version: str) -> str:
+    """The command that returns this machine to a version that works."""
+    return f"pip install 'tancat=={version.removeprefix('v')}'" if version else ""
+
+
+def held_version_sentence(installed_version: str) -> str:
+    """The half-sentence naming the version that keeps working, and how to return to it.
+
+    "nothing on disk has changed" was wrong: the product is running, and the buyer
+    needs an instruction, not reassurance (t-1524). A leading ``v`` is stripped for
+    display as well as for the command, so the sentence never reads "Version v0.9.5"
+    beside "tancat==0.9.5" (t-1527).
+    """
+    version = installed_version.removeprefix("v").strip()
+    if not version:
+        return "The version you already have keeps working."
+    return f"Version {version} keeps working. To return to it: {install_command(version)}"
+
+
 def _refusal(state: LicenceState, build_date: date, installed_version: str) -> str:
     end = state.window_end.isoformat() if state.window_end else "the end of the update window"
-    held_text = (
-        f"Version {installed_version} keeps working" if installed_version else "The version you held keeps working"
-    )
     return (
-        f"This build was released after your update window ended on {end}. {held_text} - "
-        f"nothing on disk has changed. To use this build, {RENEWAL_COPY}"
+        f"This build was released after your update window ended on {end}. "
+        f"{held_version_sentence(installed_version)} To run a newer build, {RENEWAL_COPY}"
     )
 
 
@@ -164,12 +182,9 @@ def upgrade_check(*, build_date: date | None = None, installed_version: str = ""
 
     checked = store.validate()
     if checked.refused:
-        held = (
-            f"Version {installed_version} keeps working" if installed_version else "The version you held keeps working"
-        )
         return WindowDecision(
             False,
-            f"{checked.message} The upgrade was not installed. {held} - nothing on disk has changed.",
+            f"{checked.message} The upgrade was not installed. {held_version_sentence(installed_version)}",
             state.window_end,
         )
 

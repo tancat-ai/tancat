@@ -6,13 +6,19 @@ and facet constraints.  Designed to bridge the gap between the tool's
 internal evidence format and external toolchains (Excel, Tableau, Splunk,
 pandas, Jenkins, GitHub Actions, TestRail).
 
+**One path (t-1488).** :func:`export_evidence` checks the Free-tier cap, builds the
+bytes, charges the meter and then writes a file or returns the text. No other public
+function here produces export bytes - the per-format builders are private - so a
+caller cannot obtain an export without the check.
+
 Typical usage::
 
-    from src.evidence_export import export_csv
+    from src.evidence_export import export_evidence
     from src.evidence_index import EvidenceIndex
 
     index = EvidenceIndex()
-    csv_path = export_csv(index, status="failed", output="evidence_failed.csv")
+    csv_path = export_evidence(index, "csv", status="failed", output="evidence_failed.csv")
+    browser_csv = export_evidence(index, "csv", status="failed")
 """
 
 from __future__ import annotations
@@ -50,7 +56,7 @@ def _in_package(result: object, package: str | None) -> bool:
     return f"/{package}/" in f"/{value}/"
 
 
-def export_csv(
+def _csv_text(
     index: EvidenceIndex,
     *,
     query: str = "",
@@ -60,7 +66,6 @@ def export_csv(
     story_ref: str | None = None,
     step_type: str | None = None,
     test_package: str | None = None,
-    output: str | Path | None = None,
 ) -> str:
     """Export evidence metadata as a flat CSV table.
 
@@ -138,16 +143,7 @@ def export_csv(
             ]
         )
 
-    csv_text = buf.getvalue()
-    if output is not None:
-        # csv_text already carries the BOM written above, so encode as plain
-        # utf-8 — utf-8-sig would emit a SECOND BOM (double-BOM files confuse
-        # Excel: the first cell shows a BOM glyph before the header).
-        Path(output).write_text(csv_text, encoding="utf-8")
-        _meter_record("csv", output)
-        return str(output)
-
-    return csv_text
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -155,7 +151,7 @@ def export_csv(
 # ---------------------------------------------------------------------------
 
 
-def export_ndjson(
+def _ndjson_text(
     index: EvidenceIndex,
     *,
     query: str = "",
@@ -165,7 +161,6 @@ def export_ndjson(
     story_ref: str | None = None,
     step_type: str | None = None,
     test_package: str | None = None,
-    output: str | Path | None = None,
 ) -> str:
     """Export evidence as newline-delimited JSON (NDJSON / JSON Lines).
 
@@ -209,11 +204,6 @@ def export_ndjson(
     if lines:
         ndjson_text += "\n"
 
-    if output is not None:
-        Path(output).write_text(ndjson_text, encoding="utf-8")
-        _meter_record("ndjson", output)
-        return str(output)
-
     return ndjson_text
 
 
@@ -222,7 +212,7 @@ def export_ndjson(
 # ---------------------------------------------------------------------------
 
 
-def export_junit_xml(
+def _junit_text(
     index: EvidenceIndex,
     *,
     query: str = "",
@@ -232,7 +222,6 @@ def export_junit_xml(
     story_ref: str | None = None,
     step_type: str | None = None,
     test_package: str | None = None,
-    output: str | Path | None = None,
     suite_name: str = "evidence_export",
 ) -> str:
     """Export evidence as a JUnit XML test report.
@@ -329,17 +318,63 @@ def export_junit_xml(
     xml_text = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml_text += tostring(testsuites, encoding="unicode")
 
-    if output is not None:
-        Path(output).write_text(xml_text, encoding="utf-8")
-        _meter_record("junit", output)
-        return str(output)
-
     return xml_text
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+#: The formats this module can produce, by the name the meter and the CLI use.
+EXPORT_FORMATS: tuple[str, ...] = ("csv", "ndjson", "junit")
+
+
+def export_evidence(
+    index: EvidenceIndex,
+    format_name: str,
+    *,
+    output: str | Path | None = None,
+    charge_meter: bool = True,
+    enforce_cap: bool = True,
+    **filters: object,
+) -> str:
+    """**The one export path.** Every surface that exports evidence goes through here.
+
+    Order, and it is deliberate (j-0311/t-1488):
+
+    1. **check the cap** - the Free tier's monthly limit is asked first, so no caller
+       can obtain export bytes without it;
+    2. **build the bytes**;
+    3. **charge the meter** - one export recorded, unless the caller is the UI (see
+       ``charge_meter``) or the tooling bypass below;
+    4. **write to a path, or return the text** for the browser.
+
+    ``output`` is where the CLI and the Action write; the UI passes no output and
+    returns the text to a download button. ``charge_meter=False`` exists for one
+    reason: Streamlit re-runs the whole script on every interaction, so the UI charges
+    on the button's click instead - otherwise opening the page would count as an
+    export. ``enforce_cap=False`` exists for one caller: ``scripts/parity_check.py``,
+    our own CI tooling, which exports a throwaway index and must not be affected by a
+    developer machine's export history. Both flags are named in
+    ``tests/test_export_single_path.py`` so a new caller cannot quietly use them.
+
+    Raises :class:`src.usage_meter.FreeTierLimitError` when the cap is spent.
+    """
+    if format_name not in EXPORT_FORMATS:
+        raise ValueError(f"unknown export format {format_name!r}; expected one of {EXPORT_FORMATS}")
+    if enforce_cap:
+        _meter_check(format_name)
+
+    builders = {"csv": _csv_text, "ndjson": _ndjson_text, "junit": _junit_text}
+    text = builders[format_name](index, **filters)  # type: ignore[arg-type]
+
+    if charge_meter:
+        _meter_record(format_name, output or "")
+    if output is not None:
+        Path(output).write_text(text, encoding="utf-8")
+        return str(output)
+    return text
 
 
 def _load_sidecar(index: EvidenceIndex, sidecar_path: str) -> dict | None:
@@ -392,6 +427,23 @@ def _first_step_error(sidecar: dict | None) -> str:
         if failure_note:
             return str(failure_note)
     return ""
+
+
+def _meter_check(format_name: str) -> None:
+    """Refuse an export the deployment's tier does not allow (j-0311).
+
+    The cap is enforced here, at the one place every evidence export passes, so the
+    sentence on the pricing page and the behaviour agree. A metering fault never
+    blocks an export; only a real tier refusal does.
+    """
+    try:
+        from src.usage_meter import FreeTierLimitError, UsageMeter
+
+        UsageMeter().assert_export_allowed(format_name)
+    except FreeTierLimitError:
+        raise
+    except Exception:  # pragma: no cover - a broken meter must not break exports
+        return
 
 
 def _meter_record(format_name: str, output: str | Path) -> None:

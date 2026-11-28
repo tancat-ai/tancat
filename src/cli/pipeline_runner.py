@@ -663,7 +663,7 @@ def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dic
     good. ``build_or_refresh`` is what the Streamlit page and ``evidence_cli``
     already call. An injected *index* is the caller's to build (tests use this).
     """
-    from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+    from src.evidence_export import export_evidence
     from src.evidence_index import EvidenceIndex
 
     evidence_dir = package_dir / "evidence"
@@ -679,14 +679,14 @@ def _export_evidence_formats(package_dir: Path, index: Any | None = None) -> dic
 
     package = package_dir.name
     written: dict[str, str] = {}
-    for key, filename, writer in (
-        ("csv", "report_evidence.csv", export_csv),
-        ("ndjson", "report_evidence.ndjson", export_ndjson),
-        ("junit", "report_evidence.xml", export_junit_xml),
+    for key, filename in (
+        ("csv", "report_evidence.csv"),
+        ("ndjson", "report_evidence.ndjson"),
+        ("junit", "report_evidence.xml"),
     ):
         target = package_dir / filename
         try:
-            writer(index, test_package=package, output=target)
+            export_evidence(index, key, test_package=package, output=target)
         except Exception as exc:
             print(yellow(f"  {key.upper()} export: not produced - {exc}"))
             continue

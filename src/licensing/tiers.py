@@ -19,7 +19,7 @@ They are unpublished: see :data:`RETIRED_TIERS` and :func:`published_tiers`.
 | Published tier | Claims (additive)                              | Limits                  |
 |-----------------|------------------------------------------------|-------------------------|
 | free            | core generate, evidence export (CSV/JSON/HTML), self-heal, RAG/flow learning | runs 25/mo, exports 10/mo |
-| pro             | + Jira export, POM mode, multi-site, CI runs, support | unlimited               |
+| pro             | + Jira export, POM mode, CI runs, support | unlimited               |
 
 Retired (still resolvable, not sold, no price):
 
@@ -56,7 +56,6 @@ FEATURES = {
     "rag_learning": "RAG / flow-memory learning",
     "jira_export": "Jira report export",
     "pom": "Page Object Model mode",
-    "multi_site": "multi-site suites",
     "ci_runs": "CI / headless runs",
     "private_network": "private-network target support",
     "support": "email support and setup help - direct from the developer",
@@ -104,16 +103,14 @@ def _tiers() -> dict[str, TierSpec]:
         "self-serve": TierSpec("self-serve", "Self-Serve (retired)", frozenset(free_claims | {"jira_export"})),
         # Published. `support` is claimed here because the pricing page and the
         # decision record both promise support on Pro; the code did not grant it.
-        "pro": TierSpec(
-            "pro", "Pro", frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs", "support"})
-        ),
+        "pro": TierSpec("pro", "Pro", frozenset(free_claims | {"jira_export", "pom", "ci_runs", "support"})),
         # Retired 2026-10-03 (owner): no longer a published tier. Kept resolvable
         # so a licence already activated with this key still reports its own
         # claims instead of silently downgrading to free.
         "airgap": TierSpec(
             "airgap",
             "Air-Gap (retired)",
-            frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs", "private_network", "support"}),
+            frozenset(free_claims | {"jira_export", "pom", "ci_runs", "private_network", "support"}),
         ),
     }
 

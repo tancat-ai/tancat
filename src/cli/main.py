@@ -614,6 +614,7 @@ Usage:
   tancat licence activate K  Activate your licence key on this machine (once).
   tancat licence status      Show the licence and its update window.
   tancat licence release     Release this machine from the key.
+  tancat config set update_check on|off   Turn the daily version check on or off.
   tancat update [--check]   Check for a newer version, or print the upgrade command.
   tancat --help              Show this message.
   tancat --version, -V       Version, commit, Python, platform and provider/model.
@@ -819,6 +820,31 @@ def _startup_backstop() -> int | None:
     return 3
 
 
+def _config_command(argv: list[str]) -> int:
+    """``tancat config set update_check on|off`` and ``tancat config get update_check``.
+
+    The saved setting is the UI checkbox's store; this is the same switch from a
+    terminal, for an image or a script that never opens the UI (t-1482).
+    """
+    from src import version_check
+    from src.settings_store import load_setting, save_setting
+
+    if len(argv) < 2 or argv[0] not in ("set", "get") or argv[1] != version_check.UPDATE_CHECK_SETTING:
+        print("Usage: tancat config set update_check on|off | tancat config get update_check", file=sys.stderr)
+        return 2
+    saved = load_setting(version_check.UPDATE_CHECK_SETTING, version_check.DEFAULT_UPDATE_CHECK)
+    if argv[0] == "get":
+        print(f"update_check = {saved} (effective: {'on' if version_check.enabled() else 'off'})")
+        return 0
+    value = argv[2] if len(argv) > 2 else ""
+    if value not in ("on", "off"):
+        print("Use on or off.", file=sys.stderr)
+        return 2
+    save_setting(version_check.UPDATE_CHECK_SETTING, value == "on")
+    print(f"update_check = {value == 'on'} (effective: {'on' if version_check.enabled() else 'off'})")
+    return 0
+
+
 def _update_command(argv: list[str]) -> int:
     """``tancat update [--check]`` - the manual check, and the gated upgrade.
 
@@ -873,6 +899,8 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args and args[0] == "licence":
         return _licence_command(args[1:])
+    if args and args[0] == "config":
+        return _config_command(args[1:])
     if args and args[0] == "update":
         return _update_command(args[1:])
 

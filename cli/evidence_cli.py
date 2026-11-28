@@ -25,8 +25,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+from src.evidence_export import export_evidence
 from src.evidence_index import EvidenceIndex
+from src.usage_meter import FreeTierLimitError
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -271,14 +272,16 @@ def _cmd_export(args: argparse.Namespace) -> None:
         print("No evidence matches your filters. Nothing exported.")
         return
 
-    if fmt == "csv":
-        export_csv(index, output=output, **kwargs)
-    elif fmt == "ndjson":
-        export_ndjson(index, output=output, **kwargs)
-    elif fmt == "junit":
-        export_junit_xml(index, output=output, **kwargs)
-    else:
+    if fmt not in ("csv", "ndjson", "junit"):
         print(f"Unknown format: {fmt}", file=sys.stderr)
+        sys.exit(1)
+    # t-1488: one export path - the cap check, the bytes, the meter and the write.
+    try:
+        export_evidence(index, fmt, output=output, **kwargs)
+    except FreeTierLimitError as exc:
+        # The cap is a tier refusal, not a crash: the same sentence the UI shows,
+        # and a non-zero exit so a script can tell a refusal from a success.
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
 
     size_kb = output.stat().st_size / 1024 if output.exists() else 0

@@ -52,6 +52,11 @@ from typing import Any
 UPDATE_CHECK_SETTING = "update_check"
 DEFAULT_UPDATE_CHECK = True
 
+#: Environment override: AITEST_UPDATE_CHECK=0 turns the check off, =1 turns it on,
+#: regardless of the persisted setting (CI, containers, a shared image). Anything
+#: else is ignored, so a typo never silently disables a security-relevant setting.
+UPDATE_CHECK_ENV = "AITEST_UPDATE_CHECK"
+
 #: Where the answer comes from. PyPI's JSON for this distribution; the constant
 #: is the one line to change if the feed moves.
 FEED_URL = "https://pypi.org/pypi/tancat/json"
@@ -134,10 +139,33 @@ def is_newer(latest: str, current: str) -> bool:
     return _parse_version(latest) > _parse_version(current)
 
 
+def env_override() -> bool | None:
+    """The environment's answer, or ``None`` when it says nothing usable.
+
+    ``AITEST_UPDATE_CHECK=0`` (or off/false/no) turns the check off; 1/true/on/yes
+    turns it on. Anything else is ignored, so a typo never silently disables it.
+    """
+    import os
+
+    override = os.environ.get(UPDATE_CHECK_ENV, "").strip().lower()
+    if override in ("0", "false", "off", "no"):
+        return False
+    if override in ("1", "true", "on", "yes"):
+        return True
+    return None
+
+
 def enabled() -> bool:
-    """Whether the owner (or the customer) has left the check on."""
+    """Whether the check may run: the environment first, then the saved setting.
+
+    Three routes to the switch, in this order: the environment variable (CI and
+    containers), the saved setting (the UI checkbox), and the default (on).
+    """
     from src.settings_store import load_setting
 
+    override = env_override()
+    if override is not None:
+        return override
     value = load_setting(UPDATE_CHECK_SETTING, DEFAULT_UPDATE_CHECK)
     return value if isinstance(value, bool) else DEFAULT_UPDATE_CHECK
 

@@ -297,7 +297,7 @@ def _facts_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def check_reports(evidence_dir: Path, report: Report, workdir: Path) -> None:
     """Render one evidence set five ways and compare the story they tell."""
     sys.path.insert(0, str(REPO_ROOT))
-    from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+    from src.evidence_export import export_evidence
     from src.evidence_index import EvidenceIndex
     from src.report_formatters import generate_html_report
     from src.sqlite_persistence import SQLitePersistence
@@ -312,9 +312,14 @@ def check_reports(evidence_dir: Path, report: Report, workdir: Path) -> None:
     indexed = index.build_or_refresh(base_dir=evidence_dir, force=True)
     report.add("reports", "indexed sidecar count", truth["tests"], indexed)
 
-    csv_text = export_csv(index)
-    ndjson_text = export_ndjson(index)
-    junit_text = export_junit_xml(index)
+    # t-1488: the ONE export path, with the cap switched off on purpose. This is our
+    # own CI tooling exporting a throwaway index; it must not be refused because a
+    # developer machine's ledger already shows ten exports this month. No product
+    # surface may pass enforce_cap=False - tests/test_export_single_path.py names this
+    # file as the only allowed caller.
+    csv_text = export_evidence(index, "csv", enforce_cap=False, charge_meter=False)
+    ndjson_text = export_evidence(index, "ndjson", enforce_cap=False, charge_meter=False)
+    junit_text = export_evidence(index, "junit", enforce_cap=False, charge_meter=False)
     rows = [
         {
             "test_name": s["test"]["name"],

@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures for test suite."""
 
 import os
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,27 @@ os.environ.setdefault("RAG_ENABLED", "0")
 # AI-042: flow memory must not consult machine-local evidence/flow_memory.json
 # in unit tests (same hermeticity principle as RAG_ENABLED=0).
 os.environ.setdefault("FLOW_MEMORY_ENABLED", "0")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_usage_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """j-0311: the Free export cap is enforced, so no test may spend the real ledger.
+
+    The meter's default ledger lives in the machine's storage dir, which on a
+    developer machine holds hundreds of exports; without this every export test
+    would be refused at the cap. A test that passes ``ledger_path`` explicitly still
+    gets its own file.
+    """
+    from src.usage_meter import UsageMeter
+
+    original = UsageMeter._ledger
+
+    def _ledger(self: UsageMeter) -> Path:
+        if self._ledger_path is not None:
+            return original(self)
+        return tmp_path / "usage_ledger.json"
+
+    monkeypatch.setattr(UsageMeter, "_ledger", _ledger)
 
 
 @pytest.fixture

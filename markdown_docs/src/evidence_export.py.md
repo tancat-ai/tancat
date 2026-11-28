@@ -1,12 +1,15 @@
 # `src/evidence_export.py` — Evidence Export (AI-028)
 
 ## Purpose
-CSV, NDJSON, and JUnit XML exporters for evidence data. All exporters consume the same filter parameters as `EvidenceIndex.search()`, ensuring consistent filtering across all export formats.
+CSV, NDJSON, and JUnit XML exporters for evidence data. **One public function owns an export** (t-1488): `export_evidence` checks the Free-tier cap, builds the bytes, charges the meter, then writes a file or returns the text. The per-format builders are private (`_csv_text`, `_ndjson_text`, `_junit_text`), so no caller can obtain export bytes without the check. Filters are the same parameters as `EvidenceIndex.search()`, so all formats filter consistently.
 
 ## Functions
-- `export_csv(index: EvidenceIndex, ...) -> str` — CSV export with filter support
-- `export_ndjson(index: EvidenceIndex, ...) -> str` — NDJSON (newline-delimited JSON) export
-- `export_junit_xml(index: EvidenceIndex, ...) -> str` — JUnit XML for CI/CD integration
+- `export_evidence(index, format_name, *, output=None, charge_meter=True, enforce_cap=True, **filters) -> str` — the one export path. `output` writes a file; no `output` returns the text for the browser.
+  - `enforce_cap=False` — the named tooling bypass, used only by `scripts/parity_check.py`.
+  - `charge_meter=False` — used only by the UI, which charges on the download click (Streamlit re-runs would otherwise count every render).
+- `EXPORT_FORMATS` — `("csv", "ndjson", "junit")`.
+
+The guard that keeps this true is `tests/test_export_single_path.py`: it fails if a second public export appears, if any module outside this one calls a private builder, or if either flag is used outside its named caller.
 
 ## Related
 - `src/evidence_index.py` — SQLite-backed search index
