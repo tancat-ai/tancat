@@ -414,7 +414,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | typing-inspection | 0.4.2 | MIT | https://github.com/pydantic/typing-inspection |
 | tzdata | 2026.3 | Apache-2.0 | https://github.com/python/tzdata |
 | uri-template | 1.3.0 | MIT License | https://gitlab.linss.com/open-source/python/uri-template |
-| urllib3 | 2.7.0 | MIT | https://github.com/urllib3/urllib3/blob/main/CHANGES.rst |
+| urllib3 | 2.8.0 | MIT | https://github.com/urllib3/urllib3/blob/main/CHANGES.rst |
 | uuid-utils | 0.17.0 | BSD-3-Clause | https://github.com/aminalaee/uuid-utils |
 | uvicorn | 0.52.0 | BSD-3-Clause | https://uvicorn.dev/ |
 | virtualenv | 21.14.13 | MIT | https://github.com/pypa/virtualenv |
