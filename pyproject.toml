@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tancat"
-version = "0.1.0"
+version = "0.1.1"
 description = "AI-powered Playwright test generator using local LLMs (llama.cpp, Ollama, LM Studio)"
 readme = "README.md"
 authors = [{ name = "Cat Tan Operations Ltd", email = "hello@tancat.dev" }]
