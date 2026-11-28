@@ -152,6 +152,10 @@ source,target,type
 ./docs/ci.md,./src/orchestrator.py,proximity
 ./docs/ci.md,./src/scraper.py,proximity
 ./docs/ci.md,./src/test_generator.py,proximity
+./docs/implementation/dependency-notes.md,./src/llm_client.py,proximity
+./docs/implementation/dependency-notes.md,./src/orchestrator.py,proximity
+./docs/implementation/dependency-notes.md,./src/scraper.py,proximity
+./docs/implementation/dependency-notes.md,./src/test_generator.py,proximity
 ./docs/implementation/fonts/OFL-1.1.md,./src/llm_client.py,proximity
 ./docs/implementation/fonts/OFL-1.1.md,./src/orchestrator.py,proximity
 ./docs/implementation/fonts/OFL-1.1.md,./src/scraper.py,proximity
