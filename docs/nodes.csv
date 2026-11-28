@@ -57,7 +57,7 @@ label,group,size,color
 ./docs/archived/session_05_pipeline_rebuild_plan.md,Documentation,300,#F7DC6F
 ./docs/benchmarks/README.md,Documentation,99,#F7DC6F
 ./docs/ci.md,Documentation,338,#F7DC6F
-./docs/implementation/dependency-notes.md,Documentation,52,#F7DC6F
+./docs/implementation/dependency-notes.md,Documentation,66,#F7DC6F
 ./docs/implementation/fonts/OFL-1.1.md,Documentation,95,#F7DC6F
 ./docs/implementation/fonts/README.md,Documentation,54,#F7DC6F
 ./docs/implementation/landing-asset-sources.json,Other,76,#AEB6BF
@@ -1130,7 +1130,7 @@ label,group,size,color
 ./tests/test_dialog_action_scoping.py,Other,210,#AEB6BF
 ./tests/test_director_persona_routing.py,Other,363,#AEB6BF
 ./tests/test_docker_compose_defaults.py,Other,65,#AEB6BF
-./tests/test_docker_playwright_deps.py,Other,50,#AEB6BF
+./tests/test_docker_playwright_deps.py,Other,65,#AEB6BF
 ./tests/test_document_eval_validation.py,Other,268,#AEB6BF
 ./tests/test_e2e_placeholder_quoting.py,Other,128,#AEB6BF
 ./tests/test_e2e_placeholder_resolution_valid_python.py,Other,173,#AEB6BF

@@ -486,7 +486,7 @@
       "label": "./docs/implementation/dependency-notes.md",
       "group": "Documentation",
       "type": "doc",
-      "size": 52,
+      "size": 66,
       "color": "#F7DC6F"
     },
     {
@@ -9070,7 +9070,7 @@
       "label": "./tests/test_docker_playwright_deps.py",
       "group": "Other",
       "type": "test",
-      "size": 50,
+      "size": 65,
       "color": "#AEB6BF"
     },
     {
