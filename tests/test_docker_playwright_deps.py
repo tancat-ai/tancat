@@ -48,3 +48,18 @@ def test_the_dependency_note_records_the_inert_wait() -> None:
     note = (REPO_ROOT / "docs" / "implementation" / "dependency-notes.md").read_text(encoding="utf-8")
     for phrase in ("non-inert", "RFC 6265", "Proxy credentials", "get_by_ref", "normalize()"):
         assert phrase in note, f"dependency-notes.md does not record: {phrase}"
+
+
+def test_the_note_blames_linkage_not_the_dependency_list() -> None:
+    """The corrected cause (t-1536): 1.63's Node has no libatomic dependency.
+
+    The earlier version of the note said 1.63's install-deps list does not mention
+    libatomic. That is not reproducible - both versions list it once apt is updated
+    and the library is present - and it sends the next reader after the wrong thing.
+    """
+    note = (REPO_ROOT / "docs" / "implementation" / "dependency-notes.md").read_text(encoding="utf-8")
+
+    assert "LINKS libatomic" in note, "the note does not name linkage as the difference"
+    assert "ldd" in note, "the note does not show how linkage was checked"
+    assert "does not mention it at all" not in note, "the retracted claim is back"
+    assert "The ordering is what matters" in note, "the note does not explain why order fixes it"

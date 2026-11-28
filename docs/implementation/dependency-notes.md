@@ -15,20 +15,34 @@ From 1.65 the driver's bundled Node is linked against `libatomic.so.1`. On a bar
 shared libraries: libatomic.so.1: cannot open shared object file: No such file or directory
 ```
 
-**`install-deps` lists `libatomic1` from 1.65 onward, but it cannot install it in time**:
-the command starts the bundled Node first, and that Node is what needs the library.
-Playwright 1.63's list does not mention it at all (checked with
-`playwright install-deps --dry-run chromium` on both versions), so nothing ever pulled
-it before. Both images therefore install `libatomic1` explicitly *before*
-`install-deps` - `Dockerfile` and `Dockerfile.action`.
+**The difference is whether the bundled Node LINKS libatomic, not whether
+`install-deps` lists it.** At 1.63.0 the driver's Node has no atomic dependency and
+starts on a bare base; at 1.65.2 it does, so it cannot start:
 
-Measured on 2026-11-28, `python:3.14.7-slim`:
+```
+$ ldd .../playwright/driver/node        # 1.63.0: no libatomic line
+$ ldd .../playwright/driver/node        # 1.65.2: libatomic.so.1 => not found
+```
 
-| playwright | `install-deps --dry-run chromium` | `install-deps chromium` |
+**Both versions list `libatomic1`** in `install-deps --dry-run chromium` once apt is
+updated and the library is present, and a 1.63 image with the stanza removed still
+ends up with `libatomic1` installed by its own `install-deps`. The listing is therefore
+not the cause and not the fix.
+
+**The ordering is what matters.** `install-deps` starts the bundled Node before it
+installs anything, so at 1.65.2 on a base without the library the command exits 127
+having installed nothing - it can never reach the package that would let its own Node
+run. Both images install `libatomic1` explicitly *before* `install-deps` -
+`Dockerfile` and `Dockerfile.action`.
+
+Measured on 2026-11-28, `python:3.14.7-slim` (linkage checked with `ldd` on the
+driver's `node`; the reviewer reproduced both rows independently):
+
+| playwright | bundled Node links `libatomic` | `install-deps chromium` |
 |---|---|---|
-| 1.63.0 | no `libatomic` | succeeds |
-| 1.65.2, bare base | lists `libatomic` | **fails, exit 127** |
-| 1.65.2, `libatomic1` installed first | - | succeeds; bundled Node v26.13.1 runs |
+| 1.63.0 | no | succeeds (`libatomic1` is in its list either way) |
+| 1.65.2, bare base | yes - `=> not found` | **fails, exit 127**, nothing installed |
+| 1.65.2, `libatomic1` installed first | yes - resolved | succeeds; bundled Node v26.13.1 runs |
 
 ### What 1.65 adds
 
