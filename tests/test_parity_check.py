@@ -153,10 +153,12 @@ def test_gate_exits_non_zero_when_one_renderer_drops_its_rows(monkeypatch: Any, 
     """
     import src.evidence_export as evidence_export
 
-    real_csv = evidence_export.export_csv
+    # t-1488: one export path - the CSV builder is private, so the break is made
+    # where the bytes are made.
+    real_csv = evidence_export._csv_text
     monkeypatch.setattr(
         evidence_export,
-        "export_csv",
+        "_csv_text",
         lambda index, **kwargs: real_csv(index, **kwargs).splitlines()[0] + "\n",
     )
 

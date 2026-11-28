@@ -423,18 +423,20 @@ class SidebarConfig:
         st.sidebar.divider()
         st.sidebar.subheader("License & Usage")
 
-        # j-0309/t-1472: two live states only - a verified file, or the free tier
-        # (a refused file reports as invalid with the reason). The grace/blocked
-        # branches went with the token format.
-        if status.status == "valid" and status.tier != "free":
-            st.sidebar.success(status.headline)
-        elif status.status == "valid":
-            # j-0317 review: a valid licence whose update window has closed (or
-            # whose key the store no longer calls active) is NOT success - it is
-            # the free tier with a reason. Informational, not green.
-            st.sidebar.info(status.headline)
-        elif status.status == "invalid":
-            st.sidebar.error(status.headline)
+        # Five states, one verdict (t-1527). licence_level() reads license_status()
+        # and nothing else, so the sentence here and the meter below cannot disagree -
+        # the window and the key status are folded into the tier by license.py.
+        level = SidebarConfig.licence_level(status)
+        headline = SidebarConfig.licence_headline(status)
+        if level == "pro":
+            st.sidebar.success(headline)
+        elif level == "invalid":
+            # A cache that cannot be read is a fault the buyer can fix.
+            st.sidebar.error(headline)
+        elif level in ("inactive", "window_closed"):
+            # Not a fault: the product runs on the free tier with a reason, and the
+            # meter below shows the free limits. Informational, not red (PR 205).
+            st.sidebar.info(headline)
         else:
             st.sidebar.info(status.headline)
 
@@ -459,19 +461,81 @@ class SidebarConfig:
             st.sidebar.warning("Free-tier limit reached. Request a license for unlimited runs and exports.")
 
     @staticmethod
+    def licence_level(status: Any) -> str:
+        """Which of the five licence states this deployment is in (t-1524, t-1527).
+
+        One verdict, read from :func:`src.licensing.license.license_status` and not
+        recomputed: ``license.py`` folds the update window and the store's key status
+        into the **tier**, so anything here that re-derived the window would be a
+        second copy of the rule and could disagree with the usage meter
+        (the reviewer's closed-window panel said "red" while the meter said
+        "Runs: 0 (unlimited)").
+
+        ``none`` | ``invalid`` | ``inactive`` | ``window_closed`` | ``pro``
+        """
+        verdict = str(getattr(status, "status", "unlicensed")) or "unlicensed"
+        tier = str(getattr(status, "tier", "free") or "free")
+        if verdict == "unlicensed":
+            return "none"
+        if verdict == "invalid":
+            return "invalid"
+        if tier != "free":
+            return "pro"
+        # Valid, but on the free tier: the reason says which of the two it is.
+        reason = str(getattr(status, "reason", "") or "").lower()
+        if "update window ended" in reason:
+            return "window_closed"
+        return "inactive"
+
+    @staticmethod
+    def licence_headline(status: Any) -> str:
+        """The one sentence for each state - and the way out of the bad ones.
+
+        Always the licence's own word when it has one (``license_status().headline``
+        is the reason for the two free-tier-valid states), so the panel repeats the
+        verdict instead of paraphrasing it.
+        """
+        from src.licensing.entitlement import held_version_sentence
+
+        level = SidebarConfig.licence_level(status)
+        own = str(getattr(status, "headline", "") or "")
+        if level == "pro":
+            return own or "Licence key active."
+        if level == "inactive":
+            return own or "This licence key is not active - the store reports it as disabled or expired."
+        if level == "window_closed":
+            return own or held_version_sentence("")
+        if level == "invalid":
+            return own or "The stored licence cannot be used - the product runs on the free tier."
+        return own or "No licence key - running on the free tier. Activate one below."
+
+    @staticmethod
     def _render_license_entry(status: Any) -> None:
         """Activate a key, or show what this machine holds (owner, 2026-11-26).
 
         The key is activated **once** here; after that every screen reads the stored
-        licence. The panel says when the update check happens, because that is the
-        only moment a disabled key would be noticed.
+        licence. The panel says where the licence lives (and which variable points at
+        it), and when it is checked, because that is the only moment a disabled key
+        would be noticed (t-1524).
         """
+        import os
+
+        from src.licensing.activation import CACHE_ENV
         from src.licensing.entitlement import default_licence_path
 
-        path = default_licence_path()
-        if getattr(status, "status", "") == "valid":
-            st.sidebar.caption(f"Licence: activated on this machine ({path.name}). Checked again when you update.")
+        configured = os.environ.get(CACHE_ENV, "").strip()
+        path = configured or str(default_licence_path())
+        label = f"Licence file: {path}"
+        if configured:
+            label += f" (set by {CACHE_ENV})"
+        st.sidebar.caption(label)
+
+        level = SidebarConfig.licence_level(status)
+        if level in ("pro", "inactive", "window_closed"):
+            st.sidebar.caption("Checked again when you update.")
             return
+        if level == "invalid":
+            st.sidebar.caption("Delete that file, or activate the key again below.")
 
         st.sidebar.caption("Have a licence key? Activate it once here; it is stored on this machine.")
         # Inside a form, widgets are created on ``st`` (the form's context); the

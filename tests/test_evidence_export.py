@@ -12,11 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.evidence_export import (
-    export_csv,
-    export_junit_xml,
-    export_ndjson,
-)
+from src.evidence_export import export_evidence
 from src.evidence_index import EvidenceIndex
 from src.sqlite_persistence import SQLitePersistence
 
@@ -74,6 +70,19 @@ def _make_sidecar(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def isolated_usage_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """j-0311: the Free export cap is enforced, so a test must not spend a real ledger.
+
+    A developer machine that has exported 677 times would otherwise be refused the
+    export under test. Each test gets its own storage root and an empty ledger.
+    """
+    from src.usage_meter import UsageMeter
+
+    monkeypatch.setattr(UsageMeter, "_ledger", lambda self: tmp_path / "usage_ledger.json")
+    monkeypatch.delenv("AITEST_ENFORCE_FREE_TIER", raising=False)
 
 
 @pytest.fixture()
@@ -152,11 +161,11 @@ def index(tmp_path: Path) -> EvidenceIndex:
 
 class TestExportCsv:
     def test_has_bom(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index)
+        csv_text = export_evidence(index, "csv")
         assert csv_text.startswith("\ufeff")
 
     def test_header_row(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index)
+        csv_text = export_evidence(index, "csv")
         lines = csv_text.splitlines()
         assert lines[0].startswith("\ufefftest_name")  # BOM + header
         assert "condition_ref" in lines[0]
@@ -171,27 +180,27 @@ class TestExportCsv:
         assert "sidecar_path" in lines[0]
 
     def test_row_count_without_filters(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index)
+        csv_text = export_evidence(index, "csv")
         # Header + 4 data rows
         assert len(csv_text.splitlines()) == 5
 
     def test_filter_by_status(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index, status="failed")
+        csv_text = export_evidence(index, "csv", status="failed")
         assert len(csv_text.splitlines()) == 2  # header + 1
 
     def test_filter_by_query(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index, query="login")
+        csv_text = export_evidence(index, "csv", query="login")
         assert len(csv_text.splitlines()) == 2  # header + 1
 
     def test_combined_filters(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index, status="passed", url_domain="automationexercise.com")
+        csv_text = export_evidence(index, "csv", status="passed", url_domain="automationexercise.com")
         lines = csv_text.splitlines()
         assert len(lines) == 2  # header + 1 (view_cart is passed)
         assert "test_view_cart" in lines[1]
 
     def test_writes_to_file(self, index: EvidenceIndex, tmp_path: Path) -> None:
         out = tmp_path / "export.csv"
-        result = export_csv(index, output=out)
+        result = export_evidence(index, "csv", output=out)
         assert str(out) == result
         assert out.exists()
         content = out.read_text(encoding="utf-8-sig")
@@ -202,7 +211,7 @@ class TestExportCsv:
         """The content string already carries the BOM; encoding it as utf-8-sig
         again produced double-BOM files (Excel shows a BOM glyph in cell A1)."""
         out = tmp_path / "export.csv"
-        export_csv(index, output=out)
+        export_evidence(index, "csv", output=out)
         raw = out.read_bytes()
         assert raw.startswith(b"\xef\xbb\xbf")
         assert not raw.startswith(b"\xef\xbb\xbf\xef\xbb\xbf")
@@ -213,21 +222,21 @@ class TestExportCsv:
         import csv as _csv
         import io as _io
 
-        text = export_csv(index)
+        text = export_evidence(index, "csv")
         rows = list(_csv.reader(_io.StringIO(text.lstrip("\ufeff"))))
         sidecar_col = [r[-1] for r in rows[1:]]
         assert sidecar_col, "expected data rows"
         assert all("\\" not in p for p in sidecar_col), sidecar_col
 
     def test_empty_results_returns_header_only(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index, query="nonexistent")
+        csv_text = export_evidence(index, "csv", query="nonexistent")
         lines = csv_text.splitlines()
         assert len(lines) == 1  # header only
         assert "test_name" in lines[0]
 
     def test_step_count_correct(self, index: EvidenceIndex) -> None:
         # The cart test has 3 steps — find it by test name
-        csv_text = export_csv(index, query="test_cart")
+        csv_text = export_evidence(index, "csv", query="test_cart")
         line = csv_text.splitlines()[1]
         # step_count is column index 6 (0-based) — should be 3
         cols = line.split(",")
@@ -235,7 +244,7 @@ class TestExportCsv:
 
     def test_duration_s_included(self, index: EvidenceIndex) -> None:
         # The cart test has duration_s=2.34 — find it by test name
-        csv_text = export_csv(index, query="test_cart")
+        csv_text = export_evidence(index, "csv", query="test_cart")
         line = csv_text.splitlines()[1]
         # duration_s is column index 9 (0-based)
         cols = line.split(",")
@@ -249,7 +258,7 @@ class TestExportCsv:
 
 class TestExportNdjson:
     def test_valid_json_lines(self, index: EvidenceIndex) -> None:
-        ndjson_text = export_ndjson(index)
+        ndjson_text = export_evidence(index, "ndjson")
         lines = ndjson_text.strip().split("\n")
         assert len(lines) == 4
         for line in lines:
@@ -265,7 +274,7 @@ class TestExportNdjson:
         exporter dumps the full sidecar, so an export written to a tracked path
         is the provable bundle.
         """
-        ndjson_text = export_ndjson(index, query="test_view_cart")
+        ndjson_text = export_evidence(index, "ndjson", query="test_view_cart")
         obj = json.loads(ndjson_text.strip())
         record = obj["page_expectations"][0]
         assert record["expected_url"] == "https://automationexercise.com/checkout"
@@ -273,7 +282,7 @@ class TestExportNdjson:
         assert record["producer"] == "keyword"
 
     def test_filtered_export(self, index: EvidenceIndex) -> None:
-        ndjson_text = export_ndjson(index, status="passed")
+        ndjson_text = export_evidence(index, "ndjson", status="passed")
         lines = ndjson_text.strip().split("\n")
         assert len(lines) == 2
         for line in lines:
@@ -282,20 +291,20 @@ class TestExportNdjson:
 
     def test_writes_to_file(self, index: EvidenceIndex, tmp_path: Path) -> None:
         out = tmp_path / "export.ndjson"
-        result = export_ndjson(index, output=out)
+        result = export_evidence(index, "ndjson", output=out)
         assert str(out) == result
         lines = out.read_text().strip().split("\n")
         assert len(lines) == 4
 
     def test_pandas_compatible(self, index: EvidenceIndex) -> None:
         """NDJSON should parse with pd.read_json(lines=True)."""
-        ndjson_text = export_ndjson(index)
+        ndjson_text = export_evidence(index, "ndjson")
         # Smoke test: each line is valid JSON
         for line in ndjson_text.strip().split("\n"):
             json.loads(line)
 
     def test_empty_results(self, index: EvidenceIndex) -> None:
-        ndjson_text = export_ndjson(index, query="nonexistent")
+        ndjson_text = export_evidence(index, "ndjson", query="nonexistent")
         assert ndjson_text == ""
 
 
@@ -306,12 +315,12 @@ class TestExportNdjson:
 
 class TestExportJunitXml:
     def test_valid_xml(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         assert root.tag == "testsuites"
 
     def test_suite_attributes(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -321,7 +330,7 @@ class TestExportJunitXml:
         assert suite.get("skipped") == "1"
 
     def test_testcase_elements(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -329,7 +338,7 @@ class TestExportJunitXml:
         assert len(cases) == 4
 
     def test_classname_derived_from_url(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -338,7 +347,7 @@ class TestExportJunitXml:
         assert "saucedemo.inventory" in classnames
 
     def test_name_includes_condition_ref(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -347,7 +356,7 @@ class TestExportJunitXml:
         assert any(n.startswith("TC01.06") for n in names)
 
     def test_failure_element_for_failed(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -359,7 +368,7 @@ class TestExportJunitXml:
                 assert "TimeoutError" in (failure.get("message", "") or "")
 
     def test_skipped_element(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -369,14 +378,14 @@ class TestExportJunitXml:
                 assert tc.find("skipped") is not None
 
     def test_time_attribute(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
         assert float(suite.get("time", "0")) == pytest.approx(2.34, abs=0.01)
 
     def test_custom_suite_name(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index, suite_name="my_suite")
+        xml_text = export_evidence(index, "junit", suite_name="my_suite")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -384,13 +393,13 @@ class TestExportJunitXml:
 
     def test_writes_to_file(self, index: EvidenceIndex, tmp_path: Path) -> None:
         out = tmp_path / "junit.xml"
-        result = export_junit_xml(index, output=out)
+        result = export_evidence(index, "junit", output=out)
         assert str(out) == result
         root = ET.fromstring(out.read_text())
         assert root.tag == "testsuites"
 
     def test_filtered_export(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index, status="failed")
+        xml_text = export_evidence(index, "junit", status="failed")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -398,7 +407,7 @@ class TestExportJunitXml:
         assert suite.get("failures") == "1"
 
     def test_empty_results(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index, query="nonexistent")
+        xml_text = export_evidence(index, "junit", query="nonexistent")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -412,17 +421,17 @@ class TestExportJunitXml:
 
 class TestExportEdgeCases:
     def test_csv_empty_index(self, index: EvidenceIndex) -> None:
-        csv_text = export_csv(index, query="nonexistent")
+        csv_text = export_evidence(index, "csv", query="nonexistent")
         lines = csv_text.strip().split("\n")
         assert len(lines) == 1  # header only
         assert "test_name" in lines[0]
 
     def test_ndjson_empty_index(self, index: EvidenceIndex) -> None:
-        ndjson_text = export_ndjson(index, query="nonexistent")
+        ndjson_text = export_evidence(index, "ndjson", query="nonexistent")
         assert ndjson_text == ""
 
     def test_junit_empty_index(self, index: EvidenceIndex) -> None:
-        xml_text = export_junit_xml(index, query="nonexistent")
+        xml_text = export_evidence(index, "junit", query="nonexistent")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -441,7 +450,7 @@ class TestExportEdgeCases:
         )
         index.build_or_refresh(base_dir=base)
 
-        xml_text = export_junit_xml(index)
+        xml_text = export_evidence(index, "junit")
         root = ET.fromstring(xml_text)
         suite = root.find("testsuite")
         assert suite is not None
@@ -470,7 +479,7 @@ class TestExportJunitPartialPass:
         )
         idx.build_or_refresh(base_dir=base)
 
-        root = ET.fromstring(export_junit_xml(idx))
+        root = ET.fromstring(export_evidence(idx, "junit"))
         suite = root.find("testsuite")
         assert suite is not None
         assert suite.get("failures") == "1"

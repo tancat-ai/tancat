@@ -108,6 +108,10 @@ def test_the_table_matches_the_writers_the_package_actually_has(
     found: set[str] = set()
     for name in dir(evidence_export):
         if name.startswith("export_") and callable(getattr(evidence_export, name)):
+            if name == "export_evidence":
+                # One export function, one declared format tuple (t-1521).
+                found.update(evidence_export.EXPORT_FORMATS)
+                continue
             key = name.removeprefix("export_")
             found.add({"junit_xml": "junit"}.get(key, key))
 

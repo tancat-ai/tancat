@@ -3,7 +3,7 @@
 
 Runs after pytest in run-existing mode: indexes the package's evidence
 sidecars (``<package>/evidence/*.evidence.json``) with :class:`EvidenceIndex`
-and emits the enriched JUnit report via :func:`export_junit_xml` — the
+and emits the enriched JUnit report via :func:`export_evidence` — the
 condition/story refs and per-step failure messages the raw ``pytest
 --junitxml`` cannot carry (spec §5.4: sidecars > pytest raw).
 
@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    from src.evidence_export import export_junit_xml
+    from src.evidence_export import export_evidence
     from src.evidence_index import EvidenceIndex
     from src.sqlite_persistence import SQLitePersistence
 
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     index_db = Path(str(output) + ".index.sqlite")
     index = EvidenceIndex(db=SQLitePersistence(db_path=index_db))
     indexed = index.build_or_refresh(base_dir=evidence_dir, force=True)
-    export_junit_xml(index, output=str(output), suite_name=args.suite_name)
+    export_evidence(index, "junit", output=str(output), suite_name=args.suite_name)
     print(f"export_evidence_junit: indexed {indexed} sidecar(s) -> {output}")
     return 0
 

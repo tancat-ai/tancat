@@ -501,3 +501,46 @@ def test_an_edge_403_at_update_does_not_block_the_upgrade(monkeypatch: pytest.Mo
     assert checked.code == keys.BLOCKED_AT_EDGE
     assert decision.allowed, "our edge blocked a paid upgrade"
     assert "edge error 1010" in decision.message
+
+
+# ---------------------------------------------------------------------------
+# t-1524: a refusal says what works and how to get back to it
+# ---------------------------------------------------------------------------
+
+
+def test_a_closed_window_names_the_end_and_the_command_back(monkeypatch: pytest.MonkeyPatch, cache: Path) -> None:
+    """The sentence a buyer sees: the window end, the held version, and the command."""
+    _relay(monkeypatch, 200, _activation_body("2025-01-01T00:00:00+00:00"))
+    keys.activate("00000-00000-00000-00000-00000", path=cache)
+    monkeypatch.setenv(keys.CACHE_ENV, str(cache))
+
+    decision = entitlement.startup_check(build_date=date(2026, 6, 1), installed_version="0.1.0")
+
+    assert not decision.allowed
+    assert "update window ended on 2026-01-01" in decision.message
+    assert "Version 0.1.0 keeps working" in decision.message
+    assert "pip install 'tancat==0.1.0'" in decision.message
+    assert "nothing on disk has changed" not in decision.message
+
+
+def test_a_refused_key_names_the_held_version_and_how_to_return(monkeypatch: pytest.MonkeyPatch, cache: Path) -> None:
+    _licence_in_force(monkeypatch, cache)
+    _relay(monkeypatch, 410, {})
+
+    decision = entitlement.upgrade_check(build_date=date(2027, 1, 1), installed_version="0.1.0")
+
+    assert not decision.allowed
+    assert "The upgrade was not installed" in decision.message
+    assert "Version 0.1.0 keeps working" in decision.message
+    assert "pip install 'tancat==0.1.0'" in decision.message
+    assert "nothing on disk has changed" not in decision.message
+
+
+def test_with_no_recorded_version_the_refusal_still_points_somewhere() -> None:
+    sentence = entitlement.held_version_sentence("")
+
+    assert sentence == "The version you already have keeps working."
+
+
+def test_a_v_prefix_is_not_doubled_in_the_command() -> None:
+    assert entitlement.install_command("v0.1.0") == "pip install 'tancat==0.1.0'"

@@ -118,3 +118,52 @@ def test_the_json_and_the_csvs_agree() -> None:
 
     json_labels = {_label(node["label"]) for node in data["nodes"]}
     assert json_labels == set(labels), "the JSON and nodes.csv describe different files"
+
+
+def _line_count(path: Path) -> int:
+    """The generator's own size measure: lines, decoded the way it decodes them."""
+    with path.open(encoding="utf-8", errors="ignore") as handle:
+        return sum(1 for _ in handle)
+
+
+def test_every_recorded_size_matches_the_file() -> None:
+    """The map records each file's line count; a stale number is a stale map (t-1524).
+
+    The label checks above only ask "is this path here". A regeneration that was
+    skipped after an edit leaves the right labels with the wrong sizes - and CI stayed
+    green while ``tests/test_report_parity.py`` was recorded at 398 lines and had grown
+    to 402.
+    """
+    with NODES.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    wrong: list[str] = []
+    for row in rows:
+        label = _label(row["label"])
+        path = ROOT / label
+        try:
+            actual = _line_count(path)
+        except OSError:
+            continue  # a path the repository does not have is another test's finding
+        recorded = int(row.get("size") or -1)
+        if recorded != actual:
+            wrong.append(f"{label}: recorded {recorded}, actual {actual}")
+
+    assert wrong == [], f"{len(wrong)} recorded size(s) no longer match the file(s) - regenerate the map. " + "; ".join(
+        wrong[:10]
+    )
+
+
+def test_the_json_records_the_same_sizes_as_the_csv() -> None:
+    """One graph, three files: the size in the JSON must be the size in nodes.csv."""
+    data = json.loads(MAP_JSON.read_text(encoding="utf-8"))
+    from_csv = {_label(row["label"]): row["size"] for row in (_row for _row in _node_rows())}
+    from_json = {_label(node["label"]): str(node.get("size")) for node in data["nodes"]}
+
+    disagreements = sorted(label for label in from_csv if from_csv[label] != from_json.get(label))
+    assert disagreements == [], f"{len(disagreements)} node(s) disagree between JSON and CSV: {disagreements[:10]}"
+
+
+def _node_rows() -> list[dict[str, str]]:
+    with NODES.open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))

@@ -8,6 +8,7 @@ the flagging rules.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -110,3 +111,117 @@ def test_json_manifest_shape(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert payload["verdict"] == "FLAGGED"
     assert payload["flagged"][0]["file"].endswith("bad.py")
     assert payload["flagged"][0]["classification"] == "FLAGGED"
+
+
+# ---------------------------------------------------------------------------
+# t-1521: the scanner reads structure, and the two holes are closed
+# ---------------------------------------------------------------------------
+
+
+def _module() -> Any:
+    import importlib.util
+    import sys
+
+    module_path = Path(__file__).resolve().parent.parent / "scripts" / "audit_egress.py"
+    spec = importlib.util.spec_from_file_location("audit_egress_under_test", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolves the module by name
+    spec.loader.exec_module(module)
+    return module
+
+
+def _scan(tmp_path: Path, source: str, name: str = "sample.py") -> list:
+    module = _module()
+
+    target = tmp_path / name
+    target.write_text(source, encoding="utf-8")
+    sites: list = []
+    module.audit_file(target, sites)
+    return sites
+
+
+def test_an_aliased_client_is_still_found(tmp_path: Path) -> None:
+    """`import httpx as hx; hx.get(...)` used to be invisible (t-1521)."""
+    sites = _scan(
+        tmp_path,
+        "import httpx as hx\n\ndef f():\n    return hx.get('https://telemetry.example.com/beacon')\n",
+    )
+
+    assert len(sites) == 1
+    assert sites[0].primitive == "httpx.get"
+    assert sites[0].classification == "FLAGGED"
+
+
+def test_a_dynamic_getattr_call_is_flagged(tmp_path: Path) -> None:
+    """`getattr(httpx, 'get')(...)` hides the verb; that is a finding, not a pass."""
+    sites = _scan(
+        tmp_path,
+        "import httpx\n\ndef f():\n    return getattr(httpx, 'get')('https://telemetry.example.com')\n",
+    )
+
+    assert len(sites) == 1
+    assert sites[0].classification == "FLAGGED"
+    assert "dynamic" in sites[0].reason
+
+
+def test_a_second_call_inside_an_allow_listed_function_is_flagged(tmp_path: Path) -> None:
+    """The allow-list names ONE call site, not a whole function (t-1521)."""
+    sites = _scan(
+        tmp_path,
+        "import urllib.request\n\nFEED_URL = 'https://pypi.org/pypi/tancat/json'\n\n"
+        "def _fetch(url):\n"
+        "    urllib.request.urlopen(url)\n"
+        "    return urllib.request.urlopen('https://telemetry.example.com/collect')\n",
+        name="version_check.py",
+    )
+
+    assert len(sites) == 2
+    # Neither call is allowed any more: the allow-list covered the whole function before.
+    assert not any(site.classification == "ALLOW-LISTED" for site in sites)
+    assert any("second call" in site.reason for site in sites)
+
+
+def test_the_two_real_allow_listed_call_sites_are_named(tmp_path: Path) -> None:
+    """The repo's own calls: the PyPI feed and our licence relay, and nothing else."""
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parent.parent
+    out = subprocess.run(
+        [sys.executable, str(root / "scripts" / "audit_egress.py"), "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    import json
+
+    payload = json.loads(out)
+    allowed = {
+        site["file"]: site["reason"] for site in payload["call_sites"] if site["classification"] == "ALLOW-LISTED"
+    }
+
+    assert payload["verdict"] == "CLEAN"
+    assert "src/version_check.py" in allowed
+    assert "src/licensing/activation.py" in allowed
+    assert "relay" in allowed["src/licensing/activation.py"].lower()
+
+
+def test_the_allow_list_is_found_from_a_deep_temp_path(tmp_path: Path) -> None:
+    """The CI shape: a POSIX temp path several levels deep (t-1532).
+
+    The local run passed because a Windows temp path has no "/" in it, so a
+    separator-counting rule matched. On CI the same fixture lives at
+    /tmp/pytest-…/…/version_check.py and no longer matched, so the "second call"
+    reason never fired. The rule is now "the file's name, when it is outside the
+    repo", which does not care how deep the directory is.
+    """
+    module = _module()
+    deep = tmp_path / "a" / "b" / "c" / "version_check.py"
+    deep.parent.mkdir(parents=True)
+    deep.write_text("def _fetch(url):\n    pass\n", encoding="utf-8")
+
+    entry = module._allow_list_for("/tmp/pytest-1/test_x0/version_check.py", deep)
+
+    assert entry, "the allow-list is not found from a deep POSIX temp path"
+    assert "_fetch" in entry

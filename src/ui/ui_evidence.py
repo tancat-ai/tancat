@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+from src.evidence_export import export_evidence
 from src.evidence_image import EMBED_PREVIEW_MAX_WIDTH
 from src.evidence_index import EvidenceIndex
 from src.gantt_utils import (
@@ -108,6 +108,83 @@ def _pick_current_evidence_dir(
     if not evidence_dirs:
         return None
     return max(evidence_dirs, key=lambda d: d.stat().st_mtime)
+
+
+def render_export_downloads(
+    index: EvidenceIndex,
+    *,
+    query: str = "",
+    status: str | None = None,
+    url_domain: str | None = None,
+    condition_prefix: str | None = None,
+) -> bool:
+    """The three evidence download buttons, behind the same Free cap as the writers.
+
+    j-0311/t-1485 and t-1488: an export is owned by ONE function. ``export_evidence``
+    checks the cap, builds the bytes, and (here) defers the charge to the click;
+    this panel only decides what to draw. When the cap is spent it shows the meter's
+    own sentence instead of the buttons. Returns True when the buttons rendered.
+
+    ``charge_meter=False`` is the UI's one difference: Streamlit re-runs the script on
+    every interaction and the bytes are built eagerly just to fill the download
+    widgets, so charging here would count every re-run. ``_record_export`` charges on
+    the button's click - the moment the bytes actually leave.
+    """
+    from src.usage_meter import FreeTierLimitError
+
+    def _text(format_name: str) -> str:
+        """The bytes for one format, from the one export path (charge deferred)."""
+        return export_evidence(
+            index,
+            format_name,
+            query=query,
+            status=status,
+            url_domain=url_domain,
+            condition_prefix=condition_prefix,
+            charge_meter=False,  # charged on the click, not on every re-run
+        )
+
+    try:
+        csv_data = _text("csv")
+        ndjson_data = _text("ndjson")
+        junit_data = _text("junit")
+    except FreeTierLimitError as exc:
+        st.warning(str(exc))
+        return False
+
+    st.markdown("**Export current results**")
+    e1, e2, e3 = st.columns(3)
+    with e1:
+        st.download_button(
+            "CSV",
+            data=csv_data,
+            file_name="evidence_export.csv",
+            mime="text/csv",
+            use_container_width=True,
+            on_click=_record_export,
+            args=("csv", "evidence_export.csv"),
+        )
+    with e2:
+        st.download_button(
+            "NDJSON",
+            data=ndjson_data,
+            file_name="evidence_export.ndjson",
+            mime="application/x-ndjson",
+            use_container_width=True,
+            on_click=_record_export,
+            args=("ndjson", "evidence_export.ndjson"),
+        )
+    with e3:
+        st.download_button(
+            "JUnit XML",
+            data=junit_data,
+            file_name="evidence_junit.xml",
+            mime="application/xml",
+            use_container_width=True,
+            on_click=_record_export,
+            args=("junit", "evidence_junit.xml"),
+        )
+    return True
 
 
 class EvidenceViewer:
@@ -312,59 +389,13 @@ class EvidenceViewer:
                     placeholder=".text-center",
                 )
 
-            st.markdown("**Export current results**")
-            e1, e2, e3 = st.columns(3)
-            with e1:
-                csv_data = export_csv(
-                    index,
-                    query=query,
-                    status=status_filter if status_filter != "All" else None,
-                    url_domain=domain_filter if domain_filter != "All" else None,
-                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
-                )
-                st.download_button(
-                    "📥 CSV",
-                    data=csv_data,
-                    file_name="evidence_export.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    on_click=_record_export,
-                    args=("csv", "evidence_export.csv"),
-                )
-            with e2:
-                ndjson_data = export_ndjson(
-                    index,
-                    query=query,
-                    status=status_filter if status_filter != "All" else None,
-                    url_domain=domain_filter if domain_filter != "All" else None,
-                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
-                )
-                st.download_button(
-                    "📥 NDJSON",
-                    data=ndjson_data,
-                    file_name="evidence_export.ndjson",
-                    mime="application/x-ndjson",
-                    use_container_width=True,
-                    on_click=_record_export,
-                    args=("ndjson", "evidence_export.ndjson"),
-                )
-            with e3:
-                junit_data = export_junit_xml(
-                    index,
-                    query=query,
-                    status=status_filter if status_filter != "All" else None,
-                    url_domain=domain_filter if domain_filter != "All" else None,
-                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
-                )
-                st.download_button(
-                    "📥 JUnit XML",
-                    data=junit_data,
-                    file_name="evidence_junit.xml",
-                    mime="application/xml",
-                    use_container_width=True,
-                    on_click=_record_export,
-                    args=("junit", "evidence_junit.xml"),
-                )
+            render_export_downloads(
+                index,
+                query=query,
+                status=status_filter if status_filter != "All" else None,
+                url_domain=domain_filter if domain_filter != "All" else None,
+                condition_prefix=prefix_filter if prefix_filter != "All" else None,
+            )
 
         results = index.search(
             query=query,

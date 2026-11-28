@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.flow_memory import FlowMemoryStore, FlowTransition
 from src.ui.ui_sidebar import SidebarConfig
 
@@ -164,7 +166,7 @@ def test_the_licence_panel_is_quiet_when_a_licence_is_valid(monkeypatch: Any) ->
     SidebarConfig._render_license_entry(LicenseResult(LicenseStatus.VALID, tier="pro", licence_id="00000-...-00000"))
 
     captions = [t for kind, t in fake.sidebar.calls if kind == "caption"]
-    assert any("activated on this machine" in c for c in captions), captions
+    assert any("Licence file:" in c for c in captions), captions
     assert any("Checked again when you update" in c for c in captions), captions
     assert not [c for c in fake.sidebar.calls if c[0] in ("form", "text_input", "form_submit_button")], (
         "a licence already in force must not ask for the key again"
@@ -402,3 +404,185 @@ def test_settings_are_quiet_when_the_pdf_reader_is_present(monkeypatch: Any) -> 
     SidebarConfig._render_pdf_reader_notice()
 
     assert not [t for kind, t in fake.sidebar.calls if kind == "warning"]
+
+
+# ---------------------------------------------------------------------------
+# t-1524: five licence states, and the path when the variable points elsewhere
+# ---------------------------------------------------------------------------
+
+
+def _licence_cache(tmp_path: Any, monkeypatch: Any, *, status: str = "active", created: str = "2026-11-26") -> Any:
+    import json
+    from pathlib import Path
+
+    path = Path(tmp_path) / "licence.json"
+    path.write_text(
+        json.dumps(
+            {
+                "key": "00000-00000-00000-00000-00000",
+                "instance_id": "lki_x",
+                "instance_name": "this machine",
+                "status": status,
+                "created_at": f"{created}T00:00:00+00:00",
+                "expires_at": "",
+                "activation_limit": 1,
+                "last_checked": f"{created}T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+    return path
+
+
+def test_the_level_is_no_licence_without_a_cache(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(tmp_path / "absent.json"))
+    assert SidebarConfig.licence_level(LicenseResult(LicenseStatus.UNLICENSED)) == "none"
+
+
+def test_the_level_is_invalid_when_the_cache_cannot_be_read(tmp_path: Any, monkeypatch: Any) -> None:
+    from pathlib import Path
+
+    from src.licensing.license import license_status
+
+    path = Path(tmp_path) / "licence.json"
+    path.write_text("{not json", encoding="utf-8")
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+
+    assert SidebarConfig.licence_level(license_status()) == "invalid"
+
+
+def test_the_level_is_inactive_when_the_store_says_the_key_is_not_active(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import license_status
+
+    _licence_cache(tmp_path, monkeypatch, status="disabled")
+
+    assert SidebarConfig.licence_level(license_status()) == "inactive"
+
+
+def test_the_level_is_window_closed_after_the_window(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import license_status
+
+    _licence_cache(tmp_path, monkeypatch, created="2020-01-01")
+
+    assert SidebarConfig.licence_level(license_status()) == "window_closed"
+
+
+def test_the_level_is_pro_for_a_live_key(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import license_status
+
+    _licence_cache(tmp_path, monkeypatch)
+
+    assert SidebarConfig.licence_level(license_status()) == "pro"
+
+
+def test_the_panel_names_the_environment_variable_when_it_sets_the_path(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    target = _licence_cache(tmp_path, monkeypatch)
+
+    fake = _FakeSt()
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+    SidebarConfig._render_license_entry(LicenseResult(LicenseStatus.VALID))
+
+    captions = [t for kind, t in fake.sidebar.calls if kind == "caption"]
+    assert any(str(target) in c and "AITEST_LICENCE_FILE" in c for c in captions), captions
+
+
+def test_each_bad_state_prints_its_own_sentence(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(tmp_path / "absent.json"))
+    assert "No licence key" in SidebarConfig.licence_headline(LicenseResult(LicenseStatus.UNLICENSED))
+    invalid = SidebarConfig.licence_headline(LicenseResult(LicenseStatus.INVALID, reason="the cache is not valid JSON"))
+    assert "could not be used" in invalid.lower()
+    assert "the cache is not valid JSON" in invalid, "the panel must quote the licence's own reason"
+
+
+def test_a_closed_window_sentence_names_the_date_and_the_email(tmp_path: Any, monkeypatch: Any) -> None:
+    from src.licensing.license import license_status
+
+    _licence_cache(tmp_path, monkeypatch, created="2020-01-01")
+    headline = SidebarConfig.licence_headline(license_status())
+
+    assert "update window ended on 2021-01-01" in headline
+    assert "hello@tancat.dev" in headline
+    assert "keeps working" in headline
+
+
+# ---------------------------------------------------------------------------
+# t-1527: the panel and the meter read ONE verdict, so they cannot disagree
+# ---------------------------------------------------------------------------
+
+
+def _status_for(tmp_path: Any, monkeypatch: Any, kind: str) -> Any:
+    """Build each of the five states through the product's own code path."""
+    import json
+    from pathlib import Path
+
+    from src.licensing.license import license_status
+
+    if kind == "none":
+        monkeypatch.setenv("AITEST_LICENCE_FILE", str(Path(tmp_path) / "absent.json"))
+        return license_status()
+    if kind == "invalid":
+        path = Path(tmp_path) / "licence.json"
+        path.write_text("{not json", encoding="utf-8")
+        monkeypatch.setenv("AITEST_LICENCE_FILE", str(path))
+        return license_status()
+    mismatch = tmp_path / f"{kind}.json"
+    mismatch.write_text(
+        json.dumps(
+            {
+                "key": "00000-00000-00000-00000-00000",
+                "instance_id": "lki_x",
+                "instance_name": "this machine",
+                "status": "disabled" if kind == "inactive" else "active",
+                "created_at": "2020-01-01T00:00:00+00:00" if kind == "window_closed" else "2026-11-26T00:00:00+00:00",
+                "expires_at": "",
+                "activation_limit": 1,
+                "last_checked": "2026-11-26T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AITEST_LICENCE_FILE", str(mismatch))
+    return license_status()
+
+
+@pytest.mark.parametrize(
+    ("kind", "level", "meter_capped"),
+    [
+        ("none", "none", True),
+        ("invalid", "invalid", True),
+        ("inactive", "inactive", True),
+        ("window_closed", "window_closed", True),
+        ("pro", "pro", False),
+    ],
+)
+def test_each_state_agrees_with_the_meter(
+    tmp_path: Any, monkeypatch: Any, kind: str, level: str, meter_capped: bool
+) -> None:
+    """The reviewer's proof, inverted: the sentence and the limits say the same thing.
+
+    For a closed window and for a store-disabled key the panel used to say "red"
+    while the meter underneath said "Runs: 0 (unlimited)" - the panel re-derived the
+    window instead of reading the tier. Now both read the one answer.
+    """
+    from src.usage_meter import UsageMeter
+
+    status = _status_for(tmp_path, monkeypatch, kind)
+
+    assert SidebarConfig.licence_level(status) == level
+    summary = UsageMeter().summary()
+    assert isinstance(summary.runs_limit, int) is meter_capped, (
+        f"{level}: the meter says runs_limit={summary.runs_limit}, the panel says {level}"
+    )
+    sentence = SidebarConfig.licence_headline(status)
+    assert sentence, "every state needs a sentence"
+    if meter_capped:
+        assert "unlimited" not in sentence.lower(), f"{level}: a capped state must not promise unlimited"
+    else:
+        assert "active" in sentence.lower() or "pro" in sentence.lower()
