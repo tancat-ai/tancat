@@ -97,6 +97,11 @@ COPY --chown=appuser:appuser . .
 
 # Chromium's OS packages need root; the browser bundle itself does not, so it is
 # downloaded as the user and lands correctly owned (no chown pass).
+# libatomic1 first: from Playwright 1.65 the driver's bundled Node needs it, and
+# `install-deps` only asks for it once that Node can already run (chicken-and-egg).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
 RUN /app/.venv/bin/python -m playwright install-deps chromium
 USER appuser
 RUN /app/.venv/bin/python -m playwright install chromium
