@@ -39,14 +39,22 @@ def test_committed_record_matches_uv_lock() -> None:
 
 def test_version_drift_is_detected() -> None:
     """A dependency bumped in the lock but not in the record fails the guard."""
+    import re
+
     guard = _load_guard()
     text = _record_text()
-    stale = text.replace("| playwright | 1.63.0 |", "| playwright | 1.62.0 |", 1)
+    # Derive the row from the record: a hard-coded version stops matching after the
+    # very bump this test exists to catch (t-1537, playwright 1.63.0 -> 1.65.2).
+    match = re.search(r"\| playwright \| ([\d.]+) \|", text)
+    assert match, "the record lists no playwright row"
+    current = match.group(1)
+    older = "0.0.1" if current != "0.0.1" else "0.0.2"
+    stale = text.replace(f"| playwright | {current} |", f"| playwright | {older} |", 1)
     assert stale != text
 
     problems = guard.check(stale)
 
-    assert any("playwright" in p and "1.62.0" in p for p in problems), problems
+    assert any("playwright" in p and older in p for p in problems), problems
 
 
 def test_dropped_dependency_left_in_the_record_is_detected() -> None:
