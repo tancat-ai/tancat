@@ -391,7 +391,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | shellingham | 1.5.4 | ISC License (ISCL) | https://github.com/sarugaku/shellingham |
 | six | 1.17.0 | MIT License | https://github.com/benjaminp/six |
 | sniffio | 1.3.1 | Apache Software License; MIT License | https://github.com/python-trio/sniffio |
-| soupsieve | 2.9.1 | MIT | https://github.com/facelessuser/soupsieve |
+| soupsieve | 4.0 | MIT | https://github.com/facelessuser/soupsieve |
 | stack-data | 0.6.3 | MIT License | http://github.com/alexmojaki/stack_data |
 | starlette | 1.3.1 | BSD-3-Clause | https://github.com/Kludex/starlette |
 | streamlit | 1.66.1 | Apache-2.0 | https://streamlit.io |
