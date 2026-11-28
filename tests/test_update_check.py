@@ -388,7 +388,7 @@ def test_the_background_refresh_returns_before_the_fetch_completes(
 # -- j-0313 review: one version, and the same one from a source run -----------
 
 
-def test_a_source_run_reports_the_version_the_wheel_carries() -> None:
+def test_a_source_run_reports_the_version_the_wheel_carries(tmp_path: Path) -> None:
     """The fallback used to be a hardcoded 0.1.0, so a source checkout reported
     a newer release as available against its own tree.
 
@@ -422,8 +422,10 @@ def test_a_source_run_reports_the_version_the_wheel_carries() -> None:
     # A source run reads the same number (installed metadata, else pyproject).
     assert installed_version() == source_version
 
-    # And so does the built wheel's metadata, read from the artefact.
-    out = root / "scratch" / "t1494-dist"
+    # And so does the built wheel's metadata, read from the artefact. A fresh directory
+    # each run: the old fixed path kept a previous version's wheel, and `next(glob)`
+    # picked it (t-1533: pyproject moved to 0.1.1, the stale wheel still said 0.1.0).
+    out = tmp_path / "dist"
     subprocess.run(["uv", "build", "--wheel", "--out-dir", str(out)], cwd=root, check=True, capture_output=True)
     wheel = next(out.glob("*.whl"))
     import zipfile
